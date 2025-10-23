@@ -5,11 +5,19 @@ from typing import List, Optional
 class TrackingChakpoints:
     """Modelo para TrackingChakpoints (siguiendo el modelo Dart)"""
 
-    def __init__(self, id: str, name: str, status_competitor: str, pass_time: datetime):
+    def __init__(
+        self,
+        id: str,
+        name: str,
+        status_competitor: str,
+        pass_time: datetime,
+        note: Optional[str] = None,
+    ):
         self.id = id
         self.name = name
         self.status_competitor = status_competitor
         self.pass_time = pass_time
+        self.note = note
 
     def to_dict(self) -> dict:
         """Convierte el objeto a diccionario para Firestore"""
@@ -18,6 +26,7 @@ class TrackingChakpoints:
             "name": self.name,
             "statusCompetitor": self.status_competitor,
             "passTime": self.pass_time.isoformat(),
+            "note": self.note,
         }
 
     @classmethod
@@ -28,6 +37,7 @@ class TrackingChakpoints:
             name=data["name"],
             status_competitor=data["statusCompetitor"],
             pass_time=datetime.fromisoformat(data["passTime"]),
+            note=data.get("note"),
         )
 
     def __eq__(self, other):
@@ -38,10 +48,11 @@ class TrackingChakpoints:
             and self.name == other.name
             and self.status_competitor == other.status_competitor
             and self.pass_time == other.pass_time
+            and self.note == other.note
         )
 
     def __repr__(self):
-        return f"TrackingChakpoints(id='{self.id}', name='{self.name}', status_competitor='{self.status_competitor}', pass_time={self.pass_time})"
+        return f"TrackingChakpoints(id='{self.id}', name='{self.name}', status_competitor='{self.status_competitor}', pass_time={self.pass_time}, note='{self.note}')"
 
 
 class CompetitorTracking:
