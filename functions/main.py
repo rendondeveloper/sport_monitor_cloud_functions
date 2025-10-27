@@ -3,7 +3,7 @@ from firebase_functions.options import set_global_options
 from firebase_admin import initialize_app, firestore
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from models.event_document import EventDocument, EventStatus
 from models.tracking_checkpoint import (
     TrackingCheckpoint,
@@ -27,6 +27,17 @@ set_global_options(max_instances=10)
 
 # Initialize Firebase Admin
 initialize_app()
+
+
+def format_utc_to_local_datetime(utc_datetime: datetime) -> str:
+    """
+    Convierte un datetime UTC al formato ISO 8601 con Z
+    Ejemplo: 2025-10-24T19:03:35Z
+    """
+    # Formatear como ISO 8601 con Z (UTC)
+    formatted_date = utc_datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    return formatted_date
 
 
 @https_fn.on_call()
@@ -151,7 +162,7 @@ def track_competitors(req: https_fn.CallableRequest) -> dict:
     """
     Función que recibe eventId, dayId y status.
     Si el status es 'inProgress', toma los datos del evento y crea
-    la estructura de tracking de competidores.
+    la estructura de tracking de competidores optimizada para actualizaciones granulares.
     """
     try:
         # Obtener datos de la petición callable
@@ -240,85 +251,111 @@ def track_competitors(req: https_fn.CallableRequest) -> dict:
             f"track_competitors: Encontrados {len(participants_docs)} participantes en la subcolección"
         )
 
-        # Crear lista de CompetitorTracking
-        competitors_tracking = []
+        # Crear el documento principal de tracking
+        tracking_doc_id = f"{event_id}_{day_id}"
+        collection_path = f"events_tracking/{event_id}/competitor_tracking"
+
         logging.info(
-            f"track_competitors: Creando {len(participants_docs)} CompetitorTracking"
+            f"track_competitors: Creando estructura optimizada con ID: {tracking_doc_id}"
+        )
+
+        # Crear documento principal con metadata
+        main_doc_ref = db.collection(collection_path).document(tracking_doc_id)
+
+        main_doc_data = {
+            "eventId": event_id,
+            "dayId": day_id,
+            "dayName": day_name,
+            "isActive": day_status,
+            "createdAt": format_utc_to_local_datetime(datetime.utcnow()),
+            "updatedAt": format_utc_to_local_datetime(datetime.utcnow()),
+            "competitorsCount": len(participants_docs),
+            "checkpointsCount": len(checkpoints_docs),
+        }
+
+        main_doc_ref.set(main_doc_data)
+        logging.info(f"track_competitors: Documento principal creado")
+
+        # Crear subcolección de competidores
+        competitors_collection_ref = main_doc_ref.collection("competitors")
+
+        competitors_created = []
+        logging.info(
+            f"track_competitors: Creando {len(participants_docs)} documentos de competidores"
         )
 
         for i, participant_doc in enumerate(participants_docs):
             participant_data = participant_doc.to_dict()
 
-            # Extraer datos del participante usando la estructura del CompetitorDocument
+            # Extraer datos del participante
             personal_data = participant_data.get("personalData", {})
             competition_category = participant_data.get("competitionCategory", {})
 
-            # Crear tracking_chakpoints para este competidor
-            tracking_chakpoints = []
-            for checkpoint_doc in checkpoints_docs:
-                checkpoint_data = checkpoint_doc.to_dict()
+            # Crear documento del competidor
+            competitor_id = participant_doc.id
+            competitor_doc_ref = competitors_collection_ref.document(competitor_id)
 
-                # Crear TrackingChakpoints para cada checkpoint
-                tracking_chakpoint = TrackingChakpoints(
-                    id=checkpoint_doc.id,
-                    name=checkpoint_data.get("name", "Checkpoint"),
-                    status_competitor="",  # Estado inicial para el competidor
-                    pass_time=datetime.utcnow(),  # Se actualizará cuando pase por el checkpoint
-                )
-                tracking_chakpoints.append(tracking_chakpoint)
-
-            # Crear CompetitorTracking con datos del participante y sus checkpoints
-            competitor_tracking = CompetitorTracking(
-                id=participant_doc.id,
-                name=personal_data.get("fullName", "Competidor"),
-                order=i + 1,
-                category=competition_category.get(
+            competitor_data = {
+                "id": competitor_id,
+                "name": personal_data.get("fullName", "Competidor"),
+                "order": i + 1,
+                "category": competition_category.get(
                     "registrationCategory", "Sin categoría"
                 ),
-                number=competition_category.get("pilotNumber", "Sin número"),
-                tracking_chakpoints=tracking_chakpoints,
+                "number": competition_category.get("pilotNumber", "Sin número"),
+                "createdAt": format_utc_to_local_datetime(datetime.utcnow()),
+                "updatedAt": format_utc_to_local_datetime(datetime.utcnow()),
+            }
+
+            competitor_doc_ref.set(competitor_data)
+
+            # Crear subcolección de checkpoints para este competidor
+            checkpoints_collection_ref = competitor_doc_ref.collection("checkpoints")
+
+            checkpoints_created = []
+            for checkpoint_doc in checkpoints_docs:
+                checkpoint_id = checkpoint_doc.id
+                checkpoint_data = checkpoint_doc.to_dict()
+
+                checkpoint_doc_ref = checkpoints_collection_ref.document(checkpoint_id)
+
+                checkpoint_tracking_data = {
+                    "id": checkpoint_id,
+                    "name": checkpoint_data.get("name", "Checkpoint"),
+                    "order": checkpoint_data.get("order", 0),
+                    "statusCompetitor": "none",  # Estado inicial
+                    "passTime": format_utc_to_local_datetime(
+                        datetime.utcnow()
+                    ),  # Se actualizará cuando pase
+                    "note": None,
+                    "createdAt": format_utc_to_local_datetime(datetime.utcnow()),
+                    "updatedAt": format_utc_to_local_datetime(datetime.utcnow()),
+                }
+
+                checkpoint_doc_ref.set(checkpoint_tracking_data)
+                checkpoints_created.append(
+                    {
+                        "checkpointId": checkpoint_id,
+                        "checkpointName": checkpoint_data.get("name", "Checkpoint"),
+                    }
+                )
+
+            competitors_created.append(
+                {
+                    "competitorId": competitor_id,
+                    "competitorName": personal_data.get("fullName", "Competidor"),
+                    "checkpointsCount": len(checkpoints_created),
+                    "checkpoints": checkpoints_created,
+                }
             )
 
-            competitors_tracking.append(competitor_tracking)
             logging.debug(
-                f"track_competitors: Competidor {i+1} creado: {competitor_tracking.name} (ID: {competitor_tracking.id}) con {len(tracking_chakpoints)} checkpoints"
+                f"track_competitors: Competidor {i+1} creado: {competitor_data['name']} (ID: {competitor_id}) con {len(checkpoints_created)} checkpoints"
             )
 
         logging.info(
-            f"track_competitors: {len(competitors_tracking)} competidores procesados con {len(checkpoints_docs)} checkpoints cada uno"
+            f"track_competitors: {len(competitors_created)} competidores procesados con estructura optimizada"
         )
-
-        # Crear el documento de tracking de competidores
-        tracking_doc_id = f"{event_id}_{day_id}"
-        logging.info(
-            f"track_competitors: Creando CompetitorTrackingDocument con ID: {tracking_doc_id}"
-        )
-
-        tracking_doc = CompetitorTrackingDocument(
-            id=tracking_doc_id,
-            event_id=event_id,
-            day_id=day_id,
-            name=day_name,  # Usar el nombre del día obtenido de la lista de días
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-            competitors_tracking=competitors_tracking,
-            is_active=day_status,
-        )
-
-        logging.info(
-            f"track_competitors: Documento creado - Nombre: {day_name}, Competidores: {len(competitors_tracking)}, Activo: {day_status}"
-        )
-
-        # Guardar en la colección competitor_tracking
-        collection_path = f"events_tracking/{event_id}/competitor_tracking"
-        logging.info(f"track_competitors: Guardando en colección: {collection_path}")
-
-        competitor_tracking_ref = db.collection(collection_path).document(
-            tracking_doc_id
-        )
-        competitor_tracking_ref.set(tracking_doc.to_dict())
-
-        logging.info(f"track_competitors: Documento guardado exitosamente en Firestore")
 
         result = {
             "success": True,
@@ -326,17 +363,16 @@ def track_competitors(req: https_fn.CallableRequest) -> dict:
             "event_id": event_id,
             "day_id": day_id,
             "event_name": event.name,
-            "competitors_count": len(competitors_tracking),
-            "tracking_id": tracking_doc.id,
-            "competitors": [ct.to_dict() for ct in competitors_tracking],
+            "competitors_count": len(competitors_created),
+            "tracking_id": tracking_doc_id,
+            "structure_type": "optimized_granular",
+            "competitors": competitors_created,
         }
 
         logging.info(
             f"track_competitors: Función completada exitosamente. Resultado: {result}"
         )
         return result
-
-        # Nota: si se llegó aquí, ya se retornó con éxito o por estado inválido.
 
     except https_fn.HttpsError as e:
         # Re-lanzar errores de Firebase Functions
@@ -414,7 +450,10 @@ def track_competitors_off(req: https_fn.CallableRequest) -> dict:
 
         # Actualizar el documento con isActive = false
         tracking_ref.update(
-            {"isActive": False, "updatedAt": datetime.utcnow().isoformat()}
+            {
+                "isActive": False,
+                "updatedAt": format_utc_to_local_datetime(datetime.utcnow()),
+            }
         )
 
         logging.info(
