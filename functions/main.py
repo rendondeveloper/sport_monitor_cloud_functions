@@ -404,30 +404,39 @@ def track_competitors(req: https_fn.CallableRequest) -> dict:
                             ),
                         }
                         categories_with_description.append(category_info)
-                        logging.debug(
-                            f"track_competitors: Route {route_id} - Categoría {cat_id}: {category_info['description']}"
-                        )
+
+                    # Obtener los checkpoints asociados a esta route
+                    checkpoint_ids_list = []
+                    for checkpoint_doc_item in checkpoints_docs:
+                        checkpoint_data_item = checkpoint_doc_item.to_dict()
+                        event_route_ids = checkpoint_data_item.get("eventRouteId", [])
+
+                        # Si este checkpoint tiene el route_id en su eventRouteId
+                        if route_id in event_route_ids:
+                            checkpoint_item_id = checkpoint_doc_item.id
+                            checkpoint_ids_list.append(checkpoint_item_id)
 
                     route_tracking_data = {
                         "name": route_data.get("name", ""),
                         "routeUrl": route_data.get("routeUrl", ""),
-                        "categories": categories_with_description,  # Nuevo campo con objetos con id y description
+                        "categories": categories_with_description,
+                        "checkpointIds": checkpoint_ids_list,  # Lista de IDs de checkpoints
                         "createdAt": format_utc_to_local_datetime(datetime.utcnow()),
                         "updatedAt": format_utc_to_local_datetime(datetime.utcnow()),
                     }
 
-                    # Crear el documento de route
                     route_doc_ref.set(route_tracking_data)
-                    logging.info(
-                        f"track_competitors: Route {route_id} creada exitosamente: {route_data.get('name', 'Route')} en {routes_collection_ref.path}/{route_id}"
-                    )
 
                     routes_created.append(
                         {
                             "routeId": route_id,
                             "routeName": route_data.get("name", "Route"),
                             "routeUrl": route_data.get("routeUrl", ""),
+                            "checkpointsCount": len(checkpoint_ids_list),
                         }
+                    )
+                    logging.info(
+                        f"track_competitors: Route {route_id} creada exitosamente: {route_data.get('name', 'Route')} con {len(checkpoint_ids_list)} checkpoints"
                     )
                 except Exception as e:
                     logging.error(
@@ -635,7 +644,7 @@ def track_competitors_off(req: https_fn.CallableRequest) -> dict:
 
         # Obtener datos actuales del documento
         tracking_data = tracking_doc.to_dict()
-        current_is_active = tracking_data.get("isActive", True)
+        current_is_active = tracking_data.get("isActivate", True)
 
         logging.info(
             f"track_competitors_off: Estado actual isActive: {current_is_active}"
@@ -644,7 +653,7 @@ def track_competitors_off(req: https_fn.CallableRequest) -> dict:
         # Actualizar el documento con isActive = false
         tracking_ref.update(
             {
-                "isActive": False,
+                "isActivate": False,
                 "updatedAt": format_utc_to_local_datetime(datetime.utcnow()),
             }
         )
