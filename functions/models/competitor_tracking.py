@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import List, Optional
+import json
 
 
-class TrackingChakpoints:
-    """Modelo para TrackingChakpoints (siguiendo el modelo Dart)"""
+class CheckpointsTracking:
+    """Modelo para CheckpointsTracking (siguiendo el modelo Dart)"""
 
     def __init__(
         self,
@@ -29,8 +30,12 @@ class TrackingChakpoints:
             "note": self.note,
         }
 
+    def to_json(self) -> str:
+        """Convierte el objeto a JSON string para Firestore"""
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
     @classmethod
-    def from_dict(cls, data: dict) -> "TrackingChakpoints":
+    def from_dict(cls, data: dict) -> "CheckpointsTracking":
         """Crea un objeto desde un diccionario de Firestore"""
         return cls(
             id=data["id"],
@@ -40,8 +45,14 @@ class TrackingChakpoints:
             note=data.get("note"),
         )
 
+    @classmethod
+    def from_json(cls, json_str: str) -> "CheckpointsTracking":
+        """Crea un objeto desde un JSON string"""
+        data = json.loads(json_str)
+        return cls.from_dict(data)
+
     def __eq__(self, other):
-        if not isinstance(other, TrackingChakpoints):
+        if not isinstance(other, CheckpointsTracking):
             return False
         return (
             self.id == other.id
@@ -52,7 +63,7 @@ class TrackingChakpoints:
         )
 
     def __repr__(self):
-        return f"TrackingChakpoints(id='{self.id}', name='{self.name}', status_competitor='{self.status_competitor}', pass_time={self.pass_time}, note='{self.note}')"
+        return f"CheckpointsTracking(id='{self.id}', name='{self.name}', status_competitor='{self.status_competitor}', pass_time={self.pass_time}, note='{self.note}')"
 
 
 class CompetitorTracking:
@@ -65,7 +76,7 @@ class CompetitorTracking:
         order: int,
         category: str,
         number: str,
-        tracking_chakpoints: List[TrackingChakpoints],
+        tracking_chakpoints: List[CheckpointsTracking],
     ):
         self.id = id
         self.name = name
@@ -85,13 +96,17 @@ class CompetitorTracking:
             "trackingChakpoints": [tc.to_dict() for tc in self.tracking_chakpoints],
         }
 
+    def to_json(self) -> str:
+        """Convierte el objeto a JSON string para Firestore"""
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
     @classmethod
     def from_dict(cls, data: dict) -> "CompetitorTracking":
         """Crea un objeto desde un diccionario de Firestore"""
-        tracking_chakpoints: List[TrackingChakpoints] = []
+        tracking_chakpoints: List[CheckpointsTracking] = []
         if "trackingChakpoints" in data and data["trackingChakpoints"]:
             tracking_chakpoints = [
-                TrackingChakpoints.from_dict(tc) for tc in data["trackingChakpoints"]
+                CheckpointsTracking.from_dict(tc) for tc in data["trackingChakpoints"]
             ]
 
         return cls(
@@ -103,7 +118,13 @@ class CompetitorTracking:
             tracking_chakpoints=tracking_chakpoints,
         )
 
-    def add_tracking_checkpoint(self, tracking_checkpoint: TrackingChakpoints):
+    @classmethod
+    def from_json(cls, json_str: str) -> "CompetitorTracking":
+        """Crea un objeto desde un JSON string"""
+        data = json.loads(json_str)
+        return cls.from_dict(data)
+
+    def add_tracking_checkpoint(self, tracking_checkpoint: CheckpointsTracking):
         """Agrega un tracking checkpoint al competidor"""
         self.tracking_chakpoints.append(tracking_checkpoint)
 
@@ -158,6 +179,10 @@ class CompetitorTrackingDocument:
             "updatedAt": self.updated_at.isoformat(),
         }
 
+    def to_json(self) -> str:
+        """Convierte el objeto a JSON string para Firestore"""
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
     @classmethod
     def from_dict(cls, data: dict, doc_id: str) -> "CompetitorTrackingDocument":
         """Crea un objeto desde un diccionario de Firestore"""
@@ -184,6 +209,12 @@ class CompetitorTrackingDocument:
             competitors_tracking=competitors_tracking,
             is_active=data.get("isActive", True),
         )
+
+    @classmethod
+    def from_json(cls, json_str: str, doc_id: str) -> "CompetitorTrackingDocument":
+        """Crea un objeto desde un JSON string"""
+        data = json.loads(json_str)
+        return cls.from_dict(data, doc_id)
 
     def add_competitor_tracking(self, competitor_tracking: CompetitorTracking):
         """Agrega un competitor tracking al documento"""

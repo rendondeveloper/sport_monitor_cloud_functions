@@ -5,18 +5,14 @@ import json
 import logging
 from datetime import datetime, timezone, timedelta
 from models.event_document import EventDocument, EventStatus
-from models.tracking_checkpoint import (
+from models.checkpoint_tracking import (
     TrackingCheckpoint,
     Checkpoint,
     CheckpointType,
-    CheckpointStatus,
+    CompetitorsTrackingStatus,
     Competitor,
 )
-from models.competitor_tracking_models import (
-    CompetitorTrackingDocument,
-    CompetitorTracking,
-    TrackingChakpoints,
-)
+
 
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
@@ -95,20 +91,29 @@ def track_event_checkpoint(req: https_fn.CallableRequest) -> dict:
             tracking_ref = event_ref.collection("tracking_checkpoint")
 
             # Crear checkpoints básicos para el evento
+            current_time = datetime.utcnow()
             basic_checkpoints = [
                 Checkpoint(
-                    event_id=event_id,
+                    id=f"{event_id}_start_1",
                     name="Inicio",
                     order=1,
-                    type=CheckpointType.START,
-                    status=CheckpointStatus.ACTIVE,
+                    checkpoint_type=CheckpointType.START,
+                    status_competitor=CompetitorsTrackingStatus.NONE,
+                    checkpoint_disable="",
+                    checkpoint_disable_name="",
+                    pass_time=current_time,
+                    note=None,
                 ),
                 Checkpoint(
-                    event_id=event_id,
+                    id=f"{event_id}_finish_2",
                     name="Meta",
                     order=2,
-                    type=CheckpointType.FINISH,
-                    status=CheckpointStatus.DRAFT,
+                    checkpoint_type=CheckpointType.FINISH,
+                    status_competitor=CompetitorsTrackingStatus.NONE,
+                    checkpoint_disable="",
+                    checkpoint_disable_name="",
+                    pass_time=current_time,
+                    note=None,
                 ),
             ]
 
@@ -230,14 +235,19 @@ def track_competitors(req: https_fn.CallableRequest) -> dict:
             }
 
         # Obtener checkpoints desde la subcolección events/{eventId}/checkpoints
+        # Filtrar solo los checkpoints asociados al día específico usando dayOfRaceId
         logging.info(
-            f"track_competitors: Buscando checkpoints en events/{event_id}/checkpoints"
+            f"track_competitors: Buscando checkpoints en events/{event_id}/checkpoints filtrados por dayOfRaceId={day_id}"
         )
         checkpoints_ref = db.collection(f"events/{event_id}/checkpoints")
-        checkpoints_docs = checkpoints_ref.get()
+        # Filtrar checkpoints que contengan el day_id en el array dayOfRaceId
+        checkpoints_query = checkpoints_ref.where(
+            "dayOfRaceId", "array_contains", day_id
+        )
+        checkpoints_docs = checkpoints_query.get()
 
         logging.info(
-            f"track_competitors: Encontrados {len(checkpoints_docs)} checkpoints en la subcolección"
+            f"track_competitors: Encontrados {len(checkpoints_docs)} checkpoints asociados al día {day_id}"
         )
 
         # Obtener participantes desde la subcolección events/{eventId}/participants
@@ -250,6 +260,90 @@ def track_competitors(req: https_fn.CallableRequest) -> dict:
         logging.info(
             f"track_competitors: Encontrados {len(participants_docs)} participantes en la subcolección"
         )
+
+        # Obtener categorías del evento para mapear IDs con descripciones
+        # La colección es event_categories y el campo de descripción es 'name'
+        logging.info(
+            f"track_competitors: Buscando categorías en events/{event_id}/event_categories"
+        )
+        categories_ref = db.collection(f"events/{event_id}/event_categories")
+        categories_docs = categories_ref.get()
+
+        # Crear mapa de categorías: ID -> descripción
+        # El ID es el document ID y la descripción está en el campo 'name'
+        categories_map = {}
+        for category_doc in categories_docs:
+            category_data = category_doc.to_dict()
+            if category_data is None:
+                continue
+
+            category_id = category_doc.id
+            # El campo 'name' contiene la descripción/nombre de la categoría
+            category_description = category_data.get("name", "Sin descripción")
+            categories_map[category_id] = category_description
+            logging.debug(
+                f"track_competitors: Categoría mapeada - ID: {category_id}, name (descripción): {category_description}"
+            )
+
+        # Si no hay categorías en la colección, crear un mapa desde los participantes
+        if len(categories_map) == 0:
+            logging.info(
+                f"track_competitors: No se encontraron categorías en la colección. Creando mapa desde participantes..."
+            )
+            for participant_doc in participants_docs:
+                participant_data = participant_doc.to_dict()
+                competition_category = participant_data.get("competitionCategory", {})
+                category_id = competition_category.get(
+                    "id"
+                ) or competition_category.get("registrationCategory")
+                category_description = competition_category.get(
+                    "registrationCategory", "Sin categoría"
+                )
+
+                if category_id and category_id not in categories_map:
+                    categories_map[category_id] = category_description
+                    logging.debug(
+                        f"track_competitors: Categoría desde participante - ID: {category_id}, Descripción: {category_description}"
+                    )
+
+        logging.info(
+            f"track_competitors: Mapa de categorías creado con {len(categories_map)} categorías"
+        )
+
+        # Obtener routes desde la subcolección events/{eventId}/routes
+        # Filtrar solo las routes asociadas al día específico usando dayOfRaceId
+        logging.info(
+            f"track_competitors: Buscando routes en events/{event_id}/routes filtradas por dayOfRaceId={day_id}"
+        )
+        routes_ref = db.collection(f"events/{event_id}/routes")
+
+        # Primero obtener todas las routes para debug
+        all_routes_docs = routes_ref.get()
+        logging.info(
+            f"track_competitors: Total de routes en el evento: {len(all_routes_docs)}"
+        )
+
+        if len(all_routes_docs) > 0:
+            # Mostrar información de las primeras routes para debug
+            for i, route_doc in enumerate(all_routes_docs[:3]):  # Primeras 3 para debug
+                route_data = route_doc.to_dict()
+                day_of_race_ids = route_data.get("dayOfRaceIds", [])
+                logging.info(
+                    f"track_competitors: Route {route_doc.id} - name: {route_data.get('name', 'N/A')}, dayOfRaceIds: {day_of_race_ids}"
+                )
+
+        # Filtrar routes que contengan el day_id en el array dayOfRaceIds
+        routes_query = routes_ref.where("dayOfRaceIds", "array_contains", day_id)
+        routes_docs = routes_query.get()
+
+        logging.info(
+            f"track_competitors: Encontradas {len(routes_docs)} routes asociadas al día {day_id}"
+        )
+
+        if len(routes_docs) == 0:
+            logging.warning(
+                f"track_competitors: No se encontraron routes para el día {day_id}. Verificar que las routes tengan el campo 'dayOfRaceIds' (array) que contenga el valor '{day_id}'"
+            )
 
         # Crear el documento principal de tracking
         tracking_doc_id = f"{event_id}_{day_id}"
@@ -269,12 +363,86 @@ def track_competitors(req: https_fn.CallableRequest) -> dict:
             "isActive": day_status,
             "createdAt": format_utc_to_local_datetime(datetime.utcnow()),
             "updatedAt": format_utc_to_local_datetime(datetime.utcnow()),
-            "competitorsCount": len(participants_docs),
-            "checkpointsCount": len(checkpoints_docs),
         }
 
         main_doc_ref.set(main_doc_data)
         logging.info(f"track_competitors: Documento principal creado")
+
+        # Crear subcolección de routes (al mismo nivel que competitors)
+        # Las routes son generales para todos los competidores
+        routes_collection_ref = main_doc_ref.collection("routes")
+        routes_created = []
+
+        if len(routes_docs) > 0:
+            logging.info(
+                f"track_competitors: Creando {len(routes_docs)} documentos de routes en la colección 'routes'"
+            )
+
+            for route_doc in routes_docs:
+                try:
+                    route_data = route_doc.to_dict()
+                    route_id = route_doc.id
+
+                    # Validar que route_data no sea None
+                    if route_data is None:
+                        logging.warning(
+                            f"track_competitors: Route {route_id} tiene datos None, saltando..."
+                        )
+                        continue
+
+                    route_doc_ref = routes_collection_ref.document(route_id)
+
+                    # Mapear categoryIds a objetos con id y description
+                    category_ids = route_data.get("categoryIds", [])
+                    categories_with_description = []
+
+                    for cat_id in category_ids:
+                        category_info = {
+                            "id": cat_id,
+                            "description": categories_map.get(
+                                cat_id, "Categoría no encontrada"
+                            ),
+                        }
+                        categories_with_description.append(category_info)
+                        logging.debug(
+                            f"track_competitors: Route {route_id} - Categoría {cat_id}: {category_info['description']}"
+                        )
+
+                    route_tracking_data = {
+                        "name": route_data.get("name", ""),
+                        "routeUrl": route_data.get("routeUrl", ""),
+                        "categories": categories_with_description,  # Nuevo campo con objetos con id y description
+                        "createdAt": format_utc_to_local_datetime(datetime.utcnow()),
+                        "updatedAt": format_utc_to_local_datetime(datetime.utcnow()),
+                    }
+
+                    # Crear el documento de route
+                    route_doc_ref.set(route_tracking_data)
+                    logging.info(
+                        f"track_competitors: Route {route_id} creada exitosamente: {route_data.get('name', 'Route')} en {routes_collection_ref.path}/{route_id}"
+                    )
+
+                    routes_created.append(
+                        {
+                            "routeId": route_id,
+                            "routeName": route_data.get("name", "Route"),
+                            "routeUrl": route_data.get("routeUrl", ""),
+                        }
+                    )
+                except Exception as e:
+                    logging.error(
+                        f"track_competitors: Error al crear route {route_doc.id}: {str(e)}",
+                        exc_info=True,
+                    )
+                    continue
+
+            logging.info(
+                f"track_competitors: {len(routes_created)} routes creadas exitosamente de {len(routes_docs)} encontradas"
+            )
+        else:
+            logging.info(
+                f"track_competitors: No hay routes para crear (0 routes encontradas para el día {day_id})"
+            )
 
         # Crear subcolección de competidores
         competitors_collection_ref = main_doc_ref.collection("competitors")
@@ -319,9 +487,32 @@ def track_competitors(req: https_fn.CallableRequest) -> dict:
 
                 checkpoint_doc_ref = checkpoints_collection_ref.document(checkpoint_id)
 
+                # Obtener y validar el tipo de checkpoint
+                checkpoint_type_str = checkpoint_data.get("type", "")
+                checkpoint_type_value = ""
+
+                # Mapear el valor del enum CheckpointType
+                try:
+                    if checkpoint_type_str:
+                        # Validar que sea un valor válido del enum
+                        checkpoint_type_enum = CheckpointType(checkpoint_type_str)
+                        checkpoint_type_value = checkpoint_type_enum.value
+                    else:
+                        # Valor por defecto si no está especificado
+                        checkpoint_type_value = CheckpointType.START.value
+                except (ValueError, KeyError):
+                    # Si el valor no es válido, usar "start" como valor por defecto
+                    logging.warning(
+                        f"track_competitors: Tipo de checkpoint inválido '{checkpoint_type_str}' para checkpoint {checkpoint_id}. Usando 'start' como valor por defecto."
+                    )
+                    checkpoint_type_value = CheckpointType.START.value
+
                 checkpoint_tracking_data = {
                     "id": checkpoint_id,
                     "name": checkpoint_data.get("name", "Checkpoint"),
+                    "checkpointType": checkpoint_type_value,
+                    "checkpointDisable": None,
+                    "checkpointDisableName": None,
                     "order": checkpoint_data.get("order", 0),
                     "statusCompetitor": "none",  # Estado inicial
                     "passTime": format_utc_to_local_datetime(
@@ -364,9 +555,11 @@ def track_competitors(req: https_fn.CallableRequest) -> dict:
             "day_id": day_id,
             "event_name": event.name,
             "competitors_count": len(competitors_created),
+            "routes_count": len(routes_created),
             "tracking_id": tracking_doc_id,
             "structure_type": "optimized_granular",
             "competitors": competitors_created,
+            "routes": routes_created,
         }
 
         logging.info(

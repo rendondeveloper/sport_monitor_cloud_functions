@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
+import json
 
 
 class CheckpointType(Enum):
@@ -27,6 +28,20 @@ class CheckpointType(Enum):
         return display_names[self]
 
 
+class CompetitorsTrackingStatus(Enum):
+    """Enum para el estado del tracking de competidores"""
+
+    NONE = "none"
+    NONE_START = "noneStart"
+    NONE_LAST = "noneLast"
+    CHECK = "check"
+    CHECK_START = "checkStart"
+    CHECK_LAST = "checkLast"
+    OUT = "out"
+    OUT_START = "outStart"
+    OUT_LAST = "outLast"
+
+
 class CheckpointStatus(Enum):
     """Enum para el estado del checkpoint"""
 
@@ -46,56 +61,90 @@ class CheckpointStatus(Enum):
 
 
 class Checkpoint:
-    """Modelo simplificado para Checkpoint"""
+    """Modelo para Checkpoint (siguiendo el modelo Dart)"""
 
     def __init__(
         self,
-        event_id: str,
+        id: str,
         name: str,
         order: int,
-        type: CheckpointType,
-        status: CheckpointStatus = CheckpointStatus.DRAFT,
+        checkpoint_type: CheckpointType,
+        status_competitor: CompetitorsTrackingStatus,
+        checkpoint_disable: str,
+        checkpoint_disable_name: str,
+        pass_time: datetime,
+        note: Optional[str] = None,
     ):
-        self.event_id = event_id
+        self.id = id
         self.name = name
         self.order = order
-        self.type = type
-        self.status = status
+        self.checkpoint_type = checkpoint_type
+        self.status_competitor = status_competitor
+        self.checkpoint_disable = checkpoint_disable
+        self.checkpoint_disable_name = checkpoint_disable_name
+        self.pass_time = pass_time
+        self.note = note
 
     def to_dict(self) -> dict:
         """Convierte el objeto a diccionario para Firestore"""
         return {
-            "eventId": self.event_id,
+            "id": self.id,
             "name": self.name,
             "order": self.order,
-            "type": self.type.value,
-            "status": self.status.value,
+            "checkpointType": self.checkpoint_type.value,
+            "statusCompetitor": self.status_competitor.value,
+            "checkpointDisable": self.checkpoint_disable,
+            "checkpointDisableName": self.checkpoint_disable_name,
+            "passTime": self.pass_time.isoformat(),
+            "note": self.note,
         }
+
+    def to_json(self) -> str:
+        """Convierte el objeto a JSON string para Firestore"""
+        return json.dumps(self.to_dict(), ensure_ascii=False)
 
     @classmethod
     def from_dict(cls, data: dict) -> "Checkpoint":
         """Crea un objeto desde un diccionario de Firestore"""
         return cls(
-            event_id=data["eventId"],
+            id=data["id"],
             name=data["name"],
             order=data["order"],
-            type=CheckpointType(data["type"]),
-            status=CheckpointStatus(data["status"]),
+            checkpoint_type=CheckpointType(data["checkpointType"]),
+            status_competitor=CompetitorsTrackingStatus(data["statusCompetitor"]),
+            checkpoint_disable=data.get("checkpointDisable", ""),
+            checkpoint_disable_name=data.get("checkpointDisableName", ""),
+            pass_time=datetime.fromisoformat(data["passTime"]),
+            note=data.get("note"),
         )
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "Checkpoint":
+        """Crea un objeto desde un JSON string"""
+        data = json.loads(json_str)
+        return cls.from_dict(data)
 
     def __eq__(self, other):
         if not isinstance(other, Checkpoint):
             return False
         return (
-            self.event_id == other.event_id
+            self.id == other.id
             and self.name == other.name
             and self.order == other.order
-            and self.type == other.type
-            and self.status == other.status
+            and self.checkpoint_type == other.checkpoint_type
+            and self.status_competitor == other.status_competitor
+            and self.checkpoint_disable == other.checkpoint_disable
+            and self.checkpoint_disable_name == other.checkpoint_disable_name
+            and self.pass_time == other.pass_time
+            and self.note == other.note
         )
 
     def __repr__(self):
-        return f"Checkpoint(event_id='{self.event_id}', name='{self.name}', order={self.order}, type={self.type}, status={self.status})"
+        return (
+            f"Checkpoint(id='{self.id}', name='{self.name}', order={self.order}, "
+            f"checkpoint_type={self.checkpoint_type.value}, status_competitor={self.status_competitor.value}, "
+            f"pass_time={self.pass_time}, note='{self.note}')"
+        )
 
 
 class Competitor:
