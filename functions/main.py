@@ -617,6 +617,40 @@ def track_competitors_off(req: https_fn.CallableRequest) -> dict:
 
         db = firestore.client()
 
+        # Actualizar el documento del día en events/{event_id}/day_of_races/{day_id}
+        day_of_race_ref = db.collection(f"events/{event_id}/day_of_races").document(
+            day_id
+        )
+        day_of_race_doc = day_of_race_ref.get()
+
+        if day_of_race_doc.exists:
+            # Obtener estado actual del día
+            day_of_race_data = day_of_race_doc.to_dict()
+            current_day_is_active = day_of_race_data.get("isActivate", True)
+
+            logging.info(
+                f"track_competitors_off: Actualizando documento del día {day_id} en events/{event_id}/day_of_races"
+            )
+            logging.info(
+                f"track_competitors_off: Estado actual isActivate del día: {current_day_is_active}"
+            )
+
+            # Actualizar el documento del día con isActivate = false
+            day_of_race_ref.update(
+                {
+                    "isActivate": False,
+                    "updatedAt": format_utc_to_local_datetime(datetime.utcnow()),
+                }
+            )
+
+            logging.info(
+                f"track_competitors_off: Documento del día actualizado exitosamente. isActivate cambiado a False"
+            )
+        else:
+            logging.warning(
+                f"track_competitors_off: Documento del día {day_id} no encontrado en events/{event_id}/day_of_races"
+            )
+
         # Construir el ID del documento de tracking
         tracking_doc_id = f"{event_id}_{day_id}"
         collection_path = f"events_tracking/{event_id}/competitor_tracking"
@@ -647,7 +681,7 @@ def track_competitors_off(req: https_fn.CallableRequest) -> dict:
         current_is_active = tracking_data.get("isActivate", True)
 
         logging.info(
-            f"track_competitors_off: Estado actual isActive: {current_is_active}"
+            f"track_competitors_off: Estado actual isActive del tracking: {current_is_active}"
         )
 
         # Actualizar el documento con isActive = false
@@ -659,7 +693,7 @@ def track_competitors_off(req: https_fn.CallableRequest) -> dict:
         )
 
         logging.info(
-            f"track_competitors_off: Documento actualizado exitosamente. isActive cambiado a False"
+            f"track_competitors_off: Documento de tracking actualizado exitosamente. isActivate cambiado a False"
         )
 
         result = {
