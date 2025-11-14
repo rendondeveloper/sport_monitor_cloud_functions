@@ -461,12 +461,108 @@ def track_competitors(req: https_fn.CallableRequest) -> dict:
             f"track_competitors: Creando {len(participants_docs)} documentos de competidores"
         )
 
-        for i, participant_doc in enumerate(participants_docs):
+        # Preparar lista de participantes con timeToStart para ordenar
+        participants_with_time = []
+        participants_without_time = []
+
+        for participant_doc in participants_docs:
             participant_data = participant_doc.to_dict()
 
             # Extraer datos del participante
             personal_data = participant_data.get("personalData", {})
             competition_category = participant_data.get("competitionCategory", {})
+
+            # Buscar timestoStart (Map<String, DateTime>) y verificar si day_id existe
+            time_start_map = participant_data.get("timesToStart", {})
+            time_to_start = None
+
+            if time_start_map and day_id in time_start_map:
+                # Obtener el valor DateTime del mapa
+                time_start_value = time_start_map[day_id]
+
+                # Convertir Timestamp de Firestore a datetime si es necesario
+                # Firebase Admin convierte automáticamente Timestamps a datetime con .to_dict()
+                # pero puede haber casos donde sea necesario manejar diferentes tipos
+                if isinstance(time_start_value, datetime):
+                    # Ya es un datetime (caso más común con Firebase Admin)
+                    time_to_start = time_start_value
+                    # Asegurar que esté en UTC si no tiene timezone
+                    if time_to_start.tzinfo is None:
+                        time_to_start = time_to_start.replace(tzinfo=timezone.utc)
+                elif hasattr(time_start_value, "timestamp") and callable(
+                    getattr(time_start_value, "timestamp", None)
+                ):
+                    # Es un Timestamp de Firestore (verificación por método timestamp)
+                    try:
+                        # Intentar convertir usando el método timestamp
+                        timestamp_seconds = time_start_value.timestamp()
+                        time_to_start = datetime.fromtimestamp(
+                            timestamp_seconds, tz=timezone.utc
+                        )
+                    except (AttributeError, TypeError):
+                        # Si tiene método to_datetime, usarlo
+                        if hasattr(time_start_value, "to_datetime"):
+                            time_to_start = time_start_value.to_datetime()
+                            if time_to_start.tzinfo is None:
+                                time_to_start = time_to_start.replace(
+                                    tzinfo=timezone.utc
+                                )
+                        else:
+                            time_to_start = None
+                elif isinstance(time_start_value, str):
+                    # Es un string, intentar parsearlo
+                    try:
+                        time_to_start = datetime.fromisoformat(
+                            time_start_value.replace("Z", "+00:00")
+                        )
+                    except:
+                        logging.warning(
+                            f"track_competitors: No se pudo parsear timeStart para participante {participant_doc.id}, día {day_id}"
+                        )
+                        time_to_start = None
+                else:
+                    logging.warning(
+                        f"track_competitors: Tipo de timeStart no reconocido para participante {participant_doc.id}, día {day_id}: {type(time_start_value)}"
+                    )
+                    time_to_start = None
+
+                logging.debug(
+                    f"track_competitors: Participante {participant_doc.id} tiene timeToStart: {time_to_start} para día {day_id}"
+                )
+
+            # Crear estructura temporal con los datos del participante
+            participant_info = {
+                "doc": participant_doc,
+                "data": participant_data,
+                "personal_data": personal_data,
+                "competition_category": competition_category,
+                "time_to_start": time_to_start,
+            }
+
+            if time_to_start is not None:
+                participants_with_time.append(participant_info)
+            else:
+                participants_without_time.append(participant_info)
+
+        # Ordenar participantes con timeToStart del más antiguo al más nuevo
+        participants_with_time.sort(
+            key=lambda x: x["time_to_start"] if x["time_to_start"] else datetime.max
+        )
+
+        # Combinar listas: primero los que tienen timeToStart (ordenados), luego los que no
+        sorted_participants = participants_with_time + participants_without_time
+
+        logging.info(
+            f"track_competitors: {len(participants_with_time)} participantes con timeToStart, {len(participants_without_time)} sin timeToStart"
+        )
+
+        # Crear documentos de competidores en el orden correcto
+        for i, participant_info in enumerate(sorted_participants):
+            participant_doc = participant_info["doc"]
+            participant_data = participant_info["data"]
+            personal_data = participant_info["personal_data"]
+            competition_category = participant_info["competition_category"]
+            time_to_start = participant_info["time_to_start"]
 
             # Crear documento del competidor
             competitor_id = participant_doc.id
@@ -475,7 +571,15 @@ def track_competitors(req: https_fn.CallableRequest) -> dict:
             competitor_data = {
                 "id": competitor_id,
                 "name": personal_data.get("fullName", "Competidor"),
-                "order": i + 1,
+                # Asigna el orden del competidor:
+                # Si pilotNumber existe y es un número válido, usa ese número como el order.
+                # Si no, usa el índice del ciclo + 1 (i + 1) como valor por defecto.
+                "order": (
+                    int(competition_category.get("pilotNumber", i + 1))
+                    if competition_category.get("pilotNumber") is not None
+                    and str(competition_category.get("pilotNumber")).isdigit()
+                    else int(i + 1)
+                ),
                 "category": competition_category.get(
                     "registrationCategory", "Sin categoría"
                 ),
@@ -483,6 +587,25 @@ def track_competitors(req: https_fn.CallableRequest) -> dict:
                 "createdAt": format_utc_to_local_datetime(datetime.utcnow()),
                 "updatedAt": format_utc_to_local_datetime(datetime.utcnow()),
             }
+
+            # Agregar timeToStart si existe
+            if time_to_start is not None:
+                # Asegurar que el datetime esté en UTC antes de formatearlo
+                if time_to_start.tzinfo is not None:
+                    # Convertir a UTC si tiene timezone
+                    time_to_start_utc = time_to_start.astimezone(timezone.utc).replace(
+                        tzinfo=None
+                    )
+                else:
+                    # Asumir que ya está en UTC si no tiene timezone
+                    time_to_start_utc = time_to_start
+
+                competitor_data["timeToStart"] = format_utc_to_local_datetime(
+                    time_to_start_utc
+                )
+                logging.debug(
+                    f"track_competitors: Competidor {competitor_id} - order: {i + 1}, timeToStart: {competitor_data['timeToStart']}"
+                )
 
             competitor_doc_ref.set(competitor_data)
 
