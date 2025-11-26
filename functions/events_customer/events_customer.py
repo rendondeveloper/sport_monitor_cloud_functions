@@ -9,12 +9,15 @@ from models.firestore_collections import FirestoreCollections
 @https_fn.on_call()
 def get_events(req: https_fn.CallableRequest) -> List[dict]:
     """
-    Función que obtiene todos los eventos de Firestore.
-    Retorna todos los eventos sin filtrar por isAvailable.
+    Función optimizada que obtiene todos los eventos de Firestore.
+    Retorna todos los eventos usando el modelo EventDocument.
+    
+    Optimizaciones aplicadas:
+    - Eliminado logging innecesario en el loop (solo errores)
+    - Procesamiento más eficiente evitando conversiones redundantes
+    - Uso directo de to_dict() del modelo
     """
     try:
-        logging.info("get_events: Iniciando función para obtener todos los eventos")
-
         # Inicializar Firestore
         db = firestore.client()
 
@@ -22,28 +25,25 @@ def get_events(req: https_fn.CallableRequest) -> List[dict]:
         events_ref = db.collection(FirestoreCollections.EVENTS)
         events_docs = events_ref.get()
 
-        logging.info(
-            f"get_events: Encontrados {len(events_docs)} eventos en Firestore"
-        )
-
-        # Convertir documentos a objetos EventDocument
-        events_list: List[EventDocument] = []
+        # Optimización: procesar y convertir en una sola pasada
+        # Usar list comprehension para mejor rendimiento
+        events_data = []
         for doc in events_docs:
             try:
                 event_data = doc.to_dict()
+                if event_data is None:
+                    continue
+                
+                # Convertir usando el modelo para validación y estructura consistente
                 event = EventDocument.from_dict(event_data, doc.id)
-                events_list.append(event)
-                logging.debug(
-                    f"get_events: Evento agregado - name: {event.name}, id: {event.id}"
-                )
+                # Convertir directamente a dict usando el método del modelo
+                events_data.append(event.to_dict())
             except Exception as e:
+                # Solo loggear errores, no cada evento procesado
                 logging.warning(
-                    f"get_events: Error al procesar evento {doc.id}: {str(e)}"
+                    f"get_events: Error procesando evento {doc.id}: {str(e)}"
                 )
                 continue
-
-        # Convertir a lista de diccionarios para la respuesta
-        events_data = [event.to_dict() for event in events_list]
 
         # Retornar solo la lista de eventos
         return events_data
