@@ -8,6 +8,7 @@ from .checkpoint_tracking import (
     CompetitorsTrackingStatus,
     Competitor,
 )
+from .firestore_collections import FirestoreCollections
 
 __all__ = [
     "EventsResponse",
@@ -20,4 +21,5 @@ __all__ = [
     "CheckpointType",
     "CompetitorsTrackingStatus",
     "Competitor",
+    "FirestoreCollections",
 ]

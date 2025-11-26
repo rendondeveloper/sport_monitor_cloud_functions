@@ -2,38 +2,39 @@ from firebase_functions import https_fn
 from firebase_admin import firestore
 from typing import List
 import logging
-from models.events_response import EventsResponse
+from models.event_document import EventDocument
+from models.firestore_collections import FirestoreCollections
 
 
-@https_fn.on_call(allow_unauthenticated=True)
+@https_fn.on_call()
 def get_events(req: https_fn.CallableRequest) -> List[dict]:
     """
-    Función que obtiene todos los eventos disponibles de Firestore.
-    Retorna solo los eventos donde isAvailable es True.
+    Función que obtiene todos los eventos de Firestore.
+    Retorna todos los eventos sin filtrar por isAvailable.
     """
     try:
-        logging.info("get_events: Iniciando función para obtener eventos disponibles")
+        logging.info("get_events: Iniciando función para obtener todos los eventos")
 
         # Inicializar Firestore
         db = firestore.client()
 
-        # Consultar directamente los eventos donde isAvailable es True
-        events_ref = db.collection("events")
-        events_query = events_ref.where("isAvailable", "==", True)
-        events_docs = events_query.get()
+        # Consultar todos los eventos usando la constante
+        events_ref = db.collection(FirestoreCollections.EVENTS)
+        events_docs = events_ref.get()
 
         logging.info(
-            f"get_events: Encontrados {len(events_docs)} eventos disponibles en Firestore"
+            f"get_events: Encontrados {len(events_docs)} eventos en Firestore"
         )
 
-        # Convertir documentos a objetos EventsResponse
-        events_list: List[EventsResponse] = []
+        # Convertir documentos a objetos EventDocument
+        events_list: List[EventDocument] = []
         for doc in events_docs:
             try:
-                event = EventsResponse.from_firestore(doc)
+                event_data = doc.to_dict()
+                event = EventDocument.from_dict(event_data, doc.id)
                 events_list.append(event)
                 logging.debug(
-                    f"get_events: Evento disponible agregado - title: {event.title}"
+                    f"get_events: Evento agregado - name: {event.name}, id: {event.id}"
                 )
             except Exception as e:
                 logging.warning(
