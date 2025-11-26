@@ -129,7 +129,7 @@ def get_events(req: https_fn.CallableRequest) -> Dict[str, Any]:
             last_doc_id=last_document_id if has_more else None,
         )
 
-        # Retornar como diccionario
+        # Retornar usando el método to_dict() del modelo
         return paginated_response.to_dict()
 
     except ValueError as e:

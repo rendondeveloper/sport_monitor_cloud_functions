@@ -36,16 +36,24 @@ class PaginatedResponse(Generic[T]):
 
     def __init__(
         self,
-        result: List[T],
+        items: List[T],
         pagination: PaginationInfo,
     ):
-        self.result = result
+        self.items = items
         self.pagination = pagination
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convierte a diccionario para la respuesta"""
+        """
+        Convierte a diccionario para la respuesta.
+        Retorna directamente result y pagination al mismo nivel.
+        Nota: Si Firebase Functions callable envuelve la respuesta en 'result',
+        este método retorna la estructura que queremos en la respuesta final.
+        """
+        # Retornar directamente result y pagination al mismo nivel
+        # Si Firebase envuelve en result, esto dará: {"result": {"result": [...], "pagination": {...}}}
+        # Si Firebase NO envuelve, esto dará: {"result": [...], "pagination": {...}}
         return {
-            "result": self.result,
+            "result": self.items,
             "pagination": self.pagination.to_dict(),
         }
 
@@ -75,5 +83,5 @@ class PaginatedResponse(Generic[T]):
             count=len(items),
             last_doc_id=last_doc_id,
         )
-        return cls(result=items, pagination=pagination)
+        return cls(items=items, pagination=pagination)
 
