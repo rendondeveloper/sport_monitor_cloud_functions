@@ -80,16 +80,49 @@ Las funciones callable de Firebase requieren autenticación por defecto. Para `g
 
 ## 1. get_events
 
-Obtiene todos los eventos disponibles (donde `isAvailable == true`).
+Obtiene eventos de Firestore con soporte de paginación. Retorna todos los eventos usando el modelo EventDocument.
+
+### Parámetros Opcionales
+
+- `limit`: Número de eventos por página (default: 50, máximo: 100)
+- `page`: Número de página (default: 1)
+- `lastDocId`: ID del último documento de la página anterior (para cursor-based pagination, más eficiente)
 
 ### cURL (Si la función es pública - SIN autenticación) ✅
 
+**Primera página (sin parámetros):**
 ```bash
 curl -X POST \
   'https://us-central1-system-track-monitor.cloudfunctions.net/get_events' \
   -H 'Content-Type: application/json' \
   -d '{
     "data": {}
+  }'
+```
+
+**Con paginación (limit y page):**
+```bash
+curl -X POST \
+  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "data": {
+      "limit": 20,
+      "page": 1
+    }
+  }'
+```
+
+**Paginación con cursor (más eficiente):**
+```bash
+curl -X POST \
+  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "data": {
+      "limit": 20,
+      "lastDocId": "id-del-ultimo-documento"
+    }
   }'
 ```
 
@@ -101,7 +134,10 @@ curl -X POST \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer YOUR_ID_TOKEN' \
   -d '{
-    "data": {}
+    "data": {
+      "limit": 20,
+      "page": 1
+    }
   }'
 ```
 
@@ -114,28 +150,88 @@ curl -X POST \
   - `Authorization`: `Bearer YOUR_ID_TOKEN` ⚠️ Solo si la función NO es pública
 - **Body** (raw JSON):
 
+**Sin paginación:**
 ```json
 {
   "data": {}
 }
 ```
 
+**Con paginación:**
+```json
+{
+  "data": {
+    "limit": 20,
+    "page": 1
+  }
+}
+```
+
+**Con cursor (recomendado):**
+```json
+{
+  "data": {
+    "limit": 20,
+    "lastDocId": "id-del-ultimo-documento-de-la-pagina-anterior"
+  }
+}
+```
+
 ### Respuesta Esperada
 
 ```json
-[
-  {
-    "title": "Evento 1",
-    "description": "Descripción del evento",
-    "imageUrl": "https://...",
-    "url": "https://...",
-    "isAvailable": true
-  },
-  {
-    "title": "Evento 2",
-    ...
+{
+  "events": [
+    {
+      "id": "event-id-1",
+      "name": "Evento 1",
+      "description": "Descripción del evento",
+      "status": "published",
+      "subtitle": "Subtítulo",
+      "rallySystemId": "rally-id",
+      "staffMembers": [],
+      "createdBy": "user-id",
+      "location": "Ubicación",
+      "date": "2025-01-01",
+      "participants": [],
+      "createdAt": "2025-01-01T00:00:00",
+      "updatedAt": "2025-01-01T00:00:00"
+    },
+    {
+      "id": "event-id-2",
+      ...
+    }
+  ],
+  "pagination": {
+    "limit": 20,
+    "page": 1,
+    "hasMore": true,
+    "count": 20,
+    "lastDocId": "event-id-20"
   }
-]
+}
+```
+
+### Ejemplo de Uso con Paginación
+
+**Página 1:**
+```json
+{
+  "data": {
+    "limit": 20,
+    "page": 1
+  }
+}
+```
+
+**Página 2 (usando cursor - más eficiente):**
+```json
+{
+  "data": {
+    "limit": 20,
+    "lastDocId": "event-id-del-ultimo-de-pagina-1"
+  }
+}
 ```
 
 ---
