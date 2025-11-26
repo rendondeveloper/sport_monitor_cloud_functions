@@ -1,0 +1,60 @@
+{
+  // Configuración del intérprete de Python
+  "python.defaultInterpreterPath": "${workspaceFolder}/functions/venv/bin/python",
+  
+  // Configuración de Python
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.diagnosticMode": "workspace",
+  "python.languageServer": "None",
+  
+  // Configuración de linting
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": false,
+  "python.linting.flake8Enabled": true,
+  
+  // Configuración de formato
+  "python.formatting.provider": "black",
+  "python.formatting.blackArgs": [
+    "--line-length=88"
+  ],
+  
+  // Configuración de archivos
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.pytest_cache": true,
+    "**/venv": false
+  },
+  
+  // Configuración de búsqueda
+  "search.exclude": {
+    "**/venv": true,
+    "**/__pycache__": true,
+    "**/*.pyc": true
+  },
+  
+  // Configuración de ejecución
+  "python.terminal.activateEnvironment": true,
+  "python.terminal.activateEnvInCurrentTerminal": true,
+  
+  // Configuración específica para Firebase Functions
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/functions"
+  ],
+  
+  // Configuración de editor
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+  
+  // Configuración de archivos Python
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.rulers": [88]
+  }
+}
+
