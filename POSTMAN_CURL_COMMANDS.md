@@ -91,6 +91,7 @@ Obtiene eventos de Firestore con soporte de paginación. Retorna todos los event
 ### cURL (Si la función es pública - SIN autenticación) ✅
 
 **Primera página (sin parámetros):**
+
 ```bash
 curl -X POST \
   'https://us-central1-system-track-monitor.cloudfunctions.net/get_events' \
@@ -101,6 +102,7 @@ curl -X POST \
 ```
 
 **Con paginación (limit y page):**
+
 ```bash
 curl -X POST \
   'https://us-central1-system-track-monitor.cloudfunctions.net/get_events' \
@@ -114,6 +116,7 @@ curl -X POST \
 ```
 
 **Paginación con cursor (más eficiente):**
+
 ```bash
 curl -X POST \
   'https://us-central1-system-track-monitor.cloudfunctions.net/get_events' \
@@ -151,6 +154,7 @@ curl -X POST \
 - **Body** (raw JSON):
 
 **Sin paginación:**
+
 ```json
 {
   "data": {}
@@ -158,6 +162,7 @@ curl -X POST \
 ```
 
 **Con paginación:**
+
 ```json
 {
   "data": {
@@ -168,6 +173,7 @@ curl -X POST \
 ```
 
 **Con cursor (recomendado):**
+
 ```json
 {
   "data": {
@@ -181,7 +187,7 @@ curl -X POST \
 
 ```json
 {
-  "events": [
+  "result": [
     {
       "id": "event-id-1",
       "name": "Evento 1",
@@ -212,9 +218,12 @@ curl -X POST \
 }
 ```
 
+**Nota**: Los eventos ahora están en `result` en lugar de `events` para mantener consistencia con el modelo genérico de paginación.
+
 ### Ejemplo de Uso con Paginación
 
 **Página 1:**
+
 ```json
 {
   "data": {
@@ -225,6 +234,7 @@ curl -X POST \
 ```
 
 **Página 2 (usando cursor - más eficiente):**
+
 ```json
 {
   "data": {

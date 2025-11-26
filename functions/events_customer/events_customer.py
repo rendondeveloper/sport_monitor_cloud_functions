@@ -1,9 +1,10 @@
 from firebase_functions import https_fn
 from firebase_admin import firestore
-from typing import List, Optional, Dict, Any
+from typing import Dict, Any
 import logging
 from models.event_document import EventDocument
 from models.firestore_collections import FirestoreCollections
+from models.paginated_response import PaginatedResponse
 
 
 @https_fn.on_call()
@@ -74,17 +75,15 @@ def get_events(req: https_fn.CallableRequest) -> Dict[str, Any]:
                 if len(offset_docs) > 0:
                     query = query.start_after(offset_docs[-1])
                 else:
-                    # Si no hay documentos en el offset, retornar vacío
-                    return {
-                        "events": [],
-                        "pagination": {
-                            "limit": limit,
-                            "page": page,
-                            "hasMore": False,
-                            "count": 0,
-                            "lastDocId": None,
-                        }
-                    }
+                    # Si no hay documentos en el offset, retornar vacío usando el modelo
+                    empty_response = PaginatedResponse.create(
+                        items=[],
+                        limit=limit,
+                        page=page,
+                        has_more=False,
+                        last_doc_id=None,
+                    )
+                    return empty_response.to_dict()
             except Exception as e:
                 logging.warning(f"get_events: Error calculando offset para página {page}: {str(e)}")
         
@@ -121,22 +120,17 @@ def get_events(req: https_fn.CallableRequest) -> Dict[str, Any]:
                 )
                 continue
 
-        # Calcular información de paginación
-        # Nota: Para obtener el total exacto necesitaríamos otra query, 
-        # pero eso sería costoso. Por ahora retornamos información básica.
-        
-        response = {
-            "events": events_data,
-            "pagination": {
-                "limit": limit,
-                "page": page,
-                "hasMore": has_more,
-                "count": len(events_data),
-                "lastDocId": last_document_id if has_more else None,
-            }
-        }
+        # Crear respuesta paginada usando el modelo genérico
+        paginated_response = PaginatedResponse.create(
+            items=events_data,
+            limit=limit,
+            page=page,
+            has_more=has_more,
+            last_doc_id=last_document_id if has_more else None,
+        )
 
-        return response
+        # Retornar como diccionario
+        return paginated_response.to_dict()
 
     except ValueError as e:
         logging.error(f"get_events: Error de validación: {str(e)}")

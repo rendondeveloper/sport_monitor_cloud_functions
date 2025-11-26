@@ -9,6 +9,7 @@ from .checkpoint_tracking import (
     Competitor,
 )
 from .firestore_collections import FirestoreCollections
+from .paginated_response import PaginatedResponse, PaginationInfo
 
 __all__ = [
     "EventsResponse",
@@ -22,4 +23,6 @@ __all__ = [
     "CompetitorsTrackingStatus",
     "Competitor",
     "FirestoreCollections",
+    "PaginatedResponse",
+    "PaginationInfo",
 ]
