@@ -1,6 +1,6 @@
 # Models package
 from .events_response import EventsResponse
-from .event_document import EventDocument, EventStatus, EventStaffRole, EventStaffMember
+from .event_document import EventDocument, EventStatus
 from .checkpoint_tracking import (
     TrackingCheckpoint,
     Checkpoint,
@@ -15,8 +15,6 @@ __all__ = [
     "EventsResponse",
     "EventDocument",
     "EventStatus",
-    "EventStaffRole",
-    "EventStaffMember",
     "TrackingCheckpoint",
     "Checkpoint",
     "CheckpointType",
