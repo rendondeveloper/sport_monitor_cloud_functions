@@ -2,7 +2,7 @@ from firebase_functions import https_fn
 from firebase_admin import firestore
 from typing import Dict, Any
 import logging
-from models.event_document import EventDocument
+from .event_short_document import EventShortDocument
 from models.firestore_collections import FirestoreCollections
 from models.paginated_response import PaginatedResponse
 
@@ -11,7 +11,7 @@ from models.paginated_response import PaginatedResponse
 def get_events(req: https_fn.CallableRequest) -> Dict[str, Any]:
     """
     Función optimizada que obtiene eventos de Firestore con soporte de paginación.
-    Retorna eventos usando el modelo EventDocument.
+    Retorna eventos usando el modelo EventShortDocument.
     
     Parámetros opcionales en req.data:
     - limit: Número de eventos por página (default: 50, max: 100)
@@ -108,8 +108,8 @@ def get_events(req: https_fn.CallableRequest) -> Dict[str, Any]:
                 if event_data is None:
                     continue
                 
-                # Convertir usando el modelo para validación y estructura consistente
-                event = EventDocument.from_dict(event_data, doc.id)
+                # Convertir usando el modelo EventShortDocument con mapeo automático
+                event = EventShortDocument.from_firestore_data(event_data, doc.id)
                 # Convertir directamente a dict usando el método del modelo
                 events_data.append(event.to_dict())
                 last_document_id = doc.id
