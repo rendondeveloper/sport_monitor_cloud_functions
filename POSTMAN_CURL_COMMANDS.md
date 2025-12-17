@@ -74,113 +74,113 @@ fetch(
 
 ## Nota Importante
 
-Las funciones callable de Firebase requieren autenticación por defecto. Para `get_events` (datos públicos), recomiendo hacerla pública. Para las otras funciones que modifican datos, mantén la autenticación requerida.
+- **get_events**: Ahora es una función HTTP GET (no callable). Los parámetros se pasan como query parameters. Para datos públicos, recomiendo hacerla pública.
+- **Otras funciones** (track_event_checkpoint, track_competitors, track_competitors_off): Son funciones callable que requieren autenticación por defecto. Para funciones que modifican datos, mantén la autenticación requerida.
 
 ---
 
 ## 1. get_events
 
-Obtiene eventos de Firestore con soporte de paginación. Retorna todos los eventos usando el modelo EventDocument.
+Obtiene eventos de Firestore con soporte de paginación. Retorna eventos usando el modelo **EventShortDocument** (versión simplificada con campos esenciales).
 
-### Parámetros Opcionales
+**Método**: `GET`  
+**Tipo**: HTTP Request (no callable)
+
+### Parámetros Opcionales (Query Parameters)
 
 - `limit`: Número de eventos por página (default: 50, máximo: 100)
 - `page`: Número de página (default: 1)
 - `lastDocId`: ID del último documento de la página anterior (para cursor-based pagination, más eficiente)
 
-### cURL (Si la función es pública - SIN autenticación) ✅
+**Ejemplo de URL con parámetros:**
+
+```
+https://us-central1-system-track-monitor.cloudfunctions.net/get_events?limit=20&page=1
+```
+
+### Campos Retornados (EventShortDocument)
+
+- `id`: ID del evento
+- `title`: Título del evento
+- `subtitle`: Subtítulo (opcional)
+- `status`: Estado del evento (draft, published, inProgress, etc.)
+- `startDateTime`: Fecha y hora de inicio en formato ISO 8601
+- `timezone`: Zona horaria (opcional)
+- `locationName`: Nombre de la ubicación
+- `imageUrl`: URL de la imagen (opcional)
+
+### cURL (Método GET - Query Parameters) ✅
 
 **Primera página (sin parámetros):**
 
 ```bash
-curl -X POST \
-  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "data": {}
-  }'
+curl -X GET \
+  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events'
 ```
 
 **Con paginación (limit y page):**
 
 ```bash
-curl -X POST \
-  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "data": {
-      "limit": 20,
-      "page": 1
-    }
-  }'
+curl -X GET \
+  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events?limit=20&page=1'
 ```
 
-**Paginación con cursor (más eficiente):**
+**Paginación con cursor (más eficiente - recomendado):**
 
 ```bash
-curl -X POST \
-  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "data": {
-      "limit": 20,
-      "lastDocId": "id-del-ultimo-documento"
-    }
-  }'
+curl -X GET \
+  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events?limit=20&lastDocId=id-del-ultimo-documento'
+```
+
+**Con todos los parámetros:**
+
+```bash
+curl -X GET \
+  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events?limit=20&page=1&lastDocId=id-del-ultimo-documento'
 ```
 
 ### cURL (Si requiere autenticación)
 
 ```bash
-curl -X POST \
-  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events' \
-  -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer YOUR_ID_TOKEN' \
-  -d '{
-    "data": {
-      "limit": 20,
-      "page": 1
-    }
-  }'
+curl -X GET \
+  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events?limit=20&page=1' \
+  -H 'Authorization: Bearer YOUR_ID_TOKEN'
+```
+
+**Con cursor y autenticación:**
+
+```bash
+curl -X GET \
+  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events?limit=20&lastDocId=id-del-ultimo-documento' \
+  -H 'Authorization: Bearer YOUR_ID_TOKEN'
 ```
 
 ### Postman Configuración
 
-- **Method**: `POST`
+- **Method**: `GET`
 - **URL**: `https://us-central1-system-track-monitor.cloudfunctions.net/get_events`
 - **Headers**:
-  - `Content-Type`: `application/json`
   - `Authorization`: `Bearer YOUR_ID_TOKEN` ⚠️ Solo si la función NO es pública
-- **Body** (raw JSON):
+- **Query Parameters** (Params tab):
 
 **Sin paginación:**
 
-```json
-{
-  "data": {}
-}
-```
+- No agregar parámetros (o dejar vacío)
 
 **Con paginación:**
 
-```json
-{
-  "data": {
-    "limit": 20,
-    "page": 1
-  }
-}
-```
+- `limit`: `20`
+- `page`: `1`
 
 **Con cursor (recomendado):**
 
-```json
-{
-  "data": {
-    "limit": 20,
-    "lastDocId": "id-del-ultimo-documento-de-la-pagina-anterior"
-  }
-}
+- `limit`: `20`
+- `lastDocId`: `id-del-ultimo-documento-de-la-pagina-anterior`
+
+**Ejemplo de URL completa:**
+
+```
+https://us-central1-system-track-monitor.cloudfunctions.net/get_events?limit=20&lastDocId=event-id-20
 ```
 
 ### Respuesta Esperada
@@ -190,22 +190,23 @@ curl -X POST \
   "result": [
     {
       "id": "event-id-1",
-      "name": "Evento 1",
-      "description": "Descripción del evento",
+      "title": "Evento Deportivo 2025",
+      "subtitle": "Subtítulo del evento",
       "status": "published",
-      "subtitle": "Subtítulo",
-      "rallySystemId": "rally-id",
-      "staffMembers": [],
-      "createdBy": "user-id",
-      "location": "Ubicación",
-      "date": "2025-01-01",
-      "participants": [],
-      "createdAt": "2025-01-01T00:00:00",
-      "updatedAt": "2025-01-01T00:00:00"
+      "startDateTime": "2025-01-15T10:00:00",
+      "timezone": "America/Mexico_City",
+      "locationName": "Estadio Principal",
+      "imageUrl": "https://example.com/image.jpg"
     },
     {
       "id": "event-id-2",
-      ...
+      "title": "Maratón Internacional",
+      "subtitle": null,
+      "status": "inProgress",
+      "startDateTime": "2025-02-20T08:00:00",
+      "timezone": "America/Mexico_City",
+      "locationName": "Parque Central",
+      "imageUrl": null
     }
   ],
   "pagination": {
@@ -218,31 +219,34 @@ curl -X POST \
 }
 ```
 
-**Nota**: Los eventos ahora están en `result` en lugar de `events` para mantener consistencia con el modelo genérico de paginación.
+**Nota**:
+
+- Los eventos están en formato `EventShortDocument` (versión simplificada)
+- Los campos opcionales (`subtitle`, `timezone`, `imageUrl`) pueden ser `null`
+- El campo `startDateTime` está en formato ISO 8601
+- La respuesta incluye información de paginación en `pagination`
 
 ### Ejemplo de Uso con Paginación
 
-**Página 1:**
+**Página 1 (usando page):**
 
-```json
-{
-  "data": {
-    "limit": 20,
-    "page": 1
-  }
-}
+```bash
+curl -X GET \
+  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events?limit=20&page=1'
 ```
 
-**Página 2 (usando cursor - más eficiente):**
+**Página 2 (usando cursor - más eficiente, recomendado):**
 
-```json
-{
-  "data": {
-    "limit": 20,
-    "lastDocId": "event-id-del-ultimo-de-pagina-1"
-  }
-}
+```bash
+curl -X GET \
+  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events?limit=20&lastDocId=event-id-del-ultimo-de-pagina-1'
 ```
+
+**Nota**:
+
+- Se recomienda usar `lastDocId` en lugar de `page` para mejor rendimiento, especialmente con grandes volúmenes de datos.
+- Los parámetros se pasan como query parameters en la URL (no en el body).
+- No se requiere `Content-Type: application/json` para GET requests.
 
 ---
 

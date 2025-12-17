@@ -1,19 +1,19 @@
 from firebase_functions import https_fn
 from firebase_admin import firestore
-from typing import Dict, Any
 import logging
+import json
 from .event_short_document import EventShortDocument
 from models.firestore_collections import FirestoreCollections
 from models.paginated_response import PaginatedResponse
 
 
-@https_fn.on_call()
-def get_events(req: https_fn.CallableRequest) -> Dict[str, Any]:
+@https_fn.on_request()
+def get_events(req: https_fn.Request) -> https_fn.Response:
     """
     Función optimizada que obtiene eventos de Firestore con soporte de paginación.
     Retorna eventos usando el modelo EventShortDocument.
     
-    Parámetros opcionales en req.data:
+    Parámetros opcionales (query parameters):
     - limit: Número de eventos por página (default: 50, max: 100)
     - page: Número de página (default: 1, basado en 1)
     - lastDocId: ID del último documento de la página anterior (para cursor-based pagination)
@@ -24,14 +24,46 @@ def get_events(req: https_fn.CallableRequest) -> Dict[str, Any]:
     - Procesamiento más eficiente evitando conversiones redundantes
     - Uso directo de to_dict() del modelo
     """
+    # Manejar CORS preflight (OPTIONS)
+    if req.method == "OPTIONS":
+        return https_fn.Response(
+            "",
+            status=204,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                "Access-Control-Max-Age": "3600",
+            },
+        )
+    
+    # Solo permitir método GET
+    if req.method != "GET":
+        error_response = {
+            "error": {
+                "code": "method-not-allowed",
+                "message": f"Método {req.method} no permitido. Solo se permite GET."
+            }
+        }
+        return https_fn.Response(
+            json.dumps(error_response),
+            status=405,
+            headers={
+                "Content-Type": "application/json",
+                "Allow": "GET, OPTIONS",
+                "Access-Control-Allow-Origin": "*",
+            },
+        )
+    
     try:
-        # Obtener datos de la petición
-        data = req.data or {}
+        # Obtener parámetros de query string
+        limit_param = req.args.get("limit", "50")
+        page_param = req.args.get("page", "1")
+        last_doc_id = req.args.get("lastDocId")
         
         # Parámetros de paginación
-        limit = min(int(data.get("limit", 50)), 100)  # Default 50, máximo 100
-        page = int(data.get("page", 1))  # Default página 1
-        last_doc_id = data.get("lastDocId")  # Para cursor-based pagination
+        limit = min(int(limit_param), 100)  # Default 50, máximo 100
+        page = int(page_param)  # Default página 1
         
         # Validar parámetros
         if limit < 1:
@@ -83,7 +115,12 @@ def get_events(req: https_fn.CallableRequest) -> Dict[str, Any]:
                         has_more=False,
                         last_doc_id=None,
                     )
-                    return empty_response.to_dict()
+                    response_data = empty_response.to_dict()
+                    return https_fn.Response(
+                        json.dumps(response_data),
+                        status=200,
+                        headers={"Content-Type": "application/json"},
+                    )
             except Exception as e:
                 logging.warning(f"get_events: Error calculando offset para página {page}: {str(e)}")
         
@@ -129,18 +166,43 @@ def get_events(req: https_fn.CallableRequest) -> Dict[str, Any]:
             last_doc_id=last_document_id if has_more else None,
         )
 
-        # Retornar usando el método to_dict() del modelo
-        return paginated_response.to_dict()
+        # Retornar respuesta HTTP con JSON
+        response_data = paginated_response.to_dict()
+        return https_fn.Response(
+            json.dumps(response_data, ensure_ascii=False),
+            status=200,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+        )
 
     except ValueError as e:
         logging.error(f"get_events: Error de validación: {str(e)}")
-        raise https_fn.HttpsError(
-            code="invalid-argument",
-            message=f"Parámetros inválidos: {str(e)}"
+        error_response = {
+            "error": {
+                "code": "invalid-argument",
+                "message": f"Parámetros inválidos: {str(e)}"
+            }
+        }
+        return https_fn.Response(
+            json.dumps(error_response),
+            status=400,
+            headers={"Content-Type": "application/json"},
         )
     except Exception as e:
         logging.error(f"get_events: Error interno: {str(e)}", exc_info=True)
-        raise https_fn.HttpsError(
-            code="internal", message=f"Error interno del servidor: {str(e)}"
+        error_response = {
+            "error": {
+                "code": "internal",
+                "message": f"Error interno del servidor: {str(e)}"
+            }
+        }
+        return https_fn.Response(
+            json.dumps(error_response),
+            status=500,
+            headers={"Content-Type": "application/json"},
         )
 
