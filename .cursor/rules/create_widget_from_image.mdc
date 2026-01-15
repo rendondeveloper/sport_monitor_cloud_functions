@@ -1,0 +1,864 @@
+---
+description: New widget
+alwaysApply: false
+---
+
+# CONFIGURACIÓN DE FLUJO AUTOMÁTICO PARA CREAR WIDGETS DESDE IMÁGENES
+
+## COMPORTAMIENTO DEL ASISTENTE
+
+- **Siempre hacer UNA pregunta a la vez**
+- **Esperar respuesta del usuario antes de continuar**
+- **No hacer múltiples preguntas simultáneamente**
+- **Seguir el orden secuencial establecido**
+- **Implementar automáticamente después de obtener toda la información**
+
+## FLUJO SECUENCIAL OBLIGATORIO
+
+### PASO 1: Identificar Tipo de Componente
+
+**Pregunta única:** ¿Qué tipo de componente quieres crear?
+
+- Opciones: `Screen` (pantalla completa) o `Widget` (componente reutilizable)
+- **ESPERAR RESPUESTA**
+
+### PASO 2: Identificar Feature
+
+**Pregunta única:** ¿En qué feature quieres crear el componente?
+
+- Opciones: `lib/features/[nombre_feature]` o `lib/widgets/` (widgets globales)
+- **ESPERAR RESPUESTA**
+
+### PASO 3: Nombre del Componente
+
+**Pregunta única:** ¿Qué nombre quieres usar para el componente?
+
+- Sugerir opciones basadas en la funcionalidad
+- **ESPERAR RESPUESTA**
+
+### PASO 4: Análisis de la Imagen
+
+**Pregunta única:** ¿Puedes describir los elementos principales que ves en la imagen?
+
+- Solicitar: Elementos UI, layout, interacciones, datos mostrados
+- **ESPERAR RESPUESTA**
+
+### PASO 5: Identificar Widgets Individuales
+
+**Pregunta única:** ¿Qué elementos se pueden separar en widgets individuales?
+
+- Solicitar: Lista de widgets reutilizables
+- **ESPERAR RESPUESTA**
+
+### PASO 6: Estado y Provider
+
+**Pregunta única:** ¿Qué campos del state necesitas monitorear?
+
+- Opciones: Listar campos disponibles del provider
+- **ESPERAR RESPUESTA**
+
+### PASO 7: Interacciones
+
+**Pregunta única:** ¿Qué interacciones necesita el componente?
+
+- Solicitar: Botones, formularios, navegación, etc.
+- **ESPERAR RESPUESTA**
+
+## IMPLEMENTACIÓN AUTOMÁTICA
+
+Una vez obtenidas todas las respuestas, implementar automáticamente:
+
+1. **Crear el archivo principal** (Screen o Widget)
+2. **Crear widgets individuales** separados
+3. **Implementar Consumer** para monitoreo de estado
+4. **Agregar exports** al archivo de barril correspondiente
+5. **Verificar imports** y dependencias
+
+## RESTRICCIONES IMPORTANTES
+
+- **✅ SIEMPRE usar StatelessWidget** para componentes simples
+- **✅ SIEMPRE usar Consumer** cuando se necesite monitorear estado
+- **✅ SIEMPRE separar elementos complejos** en widgets individuales
+- **❌ NO usar StatefulWidget** a menos que sea absolutamente necesario
+
+## ESTRUCTURA DE CARPETAS OBLIGATORIA
+
+### Para Screens en Features:
+
+```
+lib/features/[feature_name]/presentation/
+├── screens/
+│   ├── [screen_name]_screen.dart
+│   └── widgets/
+│       ├── [widget_name]_widget.dart
+│       └── [widget_name]_widget.dart
+```
+
+### Para Widgets Globales:
+
+```
+lib/widgets/
+├── [widget_name]/
+│   ├── [widget_name]_widget.dart
+│   └── widgets/
+│       ├── [sub_widget_name]_widget.dart
+│       └── [sub_widget_name]_widget.dart
+```
+
+## PATRONES DE IMPLEMENTACIÓN
+
+### Screen Pattern (StatelessWidget + Consumer)
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:identaplusschool/features/[feature_name]/[feature_name]_export.dart';
+import 'widgets/[widget_name]_widget.dart';
+
+class FeatureNameScreen extends ConsumerWidget {
+  const FeatureNameScreen({
+    super.key,
+    required this.data,
+  });
+
+  final EntityName data;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(featureNameProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Título de la Pantalla'),
+      ),
+      body: Column(
+        children: [
+          // Widgets individuales
+          FeatureWidget(data: data),
+          AnotherWidget(state: state),
+        ],
+      ),
+    );
+  }
+}
+```
+
+### Widget Pattern (StatelessWidget + Consumer)
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:identaplusschool/features/[feature_name]/[feature_name]_export.dart';
+
+class FeatureWidget extends ConsumerWidget {
+  const FeatureWidget({
+    super.key,
+    required this.data,
+  });
+
+  final EntityName data;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(featureNameProvider);
+
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          // Contenido del widget
+          Text(data.name),
+          if (state.isLoading)
+            const CircularProgressIndicator(),
+        ],
+      ),
+    );
+  }
+}
+```
+
+### Widget Individual Pattern (StatelessWidget)
+
+```dart
+import 'package:flutter/material.dart';
+
+class SubWidget extends StatelessWidget {
+  const SubWidget({
+    super.key,
+    required this.title,
+    this.onTap,
+  });
+
+  final String title;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16.0),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8.0),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.2),
+              spreadRadius: 1,
+              blurRadius: 3,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16.0,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+```
+
+## CONVENCIONES DE NOMENCLATURA
+
+### Archivos y Carpetas
+
+- **snake_case**: Para nombres de archivos y carpetas
+- **PascalCase**: Para nombres de clases
+- **camelCase**: Para variables y métodos
+
+### Widgets
+
+- Sufijo `Screen`: `FeatureNameScreen`
+- Sufijo `Widget`: `FeatureNameWidget`
+- Sufijo `SubWidget`: `FeatureSubWidget`
+
+### Estados
+
+- **Consumer**: Para widgets que necesitan monitorear estado
+- **StatelessWidget**: Para widgets que solo reciben props
+- **StatefulWidget**: Solo cuando es absolutamente necesario
+
+## FLUJO DE PREGUNTAS
+
+┌────────────────────────────────────────────────────────────┐
+│ FLUJO DE PREGUNTAS │
+├────────────────────────────────────────────────────────────┤
+│ P1: ¿Tipo de componente? │
+│ ├── Screen (pantalla completa) │
+│ └── Widget (componente reutilizable) │
+│ │
+│ P2: ¿Ubicación del componente? │
+│ ├── lib/features/[feature_name] │
+│ └── lib/widgets/ (widgets globales) │
+│ │
+│ P3: ¿Nombre del componente? │
+│ ├── Sugerir opciones │
+│ └── Confirmar elección │
+│ │
+│ P4: ¿Elementos principales de la imagen? │
+│ ├── Elementos UI │
+│ ├── Layout │
+│ ├── Interacciones │
+│ └── Datos mostrados │
+│ │
+│ P5: ¿Widgets individuales? │
+│ ├── Lista de widgets reutilizables │
+│ └── Separación de responsabilidades │
+│ │
+│ P6: ¿Campos del state a monitorear? │
+│ ├── Listar campos disponibles │
+│ └── Seleccionar campos necesarios │
+│ │
+│ P7: ¿Interacciones del componente? │
+│ ├── Botones │
+│ ├── Formularios │
+│ ├── Navegación │
+│ └── Callbacks │
+└────────────────────────────────────────────────────────────┘
+
+## IMPLEMENTACIÓN AUTOMÁTICA
+
+┌────────────────────────────────────────────────────────────┐
+│ IMPLEMENTACIÓN SCREEN │
+├────────────────────────────────────────────────────────────┤
+│ 1.1 Crear Screen Principal │
+│ ├── StatelessWidget + Consumer │
+│ ├── Scaffold con AppBar │
+│ ├── Body con widgets individuales │
+│ └── Manejo de estado con ref.watch │
+│ │
+│ 1.2 Crear Widgets Individuales │
+│ ├── Carpeta widgets/ │
+│ ├── StatelessWidget para cada elemento │
+│ ├── Props bien definidas │
+│ └── Consumer solo cuando sea necesario │
+│ │
+│ 1.3 Actualizar Exports │
+│ ├── [feature_name]\_export.dart │
+│ └── Verificar orden de exports │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│ IMPLEMENTACIÓN WIDGET │
+├────────────────────────────────────────────────────────────┤
+│ 2.1 Crear Widget Principal │
+│ ├── StatelessWidget + Consumer │
+│ ├── Props bien definidas │
+│ ├── Manejo de estado con ref.watch │
+│ └── Layout responsive │
+│ │
+│ 2.2 Crear Sub-Widgets │
+│ ├── Carpeta widgets/ │
+│ ├── StatelessWidget para cada elemento │
+│ ├── Props bien definidas │
+│ └── Reutilizables │
+│ │
+│ 2.3 Actualizar Exports │
+│ ├── widgets_export.dart (si aplica) │
+│ └── Verificar orden de exports │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│ CONFIGURACIÓN │
+├────────────────────────────────────────────────────────────┤
+│ 3.1 Imports y Dependencias │
+│ ├── Verificar imports │
+│ ├── Agregar dependencias necesarias │
+│ ├── Usar exports del feature │
+│ └── Imports de widgets globales │
+│ │
+│ 3.2 Validaciones │
+│ ├── Verificar estructura de carpetas │
+│ ├── Verificar nomenclatura │
+│ ├── Verificar uso de Consumer │
+│ └── Verificar separación de widgets │
+│ │
+│ 3.3 Testing (Opcional) │
+│ ├── Widget tests │
+│ ├── Integration tests │
+│ └── Mock providers │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│ CHECKLIST FINAL │
+├────────────────────────────────────────────────────────────┤
+│ ✅ Screen/Widget principal creado │
+│ ✅ Widgets individuales separados │
+│ ✅ Consumer implementado correctamente │
+│ ✅ StatelessWidget usado │
+│ ✅ Props bien definidas │
+│ ✅ Exports actualizados │
+│ ✅ Imports verificados │
+│ ✅ Estructura de carpetas correcta │
+│ ✅ Nomenclatura consistente │
+│ ✅ Responsive design implementado │
+│ ✅ Manejo de estados correcto │
+│ ✅ Interacciones implementadas │
+└────────────────────────────────────────────────────────────┘
+
+## PATRONES DE UI/UX
+
+### Layout Responsive
+
+```dart
+// Usar MediaQuery para responsive design
+final size = MediaQuery.of(context).size;
+final isTablet = size.width > 600;
+
+return Container(
+  width: isTablet ? size.width * 0.8 : size.width,
+  padding: EdgeInsets.all(isTablet ? 24.0 : 16.0),
+  child: // contenido
+);
+```
+
+### Manejo de Estados
+
+```dart
+// En Consumer widgets
+final state = ref.watch(providerName);
+
+return state.when(
+  loading: () => const CircularProgressIndicator(),
+  loaded: (data) => WidgetWithData(data: data),
+  error: (message) => ErrorWidget(message: message),
+  empty: () => const EmptyWidget(),
+);
+```
+
+### Interacciones
+
+```dart
+// Callbacks bien definidos
+class FeatureWidget extends ConsumerWidget {
+  const FeatureWidget({
+    super.key,
+    required this.onTap,
+    this.onLongPress,
+  });
+
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: // contenido
+    );
+  }
+}
+```
+
+## NOTAS IMPORTANTES
+
+1. **Siempre usar StatelessWidget** para componentes simples
+2. **Usar Consumer solo cuando sea necesario** monitorear estado
+3. **Separar elementos complejos** en widgets individuales
+4. **Mantener props bien definidas** y tipadas
+5. **Usar responsive design** con MediaQuery
+6. **Seguir convenciones de nomenclatura** del proyecto
+7. **Implementar manejo de estados** correctamente
+8. **Usar exports del feature** para imports
+9. **Mantener widgets reutilizables** y modulares
+10. **Implementar interacciones** con callbacks bien definidos
+
+---
+
+- **Implementar automáticamente después de obtener toda la información**
+
+# CONFIGURACIÓN DE FLUJO AUTOMÁTICO PARA CREAR WIDGETS DESDE IMÁGENES
+
+## COMPORTAMIENTO DEL ASISTENTE
+
+- **Siempre hacer UNA pregunta a la vez**
+- **Esperar respuesta del usuario antes de continuar**
+- **No hacer múltiples preguntas simultáneamente**
+- **Seguir el orden secuencial establecido**
+- **Implementar automáticamente después de obtener toda la información**
+
+## FLUJO SECUENCIAL OBLIGATORIO
+
+### PASO 1: Identificar Tipo de Componente
+
+**Pregunta única:** ¿Qué tipo de componente quieres crear?
+
+- Opciones: `Screen` (pantalla completa) o `Widget` (componente reutilizable)
+- **ESPERAR RESPUESTA**
+
+### PASO 2: Identificar Feature
+
+**Pregunta única:** ¿En qué feature quieres crear el componente?
+
+- Opciones: `lib/features/[nombre_feature]` o `lib/widgets/` (widgets globales)
+- **ESPERAR RESPUESTA**
+
+### PASO 3: Nombre del Componente
+
+**Pregunta única:** ¿Qué nombre quieres usar para el componente?
+
+- Sugerir opciones basadas en la funcionalidad
+- **ESPERAR RESPUESTA**
+
+### PASO 4: Análisis de la Imagen
+
+**Pregunta única:** ¿Puedes describir los elementos principales que ves en la imagen?
+
+- Solicitar: Elementos UI, layout, interacciones, datos mostrados
+- **ESPERAR RESPUESTA**
+
+### PASO 5: Identificar Widgets Individuales
+
+**Pregunta única:** ¿Qué elementos se pueden separar en widgets individuales?
+
+- Solicitar: Lista de widgets reutilizables
+- **ESPERAR RESPUESTA**
+
+### PASO 6: Estado y Provider
+
+**Pregunta única:** ¿Qué campos del state necesitas monitorear?
+
+- Opciones: Listar campos disponibles del provider
+- **ESPERAR RESPUESTA**
+
+### PASO 7: Interacciones
+
+**Pregunta única:** ¿Qué interacciones necesita el componente?
+
+- Solicitar: Botones, formularios, navegación, etc.
+- **ESPERAR RESPUESTA**
+
+## IMPLEMENTACIÓN AUTOMÁTICA
+
+Una vez obtenidas todas las respuestas, implementar automáticamente:
+
+1. **Crear el archivo principal** (Screen o Widget)
+2. **Crear widgets individuales** separados
+3. **Implementar Consumer** para monitoreo de estado
+4. **Agregar exports** al archivo de barril correspondiente
+5. **Verificar imports** y dependencias
+
+## RESTRICCIONES IMPORTANTES
+
+- **✅ SIEMPRE usar StatelessWidget** para componentes simples
+- **✅ SIEMPRE usar Consumer** cuando se necesite monitorear estado
+- **✅ SIEMPRE separar elementos complejos** en widgets individuales
+- **❌ NO usar StatefulWidget** a menos que sea absolutamente necesario
+
+## ESTRUCTURA DE CARPETAS OBLIGATORIA
+
+### Para Screens en Features:
+
+```
+lib/features/[feature_name]/presentation/
+├── screens/
+│   ├── [screen_name]_screen.dart
+│   └── widgets/
+│       ├── [widget_name]_widget.dart
+│       └── [widget_name]_widget.dart
+```
+
+### Para Widgets Globales:
+
+```
+lib/widgets/
+├── [widget_name]/
+│   ├── [widget_name]_widget.dart
+│   └── widgets/
+│       ├── [sub_widget_name]_widget.dart
+│       └── [sub_widget_name]_widget.dart
+```
+
+## PATRONES DE IMPLEMENTACIÓN
+
+### Screen Pattern (StatelessWidget + Consumer)
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:identaplusschool/features/[feature_name]/[feature_name]_export.dart';
+import 'widgets/[widget_name]_widget.dart';
+
+class FeatureNameScreen extends ConsumerWidget {
+  const FeatureNameScreen({
+    super.key,
+    required this.data,
+  });
+
+  final EntityName data;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(featureNameProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Título de la Pantalla'),
+      ),
+      body: Column(
+        children: [
+          // Widgets individuales
+          FeatureWidget(data: data),
+          AnotherWidget(state: state),
+        ],
+      ),
+    );
+  }
+}
+```
+
+### Widget Pattern (StatelessWidget + Consumer)
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:identaplusschool/features/[feature_name]/[feature_name]_export.dart';
+
+class FeatureWidget extends ConsumerWidget {
+  const FeatureWidget({
+    super.key,
+    required this.data,
+  });
+
+  final EntityName data;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(featureNameProvider);
+
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          // Contenido del widget
+          Text(data.name),
+          if (state.isLoading)
+            const CircularProgressIndicator(),
+        ],
+      ),
+    );
+  }
+}
+```
+
+### Widget Individual Pattern (StatelessWidget)
+
+```dart
+import 'package:flutter/material.dart';
+
+class SubWidget extends StatelessWidget {
+  const SubWidget({
+    super.key,
+    required this.title,
+    this.onTap,
+  });
+
+  final String title;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16.0),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8.0),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.2),
+              spreadRadius: 1,
+              blurRadius: 3,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16.0,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+```
+
+## CONVENCIONES DE NOMENCLATURA
+
+### Archivos y Carpetas
+
+- **snake_case**: Para nombres de archivos y carpetas
+- **PascalCase**: Para nombres de clases
+- **camelCase**: Para variables y métodos
+
+### Widgets
+
+- Sufijo `Screen`: `FeatureNameScreen`
+- Sufijo `Widget`: `FeatureNameWidget`
+- Sufijo `SubWidget`: `FeatureSubWidget`
+
+### Estados
+
+- **Consumer**: Para widgets que necesitan monitorear estado
+- **StatelessWidget**: Para widgets que solo reciben props
+- **StatefulWidget**: Solo cuando es absolutamente necesario
+
+## FLUJO DE PREGUNTAS
+
+┌────────────────────────────────────────────────────────────┐
+│ FLUJO DE PREGUNTAS │
+├────────────────────────────────────────────────────────────┤
+│ P1: ¿Tipo de componente? │
+│ ├── Screen (pantalla completa) │
+│ └── Widget (componente reutilizable) │
+│ │
+│ P2: ¿Ubicación del componente? │
+│ ├── lib/features/[feature_name] │
+│ └── lib/widgets/ (widgets globales) │
+│ │
+│ P3: ¿Nombre del componente? │
+│ ├── Sugerir opciones │
+│ └── Confirmar elección │
+│ │
+│ P4: ¿Elementos principales de la imagen? │
+│ ├── Elementos UI │
+│ ├── Layout │
+│ ├── Interacciones │
+│ └── Datos mostrados │
+│ │
+│ P5: ¿Widgets individuales? │
+│ ├── Lista de widgets reutilizables │
+│ └── Separación de responsabilidades │
+│ │
+│ P6: ¿Campos del state a monitorear? │
+│ ├── Listar campos disponibles │
+│ └── Seleccionar campos necesarios │
+│ │
+│ P7: ¿Interacciones del componente? │
+│ ├── Botones │
+│ ├── Formularios │
+│ ├── Navegación │
+│ └── Callbacks │
+└────────────────────────────────────────────────────────────┘
+
+## IMPLEMENTACIÓN AUTOMÁTICA
+
+┌────────────────────────────────────────────────────────────┐
+│ IMPLEMENTACIÓN SCREEN │
+├────────────────────────────────────────────────────────────┤
+│ 1.1 Crear Screen Principal │
+│ ├── StatelessWidget + Consumer │
+│ ├── Scaffold con AppBar │
+│ ├── Body con widgets individuales │
+│ └── Manejo de estado con ref.watch │
+│ │
+│ 1.2 Crear Widgets Individuales │
+│ ├── Carpeta widgets/ │
+│ ├── StatelessWidget para cada elemento │
+│ ├── Props bien definidas │
+│ └── Consumer solo cuando sea necesario │
+│ │
+│ 1.3 Actualizar Exports │
+│ ├── [feature_name]\_export.dart │
+│ └── Verificar orden de exports │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│ IMPLEMENTACIÓN WIDGET │
+├────────────────────────────────────────────────────────────┤
+│ 2.1 Crear Widget Principal │
+│ ├── StatelessWidget + Consumer │
+│ ├── Props bien definidas │
+│ ├── Manejo de estado con ref.watch │
+│ └── Layout responsive │
+│ │
+│ 2.2 Crear Sub-Widgets │
+│ ├── Carpeta widgets/ │
+│ ├── StatelessWidget para cada elemento │
+│ ├── Props bien definidas │
+│ └── Reutilizables │
+│ │
+│ 2.3 Actualizar Exports │
+│ ├── widgets_export.dart (si aplica) │
+│ └── Verificar orden de exports │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│ CONFIGURACIÓN │
+├────────────────────────────────────────────────────────────┤
+│ 3.1 Imports y Dependencias │
+│ ├── Verificar imports │
+│ ├── Agregar dependencias necesarias │
+│ ├── Usar exports del feature │
+│ └── Imports de widgets globales │
+│ │
+│ 3.2 Validaciones │
+│ ├── Verificar estructura de carpetas │
+│ ├── Verificar nomenclatura │
+│ ├── Verificar uso de Consumer │
+│ └── Verificar separación de widgets │
+│ │
+│ 3.3 Testing (Opcional) │
+│ ├── Widget tests │
+│ ├── Integration tests │
+│ └── Mock providers │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│ CHECKLIST FINAL │
+├────────────────────────────────────────────────────────────┤
+│ ✅ Screen/Widget principal creado │
+│ ✅ Widgets individuales separados │
+│ ✅ Consumer implementado correctamente │
+│ ✅ StatelessWidget usado │
+│ ✅ Props bien definidas │
+│ ✅ Exports actualizados │
+│ ✅ Imports verificados │
+│ ✅ Estructura de carpetas correcta │
+│ ✅ Nomenclatura consistente │
+│ ✅ Responsive design implementado │
+│ ✅ Manejo de estados correcto │
+│ ✅ Interacciones implementadas │
+└────────────────────────────────────────────────────────────┘
+
+## PATRONES DE UI/UX
+
+### Layout Responsive
+
+```dart
+// Usar MediaQuery para responsive design
+final size = MediaQuery.of(context).size;
+final isTablet = size.width > 600;
+
+return Container(
+  width: isTablet ? size.width * 0.8 : size.width,
+  padding: EdgeInsets.all(isTablet ? 24.0 : 16.0),
+  child: // contenido
+);
+```
+
+### Manejo de Estados
+
+```dart
+// En Consumer widgets
+final state = ref.watch(providerName);
+
+return state.when(
+  loading: () => const CircularProgressIndicator(),
+  loaded: (data) => WidgetWithData(data: data),
+  error: (message) => ErrorWidget(message: message),
+  empty: () => const EmptyWidget(),
+);
+```
+
+### Interacciones
+
+```dart
+// Callbacks bien definidos
+class FeatureWidget extends ConsumerWidget {
+  const FeatureWidget({
+    super.key,
+    required this.onTap,
+    this.onLongPress,
+  });
+
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: // contenido
+    );
+  }
+}
+```
+
+## NOTAS IMPORTANTES
+
+1. **Siempre usar StatelessWidget** para componentes simples
+2. **Usar Consumer solo cuando sea necesario** monitorear estado
+3. **Separar elementos complejos** en widgets individuales
+4. **Mantener props bien definidas** y tipadas
+5. **Usar responsive design** con MediaQuery
+6. **Seguir convenciones de nomenclatura** del proyecto
+7. **Implementar manejo de estados** correctamente
+8. **Usar exports del feature** para imports
+9. **Mantener widgets reutilizables** y modulares
+10. **Implementar interacciones** con callbacks bien definidos
+
+---
+
+- **Implementar automáticamente después de obtener toda la información**

@@ -1,0 +1,227 @@
+---
+description: Upload IOS TestFlight
+alwaysApply: false
+---
+
+# UPDATE TESTFLIGHT
+
+## PATRÓN DE TAG PARA TESTFLIGHT
+
+```
+*-i-testflight-*
+```
+
+**Ejemplos válidos:**
+
+- `3.0.0+27-i-testflight-release`
+- `v3.0.0+27-i-testflight-prod`
+- `release-i-testflight-1.0.0`
+
+**Configuración en CodeMagic:**
+
+- ✅ Marcar "Trigger on tag creation"
+- ✅ Agregar patrón: `*-i-testflight-*` en "Watched tag patterns"
+
+## COMANDO RÁPIDO: UPDATE TESTFLIGHT
+
+### Flujo Completo Automático
+
+**IMPORTANTE:** El agente debe preguntar al usuario si se requiere actualizar el build number en `pubspec.yaml` antes de proceder.
+
+```bash
+# 0. Verificar y agregar cambios no staged (unstaged)
+if [ -n "$(git status --porcelain)" ]; then
+  echo "📦 Agregando cambios no staged..."
+  git add -A
+
+  # Generar mensaje de commit basado en los cambios
+  CHANGED_FILES=$(git diff --cached --name-only | head -5 | tr '\n' ', ' | sed 's/,$//')
+  if [ -z "$CHANGED_FILES" ]; then
+    COMMIT_MSG="chore: actualizar proyecto"
+  else
+    COMMIT_MSG="chore: actualizar proyecto - $CHANGED_FILES"
+  fi
+
+  echo "💾 Haciendo commit de cambios..."
+  git commit -m "$COMMIT_MSG"
+  echo "✅ Cambios commiteados"
+else
+  echo "ℹ️  No hay cambios para commitear"
+fi
+
+# 1. Obtener versión actual del pubspec.yaml
+VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+BUILD=$(grep '^version:' pubspec.yaml | sed 's/.*+//')
+
+# 2. PREGUNTAR: ¿Se requiere actualizar el build number?
+# El agente debe preguntar al usuario:
+# "¿Deseas actualizar el build number en pubspec.yaml? (s/n)"
+# Si la respuesta es NO (n), usar la versión actual
+# Si la respuesta es SÍ (s), incrementar el build number
+
+# FLUJO SI NO SE ACTUALIZA LA VERSIÓN (usar versión actual)
+# 2a. Crear tag con versión actual
+TAG="$VERSION+$BUILD-i-testflight-release"
+git tag -a "$TAG" -m "Release $VERSION+$BUILD para TestFlight"
+
+# 2b. Subir tag
+BRANCH=$(git branch --show-current)
+git push origin "$BRANCH"
+git push origin "$TAG"
+
+echo "✅ Tag creado con versión actual: $TAG"
+echo "✅ Cambios subidos. CodeMagic iniciará el build automáticamente."
+
+# FLUJO SI SÍ SE ACTUALIZA LA VERSIÓN (incrementar build number)
+# 2a. Incrementar build number
+# NEW_BUILD=$((BUILD + 1))
+#
+# 2b. Actualizar versión en pubspec.yaml
+# sed -i '' "s/version: $VERSION+$BUILD/version: $VERSION+$NEW_BUILD/" pubspec.yaml
+#
+# 2c. Commit de actualización de versión
+# git add pubspec.yaml
+# git commit -m "chore: actualizar versión a $VERSION+$NEW_BUILD"
+#
+# 2d. Crear tag para TestFlight
+# TAG="$VERSION+$NEW_BUILD-i-testflight-release"
+# git tag -a "$TAG" -m "Release $VERSION+$NEW_BUILD para TestFlight"
+#
+# 2e. Subir cambios y tag
+# BRANCH=$(git branch --show-current)
+# git push origin "$BRANCH"
+# git push origin "$TAG"
+#
+# echo "✅ Versión actualizada a $VERSION+$NEW_BUILD"
+# echo "✅ Tag creado: $TAG"
+# echo "✅ Cambios subidos. CodeMagic iniciará el build automáticamente."
+```
+
+## PASOS MANUALES
+
+### 0. Agregar y Commitear Cambios Pendientes
+
+```bash
+# Verificar cambios no staged
+git status
+
+# Agregar todos los cambios (staged y unstaged)
+git add -A
+
+# Hacer commit con mensaje descriptivo
+git commit -m "chore: actualizar proyecto"
+```
+
+### 1. Decidir si Actualizar Versión
+
+**El agente debe preguntar:** "¿Deseas actualizar el build number en pubspec.yaml? (s/n)"
+
+#### Opción A: NO actualizar versión (usar versión actual)
+
+```bash
+# Obtener versión actual
+VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+BUILD=$(grep '^version:' pubspec.yaml | sed 's/.*+//')
+
+# Crear tag con versión actual
+TAG="$VERSION+$BUILD-i-testflight-release"
+git tag -a "$TAG" -m "Release $VERSION+$BUILD para TestFlight"
+
+# Subir tag
+BRANCH=$(git branch --show-current)
+git push origin "$BRANCH"
+git push origin "$TAG"
+```
+
+#### Opción B: SÍ actualizar versión (incrementar build number)
+
+```bash
+# Obtener versión actual
+VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+BUILD=$(grep '^version:' pubspec.yaml | sed 's/.*+//')
+NEW_BUILD=$((BUILD + 1))
+
+# Actualizar versión en pubspec.yaml
+sed -i '' "s/version: $VERSION+$BUILD/version: $VERSION+$NEW_BUILD/" pubspec.yaml
+
+# Commit de actualización de versión
+git add pubspec.yaml
+git commit -m "chore: actualizar versión a $VERSION+$NEW_BUILD"
+
+# Crear tag para TestFlight
+TAG="$VERSION+$NEW_BUILD-i-testflight-release"
+git tag -a "$TAG" -m "Release $VERSION+$NEW_BUILD para TestFlight"
+
+# Subir cambios y tag
+BRANCH=$(git branch --show-current)
+git push origin "$BRANCH"
+git push origin "$TAG"
+```
+
+## FORMATO DE TAG
+
+**Formato recomendado:**
+
+```
+{version}+{build_number}-i-testflight-release
+```
+
+**Ejemplo:**
+
+- Versión en `pubspec.yaml`: `3.0.0+27`
+- Tag creado: `3.0.0+27-i-testflight-release`
+
+## VERIFICACIÓN
+
+### Ver Tags de TestFlight
+
+```bash
+git tag -l "*testflight*"
+```
+
+### Ver Último Tag
+
+```bash
+git describe --tags --abbrev=0
+```
+
+### Ver Versión Actual
+
+```bash
+grep '^version:' pubspec.yaml
+```
+
+## VARIABLES DE ENTORNO EN CODEMAGIC
+
+**Grupo requerido: `app_store_connect_credentials`**
+
+- `APP_STORE_CONNECT_ISSUER_ID`
+- `APP_STORE_CONNECT_KEY_IDENTIFIER`
+- `APP_STORE_CONNECT_PRIVATE_KEY` (contenido del archivo .p8)
+
+## NOTAS IMPORTANTES
+
+1. ✅ **El agente DEBE preguntar** si se requiere actualizar el build number antes de proceder
+2. ✅ Si NO se actualiza la versión, se usa la versión actual del `pubspec.yaml` para crear el tag
+3. ✅ Si SÍ se actualiza la versión, se incrementa el build number automáticamente
+4. ✅ El tag sigue el patrón `*-i-testflight-*`
+5. ✅ El tag se sube al remoto para activar CodeMagic
+6. ✅ CodeMagic iniciará el build automáticamente al detectar el tag
+
+## TROUBLESHOOTING
+
+### El workflow no se activa
+
+- ✅ Verificar que el tag contiene `-i-testflight-`
+- ✅ Verificar que "Trigger on tag creation" está habilitado en CodeMagic
+- ✅ Verificar que el tag fue subido: `git push origin {tag-name}`
+
+### Error al crear tag
+
+- ✅ Verificar que no existe: `git tag -l "*testflight*"`
+- ✅ Si existe, usar un build number diferente
+
+### Error al subir tag
+
+- ✅ Verificar permisos de push
+- ✅ Verificar que el tag fue creado: `git tag -l`

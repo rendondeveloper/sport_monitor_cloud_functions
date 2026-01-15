@@ -1,0 +1,29 @@
+# cursor_rules.mdc
+
+# Rule: Start working on latest Jira ticket
+
+when user types "work on latest ticket" or presses "⌘ + ⇧ + J"
+then
+read file "cursor_events.json"
+extract the first element of the JSON array
+and run:
+"""
+Una vez creado el feature cn el brick.
+
+Revisa ue no haya errores de link
+
+- Si hay errores corrigelos
+
+Revisa el del feature nuevo la carpeta de di y si hay error con el provider del repositorio y errores
+
+- cambia el provider con error por firestoreApiProvider
+- Haz el import
+- Elimina import sin usar
+
+Revisa el del feature nuevo la carpeta de repostory y la clase del repositorio
+
+- Cambia el ApiRestConnect por FirestoreApi
+- Haz el import
+- Elimina import sin usar
+
+"""

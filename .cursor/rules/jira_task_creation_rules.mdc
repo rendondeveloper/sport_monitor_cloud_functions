@@ -1,0 +1,195 @@
+---
+alwaysApply: false
+---
+
+# Reglas para Creación de Tareas en Jira
+
+## 📋 Prefijos Obligatorios en el Título
+
+Todas las tareas deben comenzar con un prefijo entre corchetes que indique el tipo de trabajo:
+
+### Prefijos por Tipo de Trabajo
+
+- **`[App]`** - Para cambios en la aplicación Flutter móvil
+
+  - Ejemplos: UI, widgets, providers, screens, features de la app
+  - Archivos en: `lib/features/`, `lib/presentation/`, `lib/widgets/`
+
+- **`[Backend]`** - Para cambios en Cloud Functions, APIs, servicios backend
+
+  - Ejemplos: Cloud Functions en Python, endpoints REST, lógica de servidor
+  - Archivos en: `functions/`, APIs externas, servicios de backend
+
+- **`[Web]`** - Para cambios en la aplicación web (si aplica)
+
+  - Ejemplos: Frontend web, componentes web, páginas web
+
+- **`[Config]`** - Para cambios en configuración, archivos de ambiente, constantes
+
+  - Ejemplos: `config_app/`, `lib/commons/const/`, variables de ambiente
+  - Archivos: `path_dev.json`, `uri_prod.json`, `keys_dev.json`, etc.
+
+- **`[Core]`** - Para cambios en el core de la aplicación, infraestructura compartida
+
+  - Ejemplos: `lib/core/`, providers generales, utilidades compartidas
+  - Archivos en: `lib/core/`, `lib/commons/core/`
+
+- **`[DI]`** - Para cambios en Dependency Injection, providers
+
+  - Ejemplos: Actualización de providers, inyección de dependencias
+  - Archivos: `*_di.dart`, providers de Riverpod
+
+- **`[CI/CD]`** - Para cambios en pipelines, builds, deployment
+
+  - Ejemplos: Codemagic, GitHub Actions, scripts de build
+  - Archivos: `codemagic.yaml`, `.github/workflows/`
+
+- **`[Feature]`** - Para tareas relacionadas con un feature específico (opcional, usar si es muy específico)
+  - Ejemplos: `[Events]`, `[Profile]`, `[Auth]`, `[Checkpoint]`
+  - Usar cuando la tarea es muy específica de un feature
+
+### Formato del Título
+
+```
+[Prefijo] Descripción breve y clara de la tarea
+```
+
+**Ejemplos correctos:**
+
+- `[App] Agregar widget de búsqueda en pantalla de eventos`
+- `[Backend] Crear Cloud Function para obtener detalle de evento`
+- `[Config] Agregar path_get_event_detail a archivos de configuración`
+- `[Core] Crear repositorio de autenticación reutilizable`
+- `[DI] Actualizar providers para inyectar ApiRestConnect`
+- `[Events] Implementar getEvents2 usando identityToolkitApiRestProvider`
+
+**Ejemplos incorrectos:**
+
+- `Agregar widget de búsqueda` ❌ (falta prefijo)
+- `[Flutter] Agregar widget` ❌ (usar [App] en lugar de [Flutter])
+- `Crear Cloud Function` ❌ (falta prefijo [Backend])
+
+## 👥 Asignación de Tareas
+
+### Proceso de Asignación
+
+1. **Antes de crear la tarea**, el sistema debe:
+
+   - Mostrar la lista de participantes disponibles del proyecto
+   - Preguntar al usuario: "¿A quién se debe asignar esta tarea?"
+   - Esperar la respuesta del usuario con el nombre o email del asignado
+
+2. **Lista de Participantes** (se obtiene dinámicamente del proyecto):
+
+   - Se debe mostrar la lista completa de usuarios que pueden ser asignados
+   - Incluir: nombre completo, email, account ID
+   - Permitir selección por nombre o email
+
+3. **Si no se especifica asignado**:
+   - Dejar el campo `assignee` como `null` (sin asignar)
+   - La tarea quedará disponible para que alguien la tome
+
+### Obtener Lista de Participantes
+
+Usar la herramienta de búsqueda de usuarios de Jira para obtener la lista completa de participantes del proyecto.
+
+## 📝 Estructura de la Descripción
+
+La descripción debe seguir esta estructura estándar:
+
+```markdown
+## Contexto
+
+[Descripción del problema o necesidad]
+
+## Objetivo
+
+[Qué se busca lograr con esta tarea]
+
+## Requisitos Técnicos
+
+### [Sección 1]
+
+- [ ] Requisito 1
+- [ ] Requisito 2
+
+### [Sección 2]
+
+- [ ] Requisito 3
+
+## Dependencias
+
+- [ ] Esta tarea depende de:
+  - **TICKET-XX**: Descripción de la dependencia - debe estar completada
+
+## Criterios de Aceptación
+
+- [ ] Criterio 1
+- [ ] Criterio 2
+- [ ] Criterio 3
+
+## Puntos de Prueba
+
+- [ ] Punto de prueba 1
+- [ ] Punto de prueba 2
+
+## Notas Adicionales
+
+[Cualquier información adicional relevante]
+```
+
+## 🔍 Validación Antes de Crear
+
+Antes de crear la tarea, verificar:
+
+1. ✅ El título tiene un prefijo válido entre corchetes
+2. ✅ El título es descriptivo y claro
+3. ✅ La descripción sigue la estructura estándar
+4. ✅ Se preguntó sobre la asignación (aunque puede quedar sin asignar)
+5. ✅ Los criterios de aceptación están definidos
+6. ✅ Las dependencias están identificadas (si aplica)
+
+## 📌 Ejemplo Completo
+
+**Título:**
+
+```
+[Backend] Migrar EventDetailRepository.getDetailEvent a API REST en Cloud Functions (Python)
+```
+
+**Asignado:**
+
+- Se pregunta al usuario antes de crear
+- Si no se especifica, queda sin asignar
+
+**Descripción:**
+
+```markdown
+## Contexto
+
+Actualmente, el método `EventDetailRepository.getDetailEvent()` obtiene el detalle de un evento directamente desde Firestore...
+
+## Objetivo
+
+Migrar esta funcionalidad para que use una nueva API REST implementada en Python como Cloud Function...
+
+## Requisitos Técnicos
+
+### Cloud Function en Python
+
+- [ ] Crear Cloud Function en `functions/events/events_detail_customer.py`
+- [ ] Usar constante `FirestoreCollections.EVENTS` para la colección
+- [ ] Crear constante `event_content` para la subcolección
+      ...
+
+## Criterios de Aceptación
+
+- [ ] Cloud Function creada y desplegada
+- [ ] Método `getDetailEvent2()` implementado
+      ...
+
+## Notas Adicionales
+
+- La función debe seguir la estructura del proyecto existente
+- Ubicación: `functions/events/events_detail_customer.py`
+```

@@ -1,0 +1,781 @@
+---
+description: New services
+alwaysApply: false
+---
+
+# CONFIGURACIÓN DE FLUJO AUTOMÁTICO PARA NUEVOS SERVICIOS
+
+## COMPORTAMIENTO DEL ASISTENTE
+
+- **Siempre hacer UNA pregunta a la vez**
+- **Esperar respuesta del usuario antes de continuar**
+- **No hacer múltiples preguntas simultáneamente**
+- **Seguir el orden secuencial establecido**
+- **Implementar automáticamente después de obtener toda la información**
+
+## FLUJO SECUENCIAL OBLIGATORIO
+
+### PASO 1: Identificar Feature
+
+**Pregunta única:** ¿En qué feature quieres agregar el servicio?
+
+- Opciones: `lib/features/[nombre_feature]`
+- **ESPERAR RESPUESTA**
+
+### PASO 2: Definir Endpoint
+
+**Pregunta única:** ¿Cuál es la información del endpoint?
+
+- Solicitar: URL, método HTTP, request body, response structure
+- **ESPERAR RESPUESTA**
+
+### PASO 3: Estrategia de Modelado
+
+**Pregunta única:** ¿Qué estrategia de modelado prefieres?
+
+- Opciones: Freezed (automático) o Mapper (manual)
+- **ESPERAR RESPUESTA**
+
+### PASO 4: Nombre del Entity
+
+**Pregunta única:** ¿Qué nombre quieres usar para el Entity?
+
+- Sugerir opciones basadas en el endpoint
+- **ESPERAR RESPUESTA**
+
+### PASO 4.1: Campos del Entity
+
+**Pregunta única:** ¿Quieres que intuyo los campos del Entity basándome en la estructura de respuesta del endpoint?
+
+- Opciones:
+  - `Sí, intuir campos automáticamente` - Crear campos en inglés basados en la respuesta JSON
+  - `No, definir campos manualmente` - Preguntar cada campo individualmente
+- **ESPERAR RESPUESTA**
+
+### PASO 5: Nombre del Use Case
+
+**Pregunta única:** ¿Qué nombre quieres usar para el Use Case?
+
+- Sugerir opciones basadas en la funcionalidad
+- **ESPERAR RESPUESTA**
+
+### PASO 6: Estado del Provider
+
+**Pregunta única:** ¿Qué opción prefieres para el estado?
+
+- Opciones:
+  - `Usar estado existente` - Agregar el nuevo método al provider actual
+  - `Crear nuevo estado` - Crear un nuevo estado específico para este servicio
+- **ESPERAR RESPUESTA**
+
+### PASO 7: Provider para el Use Case
+
+**Pregunta única:** ¿A qué Provider quieres agregar el nuevo caso de uso?
+
+- Si existe: Proporcionar el nombre del archivo o ruta
+- Si no existe: Crear nuevo provider
+- **ESPERAR RESPUESTA**
+
+## IMPLEMENTACIÓN AUTOMÁTICA
+
+Una vez obtenidas todas las respuestas, implementar automáticamente:
+
+1. **Crear el archivo** en la ubicación correcta siguiendo Clean Architecture
+2. **Intuir campos del Entity** en inglés basados en la respuesta JSON
+3. **Agregar el export** al archivo de barril correspondiente
+4. **Verificar el orden** de los exports
+5. **Actualizar imports** en archivos relacionados
+6. **Modificar DI** para registrar el nuevo use case
+7. **Actualizar Provider** con el nuevo método
+8. **Actualizar Estado** según la elección del usuario (existente o nuevo)
+
+## REGLAS DE INTUICIÓN DE CAMPOS
+
+### Mapeo Automático de Campos JSON a Inglés:
+
+- **Campos de respuesta**: `SUCCESS` → `success`, `MENSAJE` → `message`
+- **IDs**: `ID_CLASE` → `classId`, `ID_ALUMNO` → `studentId`, `ID_DOCENTE` → `teacherId`
+- **Listas**: `LIST_ALUMNOS` → `students`, `LIST_CURSOS` → `courses`, `LIST_GRUPOS` → `groups`
+- **Fechas**: `FECHA` → `date`, `FECHA_INICIO` → `startDate`, `FECHA_FIN` → `endDate`
+- **Estados**: `ASISTIO` → `attended`, `ACTIVO` → `active`, `ESTADO` → `status`
+- **Nombres**: `NOMBRE` → `name`, `NOMBRE_COMPLETO` → `fullName`, `NOMBREU` → `displayName`
+- **Tipos**: `TIPO` → `type`, `CATEGORIA` → `category`, `CLASE` → `class`
+- **Códigos**: `NO_CONTROL` → `controlNumber`, `CURP` → `curp`, `NO_EMPLEADO` → `employeeNumber`
+- **Relaciones**: `PATERNO` → `lastName`, `MATERNO` → `motherLastName`, `CARRERA` → `career`
+- **Ubicaciones**: `ESCUELA` → `school`, `GRUPO` → `group`, `TURNO` → `shift`
+
+### Ejemplo de Intuición Automática:
+
+```json
+{
+  "SUCCESS": "1",
+  "MENSAJE": "Operación exitosa",
+  "ID_CLASE": "12345",
+  "LIST_ALUMNOS": [...],
+  "FECHA": "2024-01-15",
+  "NOMBRE_DOCENTE": "Juan Pérez"
+}
+```
+
+Se convierte automáticamente en:
+
+```dart
+@freezed
+class EntityNameEntity {
+  // ignore: invalid_annotation_target
+  @JsonKey(name: 'SUCCESS')
+  final String? success;
+
+  // ignore: invalid_annotation_target
+  @JsonKey(name: 'MENSAJE')
+  final String? message;
+
+  // ignore: invalid_annotation_target
+  @JsonKey(name: 'ID_CLASE')
+  final String? classId;
+
+  // ignore: invalid_annotation_target
+  @JsonKey(name: 'LIST_ALUMNOS')
+  final List<StudentEntity>? students;
+
+  // ignore: invalid_annotation_target
+  @JsonKey(name: 'FECHA')
+  final String? date;
+
+  // ignore: invalid_annotation_target
+  @JsonKey(name: 'NOMBRE_DOCENTE')
+  final String? teacherName;
+
+  // ... constructor y métodos
+}
+```
+
+## RESTRICCIONES IMPORTANTES
+
+- **❌ NO IMPLEMENTAR UI/WIDGETS** - Solo implementar hasta la capa de presentación (Provider)
+- **❌ NO CREAR SCREENS O WIDGETS** - El usuario implementará la UI por separado
+
+## ESTRUCTURA DE CARPETAS OBLIGATORIA
+
+### Estructura basada en report_student:
+
+```
+lib/features/[feature_name]/
+├── [feature_name]_export.dart        # Archivo de exportación central
+├── di/
+│   └── [feature_name]_di.dart        # DI específico del feature (Riverpod)
+├── data/
+│   └── repositories/
+│       └── [feature_name]_repository.dart
+├── domain/
+│   ├── entities/
+│   │   └── [entity_name]_entity.dart
+│   └── use_cases/
+│       └── [use_case_name]_use_case.dart
+└── presentation/
+    ├── provider/
+    │   ├── [feature_name]_provider.dart
+    │   ├── [feature_name]_state.dart
+    │   └── [feature_name]_state.freezed.dart
+    ├── controller/
+    │   └── [feature_name]_controller.dart
+    └── screens/
+        ├── [feature_name]_screen.dart
+        ├── [feature_name]_loading_screen.dart
+        └── [feature_name]_error_screen.dart
+```
+
+### Regla de Mappers con Freezed:
+
+- **SI** Entity usa Freezed → **NO crear mapper** para Entity
+- **SI** Entity usa Freezed Y NO hay Model → **NO crear mapper**
+- **SOLO** crear mappers Entity → Model (cuando son diferentes)
+
+### Ejemplo Try/Catch en Repository:
+
+```dart
+Future<EntityName?> getEntityName() async {
+  try {
+    final response = await client.post('/services/movilservices.php', {
+      'OPC': 'get_entity_name',
+      'USR': 'user_id',
+    });
+    return EntityName.fromJson(response.data);
+  } catch (e) {
+    throw Exception('Error al obtener entity name: $e');
+  }
+}
+```
+
+## ESTRUCTURA CLEAN ARCHITECTURE
+
+### Data Layer (`lib/features/[feature]/data/`)
+
+```
+data/
+└── repositories/
+    └── [feature_name]_repository.dart  # Repository con ApiConnect
+```
+
+### Domain Layer (`lib/features/[feature]/domain/`)
+
+```
+domain/
+├── entities/
+│   └── [entity_name]_entity.dart      # Entidades de dominio
+└── use_cases/
+    └── [use_case_name]_use_case.dart  # Casos de uso
+```
+
+### Presentation Layer (`lib/features/[feature]/presentation/`)
+
+```
+presentation/
+├── provider/
+│   ├── [feature_name]_provider.dart   # Provider principal (StateNotifier)
+│   ├── [feature_name]_state.dart      # Estado inmutable (Freezed)
+│   └── [feature_name]_state.freezed.dart
+├── controller/
+│   └── [feature_name]_controller.dart # Controller con part files
+└── screens/
+    ├── [feature_name]_screen.dart     # Pantalla principal
+    ├── [feature_name]_loading_screen.dart # Pantalla de carga
+    └── [feature_name]_error_screen.dart   # Pantalla de error
+```
+
+### Dependency Injection (`lib/features/[feature]/di/`)
+
+```
+di/
+└── [feature_name]_di.dart             # Configuración de DI con Riverpod
+```
+
+## PATRONES DE IMPLEMENTACIÓN
+
+### Repository Pattern
+
+```dart
+import 'package:api_rest_connect_plugin/api_rest_connect_export.dart';
+import 'package:identaplusschool/features/[feature_name]/[feature_name]_export.dart';
+
+class FeatureNameRepository {
+  final ApiRestConnect client;
+
+  FeatureNameRepository({
+    required this.client,
+  });
+
+  Future<EntityName?> getEntityName() async {
+    try {
+
+      final response = await client.executePost(
+        path: '/services/movilservices.php',
+        body : {
+        'OPC': 'get_entity_name',
+        'USR': 'user_id',
+        }
+      );
+
+      if(response == null) {
+        throw Exception('Error general');
+      }
+
+      return EntityName.fromJson(response);
+    } catch (e) {
+      throw Exception('Error al obtener entity name: $e');
+    }
+  }
+}
+```
+
+### Use Case Pattern
+
+```dart
+import 'package:identaplusschool/features/[feature_name]/[feature_name]_export.dart';
+
+class GetEntityNameUseCase {
+  final FeatureNameRepository repository;
+
+  GetEntityNameUseCase({
+    required this.repository,
+  });
+
+  Future<EntityName?> call() async {
+    return await repository.getEntityName();
+  }
+}
+```
+
+### Entity Pattern con Intuición de Campos
+
+```dart
+import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:json_annotation/json_annotation.dart';
+import 'student_entity.dart';
+
+part 'entity_name_entity.freezed.dart';
+part 'entity_name_entity.g.dart';
+
+@freezed
+class EntityNameEntity {
+  // Campos intuidos automáticamente en inglés
+  // ignore: invalid_annotation_target
+  @JsonKey(name: 'SUCCESS')
+  final String? success;
+
+  // ignore: invalid_annotation_target
+  @JsonKey(name: 'MENSAJE')
+  final String? message;
+
+  // ignore: invalid_annotation_target
+  @JsonKey(name: 'ID_CLASE')
+  final String? classId;
+
+  // ignore: invalid_annotation_target
+  @JsonKey(name: 'LIST_ALUMNOS')
+  final List<StudentEntity>? students;
+
+  const EntityNameEntity({
+    this.success,
+    this.message,
+    this.classId,
+    this.students,
+  });
+
+  factory EntityNameEntity.fromJson(Map<String, dynamic> json) =>
+      _$EntityNameEntityFromJson(json);
+
+  Map<String, dynamic> toJson() => _$EntityNameEntityToJson(this);
+}
+```
+
+### Reglas de Intuición de Campos:
+
+1. **Campos de respuesta**: `SUCCESS` → `success`, `MENSAJE` → `message`
+2. **IDs**: `ID_CLASE` → `classId`, `ID_ALUMNO` → `studentId`
+3. **Listas**: `LIST_ALUMNOS` → `students`, `LIST_CURSOS` → `courses`
+4. **Fechas**: `FECHA` → `date`, `FECHA_INICIO` → `startDate`
+5. **Estados**: `ASISTIO` → `attended`, `ACTIVO` → `active`
+6. **Nombres**: `NOMBRE` → `name`, `NOMBRE_COMPLETO` → `fullName`
+7. **Tipos**: `TIPO` → `type`, `CATEGORIA` → `category`
+8. **Códigos**: `NO_CONTROL` → `controlNumber`, `CURP` → `curp`
+
+### Formato de JsonKey (OBLIGATORIO):
+
+```dart
+// ignore: invalid_annotation_target
+@JsonKey(name: 'CAMPO_JSON') Tipo? nombreCampo,
+```
+
+### Provider Pattern (StateNotifier)
+
+```dart
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../domain/use_cases/[use_case_name]_use_case.dart';
+import '[feature_name]_state.dart';
+
+class FeatureNameProvider extends StateNotifier<FeatureNameState> {
+  final GetEntityNameUseCase useCase;
+
+  FeatureNameProvider({
+    required this.useCase,
+  }) : super(const FeatureNameState.loading());
+
+  Future<void> loadEntityName() async {
+    state = const FeatureNameState.loading();
+
+    try {
+      final data = await useCase.call();
+
+      if(data == null) {
+        state = const FeatureNameState.empty();
+        return;
+      }
+
+      state = FeatureNameState.loaded(data: data);
+    } catch (e) {
+      state = FeatureNameState.error(message: e.toString());
+    }
+  }
+
+  void resetState() {
+    state = const FeatureNameState.loading();
+  }
+}
+```
+
+### Estados (Freezed)
+
+```dart
+import 'package:freezed_annotation/freezed_annotation.dart';
+import '../../domain/entities/[entity_name]_entity.dart';
+
+part '[feature_name]_state.freezed.dart';
+
+@freezed
+class FeatureNameState with _$FeatureNameState {
+  const factory FeatureNameState.empty() = _Empty;
+
+  const factory FeatureNameState.loading() = _Loading;
+
+  const factory FeatureNameState.loaded({
+    required EntityNameEntity data,
+  }) = _Loaded;
+
+  const factory FeatureNameState.error({
+    required String message,
+  }) = _Error;
+}
+```
+
+### Controller Pattern
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:identaplusschool/features/[feature_name]/[feature_name]_export.dart';
+
+part '../screens/[feature_name]_screen.dart';
+part '../screens/[feature_name]_loading_screen.dart';
+part '../screens/[feature_name]_error_screen.dart';
+
+class FeatureNameController extends ConsumerWidget {
+  const FeatureNameController({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+     final state = ref.watch(featureNameProvider);
+
+    return state.when(
+      empty: () => Container(),
+      loading: () => const FeatureNameLoadingScreen(),
+      loaded: (data) => FeatureNameScreen(data: data),
+      error: (message) => const FeatureNameErrorScreen(),
+    );
+  }
+}
+```
+
+## CONFIGURACIÓN DE APIS
+
+### Endpoints
+
+- **Base URL**: `https://seaacademic.net/`
+- **Path General**: `/services/movilservices.php`
+- **Autenticación**: Token en headers
+
+### Estructura de Request
+
+```json
+{
+  "OPC": "operation_code",
+  "USR": "user_id"
+  // ... otros parámetros
+}
+```
+
+### Ejemplo de Repository con ApiConnect
+
+```dart
+class FeatureNameRepository {
+  final ApiConnect client;
+
+  FeatureNameRepository({
+    required this.client,
+  });
+
+  Future<EntityNameEntity?> getEntityName() async {
+    try {
+      final response = await client.post('/services/movilservices.php', {
+        'OPC': 'get_entity_name',
+        'USR': 'user_id',
+      });
+      return EntityNameEntity.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Error al obtener entity name: $e');
+    }
+  }
+}
+```
+
+## DEPENDENCY INJECTION
+
+### Configuración con Riverpod
+
+```dart
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:identaplusschool/core/di/core_di.dart';
+import 'package:identaplusschool/features/[feature_name]/[feature_name]_export.dart';
+
+// Repository provider
+final featureNameRepositoryProvider = Provider<FeatureNameRepository>((ref) {
+  final apiRestConnect = ref.read(apiRestConnectProvider);
+  return FeatureNameRepository(client: apiRestConnect);
+});
+
+// Use case provider
+final getEntityNameUseCaseProvider = Provider<GetEntityNameUseCase>((ref) {
+  final repository = ref.read(featureNameRepositoryProvider);
+  return GetEntityNameUseCase(repository: repository);
+});
+
+// Provider (StateNotifier) provider
+final featureNameProvider = StateNotifierProvider.autoDispose<FeatureNameProvider, FeatureNameState>((ref) {
+  return FeatureNameProvider(
+    useCase: ref.read(getEntityNameUseCaseProvider),
+  );
+});
+```
+
+## FLUJO DE PREGUNTAS
+
+┌────────────────────────────────────────────────────────────┐
+│ FLUJO DE PREGUNTAS │
+├────────────────────────────────────────────────────────────┤
+│ P1: ¿Path del feature? │
+│ ├── lib/features/[nombre_feature] │
+│ └── Confirmar ubicación │
+│ │
+│ P2: ¿Información del endpoint? │
+│ ├── URL completa │
+│ ├── Método HTTP │
+│ ├── Request body │
+│ └── Response structure │
+│ │
+│ P3: ¿Estrategia de modelado? │
+│ ├── Freezed (automático) │
+│ └── Mapper (manual) │
+│ │
+│ P4: ¿Nombre del Entity? │
+│ ├── Sugerir opciones │
+│ └── Confirmar elección │
+│ │
+│ P4.1: ¿Campos del Entity? │
+│ ├── Intuir campos automáticamente │
+│ └── Definir campos manualmente │
+│ │
+│ P5: ¿Nombre del Use Case? │
+│ ├── Sugerir opciones │
+│ └── Confirmar elección │
+│ │
+│ P6: ¿Estado del Provider? │
+│ ├── Usar estado existente │
+│ └── Crear nuevo estado │
+│ │
+│ P7: ¿Provider para el Use Case? │
+│ ├── Si existe: Nombre del archivo │
+│ ├── Si no existe: Crear nuevo provider │
+│ └── Confirmar elección │
+└────────────────────────────────────────────────────────────┘
+
+## IMPLEMENTACIÓN AUTOMÁTICA
+
+┌────────────────────────────────────────────────────────────┐
+│ IMPLEMENTACIÓN DATA │
+├────────────────────────────────────────────────────────────┤
+│ 1.1 Actualizar Repository │
+│ ├── Agregar método a repository │
+│ ├── Implementar con ApiConnect │
+│ ├── **OBLIGATORIO: Agregar try/catch** │
+│ │ ├── try { await client.post... } │
+│ │ ├── catch (e) { throw Exception... } │
+│ │ └── Manejo específico de errores │
+│ └── Manejo de errores completo │
+│ │
+│ 1.2 Actualizar Exports │
+│ ├── [feature_name]\_export.dart │
+│ └── Verificar orden de exports │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│ IMPLEMENTACIÓN DOMAIN │
+├────────────────────────────────────────────────────────────┤
+│ 2.1 Crear/Actualizar Entity │
+│ ├── Entity basado en response │
+│ ├── **INTUIR CAMPOS EN INGLÉS** │
+│ │ ├── Analizar estructura JSON │
+│ │ ├── Mapear campos a nombres en inglés │
+│ │ ├── Usar JsonKey para mapeo │
+│ │ ├── **OBLIGATORIO: // ignore: invalid_annotation_target** │
+│ │ └── Mantener consistencia de tipos │
+│ ├── No usar Freezed para entities │
+│ ├── No usar Equatable para entities │
+│ ├── Constructor simple con fromJson │
+│ └── Entity Mapper (solo si es necesario) │
+│ │
+│ 2.2 Crear/Actualizar Use Case │
+│ ├── Agregar método al use case │
+│ └── Lógica de negocio │
+│ │
+│ 2.3 Actualizar Provider │
+│ ├── Inyectar el nuevo use case │
+│ ├── Crear método público │
+│ ├── Manejar estados (loading, success, error) │
+│ └── Emitir estados correspondientes │
+│ │
+│ 2.4 Actualizar Estado │
+│ ├── Si usar estado existente: │
+│ │ ├── Agregar método al provider actual │
+│ │ └── Usar estados existentes │
+│ ├── Si crear nuevo estado: │
+│ │ ├── Crear nuevo estado específico │
+│ │ ├── Agregar estados loading, loaded, error │
+│ │ └── Actualizar provider con nuevo estado │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│ CONFIGURACIÓN │
+├────────────────────────────────────────────────────────────┤
+│ 3.1 Inyección de Dependencias │
+│ ├── Verificar registro en DI │
+│ ├── Agregar si es necesario │
+│ ├── Registrar el nuevo use case │
+│ └── Categorizar por tipo │
+│ │
+│ 3.2 Validaciones │
+│ ├── Verificar imports │
+│ ├── Verificar exports │
+│ ├── Verificar try/catch en repository │
+│ ├── Verificar estructura de carpetas │
+│ ├── Verificar eliminación de mappers innecesarios │
+│ └── Ejecutar build_runner con el siguiente comando: │
+│ └── dart pub run build_runner build --delete-conflicting-outputs  
+│ │
+│ 3.3 Testing (Opcional) │
+│ ├── Unit tests │
+│ ├── Integration tests │
+│ └── Mock services │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│ CHECKLIST FINAL │
+├────────────────────────────────────────────────────────────┤
+│ ✅ Repository actualizado con try/catch │
+│ ✅ Exports actualizados │
+│ ✅ Entity creado/actualizado │
+│ ✅ Campos intuidos en inglés automáticamente │
+│ ✅ Use Case actualizado/creado │
+│ ✅ Mappers eliminados si Freezed = mismo modelo │
+│ ✅ DI configurado correctamente │
+│ ✅ Build runner ejecutado │
+│ ✅ Imports verificados │
+│ ✅ Errores de linter resueltos │
+│ ✅ Provider actualizado │
+│ ✅ Método público creado │
+│ ✅ Estado configurado correctamente │
+│ ✅ Estados manejados correctamente │
+│ ❌ UI/Widgets NO implementados (por diseño) │
+└────────────────────────────────────────────────────────────┘
+
+## CONVENCIONES DE NOMENCLATURA
+
+### Archivos y Carpetas
+
+- **snake_case**: Para nombres de archivos y carpetas
+- **PascalCase**: Para nombres de clases
+- **camelCase**: Para variables y métodos
+
+### Providers
+
+- Sufijo `Provider`: `FeatureNameProvider`
+- Sufijo `State`: `FeatureNameState`
+- Usar `StateNotifier` con Riverpod
+
+### Modelos
+
+- Sufijo `Entity`: `EntityNameEntity`
+- Sufijo `UseCase`: `GetEntityNameUseCase`
+- Sufijo `Repository`: `FeatureNameRepository`
+
+## ARCHIVO DE EXPORTACIÓN
+
+### Estructura del archivo export
+
+```dart
+// Domain exports
+export 'domain/entities/[entity_name]_entity.dart';
+export 'domain/use_cases/[use_case_name]_use_case.dart';
+
+// Data exports
+export 'data/repositories/[feature_name]_repository.dart';
+
+// Presentation exports
+export 'presentation/provider/[feature_name]_state.dart';
+export 'presentation/provider/[feature_name]_provider.dart';
+export 'presentation/controller/[feature_name]_controller.dart';
+
+// Dependency Injection
+export 'di/[feature_name]_di.dart';
+```
+
+## MANEJO DE ESTADOS
+
+### Opción 1: Usar Estado Existente
+
+```dart
+// Agregar método al provider existente
+class FeatureProvider extends StateNotifier<FeatureState> {
+  // ... métodos existentes ...
+
+  Future<void> newMethod() async {
+    state = const FeatureState.loading();
+    try {
+      final data = await useCase.newMethod();
+      state = FeatureState.loaded(data: data);
+    } catch (e) {
+      state = FeatureState.error(message: e.toString());
+    }
+  }
+}
+```
+
+### Opción 2: Crear Nuevo Estado
+
+```dart
+// Crear nuevo estado específico
+@freezed
+class NewFeatureState with _$NewFeatureState {
+  const factory NewFeatureState.loading() = _Loading;
+  const factory NewFeatureState.loaded({
+    required NewEntity data,
+  }) = _Loaded;
+  const factory NewFeatureState.error({
+    required String message,
+  }) = _Error;
+}
+
+// Crear nuevo provider
+class NewFeatureProvider extends StateNotifier<NewFeatureState> {
+  final NewUseCase useCase;
+
+  NewFeatureProvider({required this.useCase})
+    : super(const NewFeatureState.loading());
+
+  Future<void> newMethod() async {
+    state = const NewFeatureState.loading();
+    try {
+      final data = await useCase.newMethod();
+      state = NewFeatureState.loaded(data: data);
+    } catch (e) {
+      state = NewFeatureState.error(message: e.toString());
+    }
+  }
+}
+```
+
+## NOTAS IMPORTANTES
+
+1. **Siempre usar Riverpod para gestión de estado**
+2. **Seguir Clean Architecture en features**
+3. **Usar Freezed para estados inmutables**
+4. **Implementar manejo de errores robusto**
+5. **Mantener separación de responsabilidades**
+6. **Usar internacionalización para textos**
+7. **Seguir convenciones de nomenclatura**
+8. **Implementar loading states**
+9. **Manejar estados vacíos y de error**
+10. **Usar dependency injection para testing**
+11. **Evaluar si usar estado existente o crear nuevo**
+12. **Mantener consistencia en el manejo de estados**
+13. **Usar // ignore: invalid_annotation_target con @JsonKey**
+14. **Evitar warnings de anotaciones en Freezed**

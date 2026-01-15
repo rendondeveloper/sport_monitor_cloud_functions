@@ -1,0 +1,549 @@
+---
+alwaysApply: true
+---
+
+
+# IdentaPlus School - Flutter Project Rules
+
+## 🏗️ Arquitectura del Proyecto
+
+### Tecnologías Principales
+- **Flutter**: Framework principal para desarrollo multiplataforma
+- **Dart**: Lenguaje de programación
+- **Provider**: Gestión de estado (MVVM pattern)
+- **Riverpod**: Gestión de estado avanzada (en algunas features)
+- **Freezed**: Generación de código para modelos inmutables
+- **Clean Architecture**: Separación de capas (Data, Domain, Presentation)
+- **Screaming Architecture**: Estructura organizada por features
+
+### Patrones de Diseño
+- **MVVM (Model-View-ViewModel)**: Con Provider como ViewModel
+- **Repository Pattern**: Para acceso a datos
+- **Use Case Pattern**: Para lógica de negocio
+- **Dependency Injection**: Con GetIt
+- **Observer Pattern**: Con Provider/Riverpod
+
+## 📁 Estructura del Proyecto
+
+### Core (`lib/core/`)
+```
+lib/core/
+├── navigation/
+│   ├── constants/
+│   │   └── route_paths.dart          # Rutas de navegación
+│   └── router.dart                   # Configuración de navegación
+├── util/                             # Funciones reutilizables
+├── values/
+│   ├── values_api.dart               # Constantes de APIs
+│   ├── values_app.dart               # Constantes generales
+│   ├── values_collection.dart        # Constantes Firebase
+│   ├── values_inputs.dart            # Constantes de inputs
+│   └── values_shared_preferences.dart # Constantes de almacenamiento
+├── network/
+│   └── apiconnect.dart               # Cliente HTTP
+├── modeling/
+│   ├── provider/
+│   │   └── base_provider.dart        # Provider base
+│   ├── dto/                          # Data Transfer Objects
+│   ├── enum/                         # Enumeraciones
+│   └── extension/                    # Extensiones
+├── di/
+│   └── core_di.dart                  # Inyección de dependencias
+├── db/                               # Base de datos local
+├── singleton/                        # Singletons de la app
+└── feature/                          # Features core (login, user info)
+```
+
+### Features (`lib/features/`)
+```
+lib/features/
+├── feature_name/
+│   ├── feature_name_export.dart      # Archivo de exportación central
+│   ├── di/
+│   │   └── feature_name_di.dart      # DI específico del feature (Riverpod)
+│   ├── data/
+│   │   └── repositories/
+│   │       └── feature_name_repository.dart
+│   ├── domain/
+│   │   ├── entities/
+│   │   │   └── feature_entity.dart
+│   │   └── use_cases/
+│   │       └── feature_use_case.dart
+│   └── presentation/
+│       ├── provider/
+│       │   ├── feature_name_provider.dart
+│       │   ├── feature_name_state.dart
+│       │   └── feature_name_state.freezed.dart
+│       ├── controller/
+│       │   └── feature_name_controller.dart
+│       └── screens/
+│           ├── feature_name_screen.dart
+│           ├── feature_name_loading_screen.dart
+│           └── feature_name_error_screen.dart
+```
+
+### Internacionalización (`lib/l10n/`)
+- Archivos de traducción en formato ARB
+- Soporte para español e inglés
+
+## 🎯 Convenciones de Nomenclatura
+
+### Archivos y Carpetas
+- **snake_case**: Para nombres de archivos y carpetas
+- **PascalCase**: Para nombres de clases
+- **camelCase**: Para variables y métodos
+
+### Providers
+- Sufijo `Provider`: `FeatureProvider`
+- Sufijo `State`: `FeatureState`
+- Usar `StateNotifier` con Riverpod
+
+### Estados (Freezed)
+```dart
+@freezed
+class FeatureState with _$FeatureState {
+  const factory FeatureState.empty() = _Empty;
+  const factory FeatureState.loading() = _Loading;
+  const factory FeatureState.loaded({
+    required Data data,
+  }) = _Loaded;
+  const factory FeatureState.error({
+    required String message,
+  }) = _Error;
+}
+```
+
+### Modelos
+- Sufijo `Model`: `UserModel`
+- Sufijo `Entity`: `UserEntity`
+- Sufijo `DTO`: `UserDTO`
+
+## 🔧 Configuración de Dependencias
+
+### Dependencias Principales
+- `provider: ^6.0.3` - Gestión de estado
+- `riverpod: ^2.5.0` - Gestión de estado avanzada
+- `freezed_annotation: ^2.4.1` - Modelos inmutables
+- `get_it: ^7.2.0` - Inyección de dependencias
+- `http: ^0.13.5` - Cliente HTTP
+- `shared_preferences: ^2.2.2` - Almacenamiento local
+- `firebase_core: ^3.15.2` - Firebase
+
+### Dev Dependencies
+- `build_runner: ^2.4.8` - Generación de código
+- `freezed: ^2.4.7` - Generador de Freezed
+
+## 🚀 Patrones de Implementación
+
+### Provider Pattern (Riverpod)
+```dart
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../domain/use_cases/feature_use_case.dart';
+import 'feature_state.dart';
+
+class FeatureProvider extends StateNotifier<FeatureState> {
+  final FeatureUseCase useCase;
+  
+  FeatureProvider({
+    required this.useCase,
+  }) : super(const FeatureState.loading());
+
+  Future<void> loadData() async {
+    state = const FeatureState.loading();
+
+    try {
+      final data = await useCase.call();
+
+      if(data == null) {
+        state = const FeatureState.empty();
+        return;
+      }
+
+      state = FeatureState.loaded(data: data);
+    } catch (e) {
+      state = FeatureState.error(message: e.toString());
+    }
+  }
+
+  void resetState() {
+    state = const FeatureState.loading();
+  }
+}
+```
+
+### Controller Pattern
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:identaplusschool/features/feature_name/feature_name_export.dart';
+
+part '../screens/feature_name_screen.dart';
+part '../screens/feature_name_loading_screen.dart';
+part '../screens/feature_name_error_screen.dart';
+
+class FeatureNameController extends ConsumerWidget { 
+  const FeatureNameController({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+     final state = ref.watch(featureNameProvider);
+    
+    return state.when(
+      empty: () => Container(),
+      loading: () => const FeatureNameLoadingScreen(),
+      loaded: (data) => FeatureNameScreen(data: data),
+      error: (message) => const FeatureNameErrorScreen(),
+    );  
+  }
+}
+```
+
+### Repository Pattern
+```dart
+abstract class FeatureRepository {
+  Future<List<Data>> getData();
+}
+
+class FeatureRepositoryImpl implements FeatureRepository {
+  final ApiConnect _client;
+  
+  @override
+  Future<List<Data>> getData() async {
+    return await _client.getData();
+  }
+}
+```
+
+### Use Case Pattern
+```dart
+abstract class FeatureUseCase {
+  Future<List<Data>> call();
+}
+
+class FeatureUseCaseImpl implements FeatureUseCase {
+  final FeatureRepository _repository;
+  
+  @override
+  Future<List<Data>> call() async {
+    return await _repository.getData();
+  }
+}
+```
+
+## 🌐 Configuración de APIs
+
+### Endpoints
+- **Base URL**: `https://seaacademic.net/`
+- **Path General**: `/services/movilservices.php`
+- **Autenticación**: Token en headers
+
+### Estructura de Request
+```json
+{
+  "OPC": "operation_code",
+  "USR": "user_id",
+  // ... otros parámetros
+}
+```
+
+## 📱 Navegación
+
+### Rutas
+- Definidas en `lib/core/navigation/constants/route_paths.dart`
+- Configuradas en `lib/core/navigation/router.dart`
+- Uso de `NavigationCustom` para transiciones
+
+### Ejemplo de Navegación
+```dart
+Navigator.pushNamed(
+  context, 
+  pageFeatureDetail,
+  arguments: [data],
+);
+```
+
+## 🎨 UI/UX Guidelines
+
+### Colores
+- Definidos en `lib/resources/colors_app.dart`
+- Uso de `ColorsApp` para consistencia
+
+### Dimensiones
+- Definidas en `lib/resources/dimens_app.dart`
+- Uso de `DimensApp` para responsive design
+
+### Strings
+- Internacionalización en `lib/l10n/`
+- Uso de `context.strings()` para traducciones
+
+## 🔒 Seguridad
+
+### Almacenamiento
+- `flutter_secure_storage` para datos sensibles
+- `shared_preferences` para datos no sensibles
+- Encriptación de datos críticos
+
+### APIs
+- Validación de tokens
+- Manejo de errores de autenticación
+- Timeouts configurados
+
+## 📊 Testing
+
+### Estructura de Tests
+```
+test/
+├── unit/
+├── widget/
+└── integration/
+```
+
+### Convenciones
+- Sufijo `_test.dart` para archivos de test
+- Uso de `group()` para organizar tests
+- Mocks para dependencias externas
+
+## 🚀 Deployment
+
+### Build
+- `flutter build apk --debug` - APK de desarrollo
+- `flutter build apk --release` - APK de producción
+- `flutter build ios --release` - iOS de producción
+
+### Configuración
+- Firebase configurado
+- Splash screen nativo
+- Iconos de la aplicación
+
+## 📝 Notas Importantes
+
+1. **Siempre usar Provider para gestión de estado**
+2. **Seguir Clean Architecture en features**
+3. **Usar Freezed para modelos inmutables**
+4. **Implementar manejo de errores robusto**
+5. **Mantener separación de responsabilidades**
+6. **Usar internacionalización para textos**
+7. **Seguir convenciones de nomenclatura**
+8. **Implementar loading states**
+9. **Manejar estados vacíos y de error**
+10. **Usar dependency injection para testing**
+
+## 🚀 Reglas de Desarrollo y Rendimiento
+
+### Widgets con `const`
+**SIEMPRE** usar `const` cuando sea posible para widgets que no cambian:
+
+```dart
+// ✅ CORRECTO
+const ExampleWidget({
+  super.key,
+  required this.title,
+});
+
+// ❌ INCORRECTO
+ExampleWidget({
+  super.key,
+  required this.title,
+});
+```
+
+**Condiciones para usar `const`:**
+- Todos los parámetros son `final` o `const`
+- No hay lógica dinámica en el constructor
+- El widget no cambia su estado interno
+
+### Ejemplos de uso correcto:
+```dart
+// Widget simple - SIEMPRE const
+const SizedBox(height: 16),
+
+// Widget con parámetros finales - SIEMPRE const
+const Text(
+  'Hola Mundo',
+  style: TextStyle(fontSize: 16),
+),
+
+// Widget personalizado - const si cumple condiciones
+const CustomWidget(
+  title: 'Título',
+  color: Colors.blue,
+),
+```
+
+### Usar `debugPrint` en lugar de `print`
+**SIEMPRE** usar `debugPrint` para logs de desarrollo:
+
+```dart
+// ✅ CORRECTO
+debugPrint('Usuario logueado: ${user.name}');
+
+// ❌ INCORRECTO
+print('Usuario logueado: ${user.name}');
+```
+
+**Ventajas de `debugPrint`:**
+- Solo se ejecuta en modo debug
+- No aparece en builds de producción
+- Mejor rendimiento en producción
+- Más profesional
+
+### Siempre incluir `super.key`
+**SIEMPRE** incluir `super.key` en constructores de widgets:
+
+```dart
+// ✅ CORRECTO
+class ExampleWidget extends StatelessWidget {
+  const ExampleWidget({
+    super.key,
+    required this.title,
+  });
+  
+  final String title;
+  // ... resto del código
+}
+
+// ❌ INCORRECTO
+class ExampleWidget extends StatelessWidget {
+  const ExampleWidget({
+    required this.title,
+  });
+  
+  final String title;
+  // ... resto del código
+}
+```
+
+### Template de Widget StatelessWidget
+```dart
+class StudentCard extends StatelessWidget {
+  const StudentCard({
+    super.key,
+    required this.studentName,
+    required this.onTap,
+  });
+
+  final String studentName;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Card(
+        child: Text(studentName),
+      ),
+    );
+  }
+}
+```
+
+### Template de Widget StatefulWidget
+```dart
+class StudentList extends StatefulWidget {
+  const StudentList({
+    super.key,
+    required this.students,
+  });
+
+  final List<Student> students;
+
+  @override
+  State<StudentList> createState() => _StudentListState();
+}
+
+class _StudentListState extends State<StudentList> {
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: widget.students.length,
+      itemBuilder: (context, index) {
+        final student = widget.students[index];
+        debugPrint('Renderizando estudiante: ${student.name}');
+        
+        return StudentCard(
+          key: ValueKey(student.id),
+          studentName: student.name,
+          onTap: () => debugPrint('Estudiante seleccionado: ${student.name}'),
+        );
+      },
+    );
+  }
+}
+```
+
+### Checklist de Implementación
+Antes de crear un widget, verificar:
+
+- [ ] ¿Puede usar `const`? (parámetros finales, sin lógica dinámica)
+- [ ] ¿Incluye `super.key` en el constructor?
+- [ ] ¿Usa `debugPrint` en lugar de `print`?
+- [ ] ¿Todos los parámetros son `final`?
+- [ ] ¿El widget es inmutable?
+
+### Beneficios de las Reglas
+1. **Mejor Rendimiento**: Widgets `const` se crean una sola vez
+2. **Código Limpio**: Estructura consistente y profesional
+3. **Debugging Seguro**: `debugPrint` solo en desarrollo
+4. **Mantenibilidad**: Código más fácil de mantener y debuggear
+5. **Flutter Best Practices**: Sigue las recomendaciones oficiales
+
+## 🔄 Flujo de Desarrollo
+
+1. **Crear feature** siguiendo la estructura establecida
+2. **Implementar modelos** con Freezed
+3. **Crear datasource** para acceso a datos
+4. **Implementar repository** con patrón Repository
+5. **Crear use cases** para lógica de negocio
+6. **Implementar provider** con estado inmutable
+7. **Crear páginas** con manejo de estados
+8. **Agregar widgets** reutilizables
+9. **Configurar navegación** en router
+10. **Implementar tests** unitarios y de widget
+
+## 🔧 Dependency Injection (Riverpod)
+
+### Configuración de Providers
+```dart
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:identaplusschool/core/di/core_di.dart';
+import 'package:identaplusschool/features/feature_name/feature_name_export.dart';
+
+// Repository provider
+final featureNameRepositoryProvider = Provider<FeatureRepository>((ref) {
+  final apiConnect = ref.read(apiConnectProvider);
+  return FeatureRepository(client: apiConnect);
+});
+
+// Use case provider
+final featureNameUseCaseProvider = Provider<FeatureUseCase>((ref) {
+  final repository = ref.read(featureNameRepositoryProvider);
+  return FeatureUseCase(repository: repository);
+});
+
+// Provider (StateNotifier) provider
+final featureNameProvider = StateNotifierProvider.autoDispose<FeatureProvider, FeatureState>((ref) {  
+  return FeatureProvider(
+    useCase: ref.read(featureNameUseCaseProvider),
+  );
+});
+```
+
+## 📁 Archivo de Exportación
+
+### Estructura del archivo export
+```dart
+// Domain exports
+export 'domain/entities/feature_entity.dart';
+export 'domain/use_cases/feature_use_case.dart';
+
+// Data exports
+export 'data/repositories/feature_repository.dart';
+
+// Presentation exports
+export 'presentation/provider/feature_state.dart';
+export 'presentation/provider/feature_provider.dart';
+export 'presentation/controller/feature_controller.dart';
+
+// Dependency Injection
+export 'di/feature_di.dart';
+```

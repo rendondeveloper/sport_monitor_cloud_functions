@@ -1,0 +1,8 @@
+# Rule: Launch app after starting Jira ticket
+
+when user just ran "work on latest ticket"
+then
+run:
+"""
+🧪 Lanza la app en un emulador ios disponible para validar visualmente los cambios del ticket activo.
+"""

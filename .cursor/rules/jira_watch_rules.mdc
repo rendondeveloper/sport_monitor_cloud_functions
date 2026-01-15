@@ -1,0 +1,159 @@
+# Rule: Start working on latest Jira ticket
+
+when user types "work on first ticket" or presses "⌘ + ⇧ + J"
+then
+read file "/Users/kike/mcp/jira_watcher_py/cursor_events.json"
+extract the first element of the JSON array
+and run:
+"""
+🎫 Ticket detectado desde Jira Watcher:
+
+    - Clave: {{key}}
+    - Título: {{summary}}
+    - Estado: {{status}}
+    - Prioridad: {{priority}}
+    - Asignado a: {{assignee}}
+
+    🔧 Instrucciones de flujo:
+
+    1️⃣ Obtener contexto completo del ticket:
+        - Usa la tool: mcp_Atlassian-MCP-Server_getJiraIssue
+        - Parámetros:
+          * cloudId: "https://softwarecosta.atlassian.net"
+          * issueIdOrKey: "{{key}}"
+        - Analiza la descripción, comentarios existentes y subtareas
+        - Nota: Estamos trabajando con el board 73
+
+    2️⃣ Trabaja sobre la rama actual (no crees nuevas ramas).
+
+    3️⃣ Analiza el contenido del card:
+
+        - Si el status es COMMENTS:
+          * IMPORTANTE: El ticket está esperando atención de comentarios
+          * Paso 1 - Obtener comentarios del ticket:
+            - Ya obtuviste el issue con getJiraIssue en el paso 1️⃣
+            - Los comentarios están en: issue.fields.comment.comments[]
+            - Cada comentario tiene: author.displayName, body, created
+          * Paso 2 - Analizar la conversación en los comentarios:
+            a) Ordenar comentarios por fecha (más reciente último)
+            b) Identificar el último comentario del usuario humano (no de Cursor/IA)
+               - Cursor/IA: Contiene ✅, 🔧, formato markdown estructurado, hash de commit
+               - Usuario: Comentarios normales, solicitudes, preguntas
+            c) Verificar si hay una respuesta de Cursor después de ese comentario
+          * Paso 3 - Si NO hay respuesta de Cursor después del último comentario de usuario:
+               → Significa que hay comentarios sin atender
+               → Leer detenidamente el comentario del usuario
+               → Entender qué aclaraciones o cambios solicita
+               → Implementar los cambios solicitados
+               → Responder al comentario con:
+                 - Tool: mcp_Atlassian-MCP-Server_addCommentToJiraIssue
+                 - Parámetros:
+                   * cloudId: "https://softwarecosta.atlassian.net"
+                   * issueIdOrKey: "{{key}}"
+                   * commentBody: "✅ Comentarios atendidos:\n\n[Detalla qué cambios hiciste basado en los comentarios]\n\n🔧 Cambios realizados:\n- [lista específica]\n\n📦 Commit: [hash]"
+               → Obtener transiciones disponibles
+               → Mover el ticket a IN PROGRESS o TESTING según corresponda
+          * Paso 4 - Si SÍ hay respuesta de Cursor pero el ticket sigue en COMMENTS:
+               → El usuario movió el ticket de vuelta a COMMENTS después de tu respuesta
+               → Significa que tu respuesta no fue suficiente o hay nuevas solicitudes
+               → Revisar el comentario más reciente del usuario (después de tu última respuesta)
+               → Implementar los cambios adicionales solicitados
+          * Paso 5 - Después de implementar los cambios:
+               → Crear commit con los cambios
+               → Agregar comentario detallado en Jira
+               → Mover a TESTING (no a IN PROGRESS, ya que es una corrección)
+
+        - Si hay subtareas:
+          * Entender el contexto de cada subtarea
+          * Para cada subtarea:
+            a) Usar mcp_Atlassian-MCP-Server_getJiraIssue para obtener detalles
+            b) Crear TODOs para completar la subtarea
+            c) IMPORTANTE: Primero obtener transiciones disponibles con:
+               - Tool: mcp_Atlassian-MCP-Server_getTransitionsForJiraIssue
+               - Parámetros:
+                 * cloudId: "https://softwarecosta.atlassian.net"
+                 * issueIdOrKey: "{{subtask_key}}"
+            d) Mover la subtarea a IN PROGRESS con:
+               - Tool: mcp_Atlassian-MCP-Server_transitionJiraIssue
+               - Parámetros:
+                 * cloudId: "https://softwarecosta.atlassian.net"
+                 * issueIdOrKey: "{{subtask_key}}"
+                 * transition: {"id": "{{transition_id_for_in_progress}}"}
+            e) Implementar los cambios necesarios
+            f) Al finalizar, crear un commit
+            g) Mover la subtarea a DONE con:
+               - Tool: mcp_Atlassian-MCP-Server_transitionJiraIssue
+               - Parámetros:
+                 * cloudId: "https://softwarecosta.atlassian.net"
+                 * issueIdOrKey: "{{subtask_key}}"
+                 * transition: {"id": "{{transition_id_for_done}}"}
+
+        - Si NO entiendes el contexto:
+            a) Escribe un comentario en Jira pidiendo aclaración:
+               - Tool: mcp_Atlassian-MCP-Server_addCommentToJiraIssue
+               - Parámetros:
+                 * cloudId: "https://softwarecosta.atlassian.net"
+                 * issueIdOrKey: "{{key}}"
+                 * commentBody: "Necesito más contexto sobre [especifica qué necesitas]..."
+            b) Obtener transiciones disponibles primero
+            c) Mueve el card a status COMMENTS:
+               - Tool: mcp_Atlassian-MCP-Server_transitionJiraIssue
+               - Parámetros:
+                 * cloudId: "https://softwarecosta.atlassian.net"
+                 * issueIdOrKey: "{{key}}"
+                 * transition: {"id": "{{transition_id_for_comments}}"}
+
+        - Si SÍ entiendes lo que debes hacer:
+            a) Primero obtener transiciones disponibles con getTransitionsForJiraIssue
+            b) Mueve el card a IN PROGRESS:
+               - Tool: mcp_Atlassian-MCP-Server_transitionJiraIssue
+               - Parámetros:
+                 * cloudId: "https://softwarecosta.atlassian.net"
+                 * issueIdOrKey: "{{key}}"
+                 * transition: {"id": "{{transition_id_for_in_progress}}"}
+            c) Procede con la implementación
+
+    4️⃣ Al finalizar la implementación:
+        a) Lanza la app en el emulador disponible
+        b) Si hay errores, corrígelos y vuelve a lanzar
+        c) Cuando todo funcione correctamente:
+
+           * Crea un commit con el formato:
+             ✨ {{key}}: descripción breve del cambio
+
+           * Sube los cambios en la rama actual (git push)
+
+           * Escribe un comentario detallado en Jira:
+             - Tool: mcp_Atlassian-MCP-Server_addCommentToJiraIssue
+             - Parámetros:
+               * cloudId: "https://softwarecosta.atlassian.net"
+               * issueIdOrKey: "{{key}}"
+               * commentBody: "✅ Cambios implementados:\n\n[Detalla los cambios realizados]\n\n🔧 Archivos modificados:\n- [lista de archivos]\n\n✨ Commit: [hash del commit]"
+
+           * Obtener transiciones disponibles con getTransitionsForJiraIssue
+
+           * Mueve el card a TESTING:
+             - Tool: mcp_Atlassian-MCP-Server_transitionJiraIssue
+             - Parámetros:
+               * cloudId: "https://softwarecosta.atlassian.net"
+               * issueIdOrKey: "{{key}}"
+               * transition: {"id": "{{transition_id_for_testing}}"}
+
+    📝 IMPORTANTE:
+    - Siempre obtener las transiciones disponibles ANTES de intentar cambiar el estado
+    - Usar el transition ID correcto según lo que devuelva getTransitionsForJiraIssue
+    - CloudId configurado: https://softwarecosta.atlassian.net
+    - Board ID: 73
+    - Puedes verificar la conexión con mcp_Atlassian-MCP-Server_getAccessibleAtlassianResources si es necesario
+
+    💬 MANEJO DE COMENTARIOS:
+    - Los comentarios de usuarios aparecen en el campo "comment" del issue
+    - Cada comentario tiene un "author" con información del usuario
+    - Los comentarios de Cursor/IA típicamente contienen:
+      * Emojis como ✅, 🔧, 📦, ✨
+      * Formato markdown con secciones
+      * Menciones a commits (hash)
+      * Mensajes estructurados sobre implementación
+    - Si el último comentario es de un usuario y NO tiene respuesta de Cursor → Hay comentarios sin atender
+    - Si hay comentarios sin atender → Priorizar atenderlos antes de continuar con otras tareas
+    """
