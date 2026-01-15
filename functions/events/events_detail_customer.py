@@ -6,7 +6,7 @@ from models.firestore_collections import FirestoreCollections
 
 
 @https_fn.on_request()
-def get_event_detail(req: https_fn.Request) -> https_fn.Response:
+def event_detail(req: https_fn.Request) -> https_fn.Response:
     """
     Obtiene el detalle de un evento desde Firestore
     
@@ -49,7 +49,7 @@ def get_event_detail(req: https_fn.Request) -> https_fn.Response:
         
         # Validar que eventId esté presente
         if not event_id or event_id.strip() == "":
-            logging.warning("get_event_detail: eventId faltante o vacío")
+            logging.warning("event_detail: eventId faltante o vacío")
             return https_fn.Response(
                 "",
                 status=400,
@@ -71,7 +71,7 @@ def get_event_detail(req: https_fn.Request) -> https_fn.Response:
         
         # Si no hay documentos, retornar 404
         if not event_content_docs or len(event_content_docs) == 0:
-            logging.info(f"get_event_detail: Evento {event_id} no encontrado en event_content")
+            logging.info(f"event_detail: Evento {event_id} no encontrado en event_content")
             return https_fn.Response(
                 "",
                 status=404,
@@ -83,7 +83,7 @@ def get_event_detail(req: https_fn.Request) -> https_fn.Response:
         event_data = event_content_doc.to_dict()
         
         if event_data is None:
-            logging.warning(f"get_event_detail: Datos vacíos para evento {event_id}")
+            logging.warning(f"event_detail: Datos vacíos para evento {event_id}")
             return https_fn.Response(
                 "",
                 status=404,
@@ -137,14 +137,14 @@ def get_event_detail(req: https_fn.Request) -> https_fn.Response:
         )
     
     except ValueError as e:
-        logging.error(f"get_event_detail: Error de validación: {str(e)}")
+        logging.error(f"event_detail: Error de validación: {str(e)}")
         return https_fn.Response(
             "",
             status=400,
             headers={"Access-Control-Allow-Origin": "*"},
         )
     except Exception as e:
-        logging.error(f"get_event_detail: Error interno: {str(e)}", exc_info=True)
+        logging.error(f"event_detail: Error interno: {str(e)}", exc_info=True)
         return https_fn.Response(
             "",
             status=500,

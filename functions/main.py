@@ -6,7 +6,7 @@ from tracking.tracking_checkpoint import track_event_checkpoint
 from tracking.tracking_competitors import track_competitors, track_competitors_off
 
 # Importar funciones de events
-from events import get_events, get_event_detail
+from events import events, event_detail
 
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
@@ -22,5 +22,5 @@ initialize_app()
 # - track_event_checkpoint: tracking/tracking_checkpoint.py
 # - track_competitors: tracking/tracking_competitors.py
 # - track_competitors_off: tracking/tracking_competitors.py
-# - get_events: events/events_customer.py
-# - get_event_detail: events/events_detail_customer.py
+# - events: events/events_customer.py
+# - event_detail: events/events_detail_customer.py

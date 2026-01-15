@@ -8,13 +8,13 @@ from models.paginated_response import PaginatedResponse
 
 
 @https_fn.on_request()
-def get_events(req: https_fn.Request) -> https_fn.Response:
+def events(req: https_fn.Request) -> https_fn.Response:
     """
     Función optimizada que obtiene eventos de Firestore con soporte de paginación.
     Retorna eventos usando el modelo EventShortDocument.
     
     Parámetros opcionales (query parameters):
-    - limit: Número de eventos por página (default: 50, max: 100)
+    - size: Número de eventos por página (default: 50, max: 100)
     - page: Número de página (default: 1, basado en 1)
     - lastDocId: ID del último documento de la página anterior (para cursor-based pagination)
     
@@ -83,7 +83,7 @@ def get_events(req: https_fn.Request) -> https_fn.Response:
             query = events_ref.order_by("createdAt", direction=firestore.Query.DESCENDING)
         except Exception as e:
             # Si falla por falta de índice, usar sin ordenamiento
-            logging.warning(f"get_events: Error con order_by, usando sin orden: {str(e)}")
+            logging.warning(f"events: Error con order_by, usando sin orden: {str(e)}")
             query = events_ref
         
         # Si se proporciona lastDocId, usar cursor-based pagination (más eficiente)
@@ -94,7 +94,7 @@ def get_events(req: https_fn.Request) -> https_fn.Response:
                 if last_doc.exists:
                     query = query.start_after(last_doc)
             except Exception as e:
-                logging.warning(f"get_events: Error con lastDocId {last_doc_id}: {str(e)}")
+                logging.warning(f"events: Error con lastDocId {last_doc_id}: {str(e)}")
         # Si no hay lastDocId pero hay page > 1, usar offset (menos eficiente)
         # Nota: Para mejor rendimiento, se recomienda usar lastDocId
         elif page > 1:
@@ -122,7 +122,7 @@ def get_events(req: https_fn.Request) -> https_fn.Response:
                         headers={"Content-Type": "application/json"},
                     )
             except Exception as e:
-                logging.warning(f"get_events: Error calculando offset para página {page}: {str(e)}")
+                logging.warning(f"events: Error calculando offset para página {page}: {str(e)}")
         
         # Aplicar límite (agregar 1 para verificar si hay más páginas)
         query = query.limit(limit + 1)
@@ -153,7 +153,7 @@ def get_events(req: https_fn.Request) -> https_fn.Response:
             except Exception as e:
                 # Solo loggear errores, no cada evento procesado
                 logging.warning(
-                    f"get_events: Error procesando evento {doc.id}: {str(e)}"
+                    f"events: Error procesando evento {doc.id}: {str(e)}"
                 )
                 continue
 
@@ -180,7 +180,7 @@ def get_events(req: https_fn.Request) -> https_fn.Response:
         )
 
     except ValueError as e:
-        logging.error(f"get_events: Error de validación: {str(e)}")
+        logging.error(f"events: Error de validación: {str(e)}")
         error_response = {
             "error": {
                 "code": "invalid-argument",
@@ -193,7 +193,7 @@ def get_events(req: https_fn.Request) -> https_fn.Response:
             headers={"Content-Type": "application/json"},
         )
     except Exception as e:
-        logging.error(f"get_events: Error interno: {str(e)}", exc_info=True)
+        logging.error(f"events: Error interno: {str(e)}", exc_info=True)
         error_response = {
             "error": {
                 "code": "internal",
