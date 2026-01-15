@@ -5,8 +5,8 @@ from firebase_admin import initialize_app
 from tracking.tracking_checkpoint import track_event_checkpoint
 from tracking.tracking_competitors import track_competitors, track_competitors_off
 
-# Importar funciones de events_customer
-from events_customer.events_customer import get_events
+# Importar funciones de events
+from events import get_events
 
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected

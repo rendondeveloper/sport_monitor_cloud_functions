@@ -57,7 +57,7 @@ def get_events(req: https_fn.Request) -> https_fn.Response:
     
     try:
         # Obtener parámetros de query string
-        limit_param = req.args.get("limit", "50")
+        limit_param = req.args.get("size", "50")
         page_param = req.args.get("page", "1")
         last_doc_id = req.args.get("lastDocId")
         
