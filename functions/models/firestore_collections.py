@@ -18,6 +18,7 @@ class FirestoreCollections:
     EVENT_PARTICIPANTS = "participants"
     EVENT_STAFF = "staff_users"
     EVENT_ROUTES = "routes"
+    EVENT_CONTENT = "event_content"
 
     # Colecciones de tracking
     EVENT_TRACKING_COMPETITOR_TRACKING = "competitor_tracking"
