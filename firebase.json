@@ -13,6 +13,55 @@
       "runtime": "python312"
     }
   ],
+  "hosting": {
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api/events",
+        "function": "events",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/events/detail",
+        "function": "event_detail",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/profile",
+        "function": "user_profile",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/**",
+        "function": "events",
+        "region": "us-central1"
+      }
+    ],
+    "headers": [
+      {
+        "source": "/api/**",
+        "headers": [
+          {
+            "key": "Access-Control-Allow-Origin",
+            "value": "*"
+          },
+          {
+            "key": "Access-Control-Allow-Methods",
+            "value": "GET, POST, OPTIONS"
+          },
+          {
+            "key": "Access-Control-Allow-Headers",
+            "value": "Content-Type, Authorization"
+          }
+        ]
+      }
+    ]
+  },
   "emulators": {
     "functions": {
       "port": 5001
