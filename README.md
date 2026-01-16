@@ -5,6 +5,7 @@
 Este proyecto contiene las **Cloud Functions de Firebase** desarrolladas en Python para el sistema **Sport Monitor**. Estas funciones proporcionan servicios backend para la gestión y control de eventos deportivos, incluyendo:
 
 - **Gestión de Eventos**: Obtención de listados y detalles de eventos deportivos
+- **Gestión de Usuarios**: Obtención de perfiles de usuario con eventos asignados
 - **Tracking de Competidores**: Seguimiento en tiempo real de competidores durante eventos
 - **Gestión de Checkpoints**: Control de puntos de control en eventos deportivos
 
@@ -17,8 +18,10 @@ Las funciones están desplegadas en **Firebase Cloud Functions** y proporcionan 
 ```
 functions/
 ├── events/              # Package: Gestión de Eventos
-│   ├── events_customer.py          # get_events
+│   ├── events_customer.py          # events
 │   └── events_detail_customer.py  # event_detail
+├── users/               # Package: Gestión de Usuarios
+│   └── user_profile.py            # user_profile
 ├── tracking/           # Package: Tracking de Competidores
 │   ├── tracking_checkpoint.py     # track_event_checkpoint
 │   └── tracking_competitors.py     # track_competitors, track_competitors_off
@@ -41,12 +44,12 @@ functions/
 
 Funciones relacionadas con la gestión y consulta de eventos deportivos.
 
-### 1. `get_events`
+### 1. `events`
 
 Obtiene una lista paginada de eventos desde Firestore. Retorna eventos en formato `EventShortDocument` (versión simplificada con campos esenciales).
 
 **Tipo**: HTTP Request (GET)  
-**Endpoint**: `https://us-central1-system-track-monitor.cloudfunctions.net/get_events`
+**Endpoint**: `https://events-xa26lpxdea-uc.a.run.app`
 
 #### Parámetros (Query Parameters)
 
@@ -73,7 +76,7 @@ Obtiene una lista paginada de eventos desde Firestore. Retorna eventos en format
 
 ```bash
 curl -X GET \
-  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events' \
+  'https://events-xa26lpxdea-uc.a.run.app' \
   -H 'Content-Type: application/json'
 ```
 
@@ -81,7 +84,7 @@ curl -X GET \
 
 ```bash
 curl -X GET \
-  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events?size=20&page=1' \
+  'https://events-xa26lpxdea-uc.a.run.app?size=20&page=1' \
   -H 'Content-Type: application/json'
 ```
 
@@ -89,7 +92,7 @@ curl -X GET \
 
 ```bash
 curl -X GET \
-  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events?size=20&lastDocId=id-del-ultimo-documento' \
+  'https://events-xa26lpxdea-uc.a.run.app?size=20&lastDocId=id-del-ultimo-documento' \
   -H 'Content-Type: application/json'
 ```
 
@@ -97,7 +100,7 @@ curl -X GET \
 
 ```bash
 curl -X GET \
-  'https://us-central1-system-track-monitor.cloudfunctions.net/get_events?size=20&page=1&lastDocId=id-del-ultimo-documento' \
+  'https://events-xa26lpxdea-uc.a.run.app?size=20&page=1&lastDocId=id-del-ultimo-documento' \
   -H 'Content-Type: application/json'
 ```
 
@@ -133,7 +136,7 @@ curl -X GET \
 Obtiene el detalle completo de un evento específico desde Firestore. Retorna el objeto `EventInfo` completo con todos sus campos.
 
 **Tipo**: HTTP Request (GET)  
-**Endpoint**: `https://us-central1-system-track-monitor.cloudfunctions.net/event_detail`
+**Endpoint**: `https://event-detail-xa26lpxdea-uc.a.run.app`
 
 #### Parámetros (Query Parameters)
 
@@ -161,7 +164,7 @@ Obtiene el detalle completo de un evento específico desde Firestore. Retorna el
 
 ```bash
 curl -X GET \
-  'https://us-central1-system-track-monitor.cloudfunctions.net/event_detail?eventId=TU_EVENT_ID' \
+  'https://event-detail-xa26lpxdea-uc.a.run.app?eventId=TU_EVENT_ID' \
   -H 'Content-Type: application/json'
 ```
 
@@ -169,7 +172,7 @@ curl -X GET \
 
 ```bash
 curl -X GET \
-  'https://us-central1-system-track-monitor.cloudfunctions.net/event_detail?eventId=abc123' \
+  'https://event-detail-xa26lpxdea-uc.a.run.app?eventId=abc123' \
   -H 'Content-Type: application/json'
 ```
 
@@ -177,7 +180,7 @@ curl -X GET \
 
 ```bash
 curl -v -X GET \
-  'https://us-central1-system-track-monitor.cloudfunctions.net/event_detail?eventId=abc123' \
+  'https://event-detail-xa26lpxdea-uc.a.run.app?eventId=abc123' \
   -H 'Content-Type: application/json'
 ```
 
@@ -211,11 +214,198 @@ curl -v -X GET \
 
 ---
 
+## 📦 Package: Users
+
+Funciones relacionadas con la gestión y consulta de perfiles de usuario.
+
+### 3. `user_profile`
+
+Obtiene el perfil completo de un usuario desde Firestore. Retorna el objeto `UserProfile` completo con todos sus campos, incluyendo eventos asignados y checkpoints filtrados según las relaciones del usuario.
+
+**Tipo**: HTTP Request (GET)  
+**Endpoint**: `https://user-profile-xa26lpxdea-uc.a.run.app`
+
+**Nota**: Esta función requiere autenticación Bearer token para validar que el usuario esté autenticado. El parámetro `userId` es en realidad el `authUserId` (ID de autenticación de Firebase), no el ID del documento en Firestore. La búsqueda se realiza usando una query `where('authUserId', '==', authUserId)`.
+
+#### Headers Requeridos
+
+| Header          | Tipo   | Requerido | Descripción                                             |
+| --------------- | ------ | --------- | ------------------------------------------------------- |
+| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth (solo para autenticación) |
+
+#### Parámetros (Query Parameters)
+
+| Parámetro | Tipo   | Requerido | Descripción                                                                        |
+| --------- | ------ | --------- | ---------------------------------------------------------------------------------- |
+| `userId`  | string | **Sí**    | `authUserId` del usuario (ID de autenticación de Firebase), no el ID del documento |
+
+#### Campos Retornados (UserProfile)
+
+**Campos del Usuario:**
+
+- `id`: ID del documento del usuario en Firestore
+- `authUserId`: ID de autenticación de Firebase
+- `personalData`: Objeto con:
+  - `fullName`: Nombre completo del usuario
+  - `email`: Correo electrónico
+  - `phone`: Teléfono
+- `emergencyContact`: Objeto con:
+  - `fullName`: Nombre completo del contacto de emergencia
+  - `phone`: Teléfono del contacto de emergencia
+- `userData`: Objeto con:
+  - `username`: Nombre de usuario
+- `eventStaffRelations`: Array de relaciones usuario-evento (estructura original)
+- `assignedEvents`: Array de eventos asignados con checkpoints filtrados
+- `createdAt`: Fecha de creación en formato ISO 8601
+- `updatedAt`: Fecha de actualización en formato ISO 8601
+- `avatarUrl`: URL del avatar del usuario (opcional, puede ser null)
+- `isActive`: Estado activo del usuario (boolean)
+- `deletedAt`: Fecha de eliminación en formato ISO 8601 (opcional, puede ser null)
+- `disableAt`: Fecha de deshabilitación en formato ISO 8601 (opcional, puede ser null)
+- `appVersion`: Versión de la app (default: "2.0.0")
+
+**Estructura de `assignedEvents`:**
+Cada evento en `assignedEvents` incluye:
+
+- Todos los campos del evento desde Firestore
+- `checkpoints`: Array de checkpoints filtrados según `checkpointIds` de la relación
+
+#### Comandos cURL
+
+**Obtener perfil de usuario (con token Bearer y authUserId):**
+
+```bash
+curl -X GET \
+  'https://user-profile-xa26lpxdea-uc.a.run.app?userId=TU_AUTH_USER_ID' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Ejemplo con authUserId específico:**
+
+```bash
+curl -X GET \
+  'https://user-profile-xa26lpxdea-uc.a.run.app?userId=firebase-auth-uid-123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Nota**: El parámetro `userId` debe ser el `authUserId` (ID de autenticación de Firebase), no el ID del documento en Firestore.
+
+**Con verbose (para ver headers y respuesta completa):**
+
+```bash
+curl -v -X GET \
+  'https://user-profile-xa26lpxdea-uc.a.run.app?userId=firebase-auth-uid-123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Probar error 400 (sin authUserId):**
+
+```bash
+curl -X GET \
+  'https://user-profile-xa26lpxdea-uc.a.run.app' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+**Probar error 401 (sin token):**
+
+```bash
+curl -X GET \
+  'https://user-profile-xa26lpxdea-uc.a.run.app?userId=firebase-auth-uid-123' \
+  -H 'Content-Type: application/json' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+**Probar error 404 (usuario no existente con ese authUserId):**
+
+```bash
+curl -X GET \
+  'https://user-profile-xa26lpxdea-uc.a.run.app?userId=auth-uid-que-no-existe' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+#### Respuestas
+
+**200 OK - Usuario encontrado:**
+
+```json
+{
+  "id": "user-id",
+  "authUserId": "firebase-auth-uid",
+  "personalData": {
+    "fullName": "Nombre Completo",
+    "email": "email@example.com",
+    "phone": "+1234567890"
+  },
+  "emergencyContact": {
+    "fullName": "Contacto Emergencia",
+    "phone": "+1234567890"
+  },
+  "userData": {
+    "username": "username"
+  },
+  "eventStaffRelations": [
+    {
+      "eventId": "event-id",
+      "checkpointIds": ["cp1", "cp2"]
+    }
+  ],
+  "assignedEvents": [
+    {
+      "id": "event-id",
+      "name": "Nombre del Evento",
+      "rallySystemId": "rally-id",
+      "status": "EN_CURSO",
+      "checkpoints": [
+        {
+          "id": "cp1",
+          "name": "Inicio",
+          "type": "start",
+          "status": "active"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2025-01-15T10:00:00Z",
+  "updatedAt": "2025-01-15T10:00:00Z",
+  "avatarUrl": "https://example.com/avatar.jpg",
+  "isActive": true,
+  "deletedAt": null,
+  "disableAt": null,
+  "appVersion": "2.0.0"
+}
+```
+
+**400 Bad Request** - Sin cuerpo (solo código HTTP) - cuando falta el parámetro `userId` (authUserId) o está vacío
+
+**401 Unauthorized** - Sin cuerpo (solo código HTTP) - cuando el token Bearer es inválido, expirado o falta el header `Authorization`
+
+**404 Not Found** - Sin cuerpo (solo código HTTP) - cuando no se encuentra ningún usuario con el `authUserId` proporcionado en Firestore
+
+**500 Internal Server Error** - Sin cuerpo (solo código HTTP) - errores del servidor al consultar Firestore o procesar datos
+
+### Notas Importantes
+
+- **Autenticación**: El token Bearer solo se usa para validar que el usuario esté autenticado. No se extrae información del token para buscar el usuario.
+- **Parámetro userId**: El parámetro `userId` es en realidad el `authUserId` (ID de autenticación de Firebase), **NO** el ID del documento en Firestore. La búsqueda se realiza usando `where('authUserId', '==', authUserId).limit(1)`.
+- **Búsqueda por authUserId**: La función busca el usuario en la colección `users` usando el campo `authUserId`, no el ID del documento. Esto coincide con cómo se consulta en la app Flutter.
+- **Eventos Asignados**: Los eventos se obtienen desde `eventStaffRelations` del usuario. Solo se incluyen los checkpoints cuyo ID esté en el array `checkpointIds` de cada relación.
+- **Campos Opcionales**: Los campos `avatarUrl`, `deletedAt`, y `disableAt` pueden ser `null` si no están definidos en el documento.
+- **Compatibilidad**: La respuesta JSON es compatible con `UserProfile.fromMap()` o `UserProfile.fromJson()` en Flutter.
+
+---
+
 ## 📦 Package: Tracking
 
 Funciones relacionadas con el tracking y seguimiento de competidores durante eventos deportivos.
 
-### 3. `track_event_checkpoint`
+### 4. `track_event_checkpoint`
 
 Crea la colección `tracking_checkpoint` para un evento cuando el status es `inProgress`. Inicializa la estructura de tracking de checkpoints.
 
@@ -266,7 +456,7 @@ curl -X POST \
 
 ---
 
-### 4. `track_competitors`
+### 5. `track_competitors`
 
 Crea la estructura de tracking de competidores para un evento y día específico. Inicializa el sistema de seguimiento de competidores.
 
@@ -319,7 +509,7 @@ curl -X POST \
 
 ---
 
-### 5. `track_competitors_off`
+### 6. `track_competitors_off`
 
 Desactiva el tracking de competidores para un evento y día específico. Detiene el seguimiento activo.
 
@@ -370,16 +560,17 @@ curl -X POST \
 
 Las siguientes funciones pueden ser públicas y no requieren autenticación:
 
-- `get_events` - Solo lectura de datos públicos
+- `events` - Solo lectura de datos públicos
 - `event_detail` - Solo lectura de datos públicos
 
 ### Funciones que Requieren Autenticación
 
-Las siguientes funciones requieren autenticación ya que modifican datos:
+Las siguientes funciones requieren autenticación Bearer token:
 
-- `track_event_checkpoint`
-- `track_competitors`
-- `track_competitors_off`
+- `user_profile` - Obtiene perfil de usuario (requiere token para identificar usuario)
+- `track_event_checkpoint` - Modifica datos de tracking
+- `track_competitors` - Modifica datos de tracking
+- `track_competitors_off` - Modifica datos de tracking
 
 ### Cómo Obtener el Token de Autenticación
 
@@ -451,11 +642,14 @@ firebase deploy --only functions:NOMBRE_FUNCION
 ### Ejemplos
 
 ```bash
-# Desplegar solo get_events
-firebase deploy --only functions:get_events
+# Desplegar solo events
+firebase deploy --only functions:events
 
 # Desplegar solo event_detail
 firebase deploy --only functions:event_detail
+
+# Desplegar solo user_profile
+firebase deploy --only functions:user_profile
 
 # Desplegar funciones de tracking
 firebase deploy --only functions:track_event_checkpoint,functions:track_competitors,functions:track_competitors_off
@@ -477,13 +671,15 @@ firebase emulators:start
 
 ## 📝 Notas Importantes
 
-1. **Paginación**: Para `get_events`, se recomienda usar `lastDocId` en lugar de `page` para mejor rendimiento con grandes volúmenes de datos.
+1. **Paginación**: Para `events`, se recomienda usar `lastDocId` en lugar de `page` para mejor rendimiento con grandes volúmenes de datos.
 
-2. **Códigos HTTP**: Las funciones de eventos (`get_events`, `event_detail`) retornan códigos HTTP estándar. Las funciones de tracking retornan objetos JSON con `success` y `message`.
+2. **Códigos HTTP**: Las funciones de eventos (`events`, `event_detail`) y usuarios (`user_profile`) retornan códigos HTTP estándar. Las funciones de tracking retornan objetos JSON con `success` y `message`.
 
-3. **Errores**: Las funciones de eventos retornan solo códigos HTTP en caso de error (400, 404, 500) sin cuerpo JSON, mientras que las funciones de tracking retornan objetos JSON con información del error.
+3. **Errores**: Las funciones de eventos y usuarios retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, mientras que las funciones de tracking retornan objetos JSON con información del error.
 
-4. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
+4. **Autenticación**: La función `user_profile` requiere Bearer token válido de Firebase Auth solo para autenticación. El `userId` se recibe como parámetro query (`userId`), no se extrae del token. El token solo valida que el usuario esté autenticado.
+
+5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
 
 ---
 

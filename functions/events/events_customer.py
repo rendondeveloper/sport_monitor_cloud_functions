@@ -1,10 +1,13 @@
-from firebase_functions import https_fn
-from firebase_admin import firestore
-import logging
 import json
-from .event_short_document import EventShortDocument
+import logging
+
+from firebase_admin import firestore
+from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
 from models.paginated_response import PaginatedResponse
+from utils.helper_http_verb import validate_request
+
+from .event_short_document import EventShortDocument
 
 
 @https_fn.on_request()
@@ -12,59 +15,35 @@ def events(req: https_fn.Request) -> https_fn.Response:
     """
     Función optimizada que obtiene eventos de Firestore con soporte de paginación.
     Retorna eventos usando el modelo EventShortDocument.
-    
+
     Parámetros opcionales (query parameters):
     - size: Número de eventos por página (default: 50, max: 100)
     - page: Número de página (default: 1, basado en 1)
     - lastDocId: ID del último documento de la página anterior (para cursor-based pagination)
-    
+
     Optimizaciones aplicadas:
     - Paginación para mejorar rendimiento
     - Eliminado logging innecesario en el loop (solo errores)
     - Procesamiento más eficiente evitando conversiones redundantes
     - Uso directo de to_dict() del modelo
     """
-    # Manejar CORS preflight (OPTIONS)
-    if req.method == "OPTIONS":
-        return https_fn.Response(
-            "",
-            status=204,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization",
-                "Access-Control-Max-Age": "3600",
-            },
-        )
-    
-    # Solo permitir método GET
-    if req.method != "GET":
-        error_response = {
-            "error": {
-                "code": "method-not-allowed",
-                "message": f"Método {req.method} no permitido. Solo se permite GET."
-            }
-        }
-        return https_fn.Response(
-            json.dumps(error_response),
-            status=405,
-            headers={
-                "Content-Type": "application/json",
-                "Allow": "GET, OPTIONS",
-                "Access-Control-Allow-Origin": "*",
-            },
-        )
-    
+    # Validar CORS y método HTTP
+    validation_response = validate_request(
+        req, ["GET"], "events", return_json_error=True
+    )
+    if validation_response is not None:
+        return validation_response
+
     try:
         # Obtener parámetros de query string
         limit_param = req.args.get("size", "50")
         page_param = req.args.get("page", "1")
         last_doc_id = req.args.get("lastDocId")
-        
+
         # Parámetros de paginación
         limit = min(int(limit_param), 100)  # Default 50, máximo 100
         page = int(page_param)  # Default página 1
-        
+
         # Validar parámetros
         if limit < 1:
             limit = 50
@@ -76,16 +55,18 @@ def events(req: https_fn.Request) -> https_fn.Response:
 
         # Consultar eventos usando la constante
         events_ref = db.collection(FirestoreCollections.EVENTS)
-        
+
         # Aplicar paginación
         # Ordenar por createdAt descendente (más recientes primero)
         try:
-            query = events_ref.order_by("createdAt", direction=firestore.Query.DESCENDING)
+            query = events_ref.order_by(
+                "createdAt", direction=firestore.Query.DESCENDING
+            )
         except Exception as e:
             # Si falla por falta de índice, usar sin ordenamiento
             logging.warning(f"events: Error con order_by, usando sin orden: {str(e)}")
             query = events_ref
-        
+
         # Si se proporciona lastDocId, usar cursor-based pagination (más eficiente)
         if last_doc_id:
             try:
@@ -122,11 +103,13 @@ def events(req: https_fn.Request) -> https_fn.Response:
                         headers={"Content-Type": "application/json"},
                     )
             except Exception as e:
-                logging.warning(f"events: Error calculando offset para página {page}: {str(e)}")
-        
+                logging.warning(
+                    f"events: Error calculando offset para página {page}: {str(e)}"
+                )
+
         # Aplicar límite (agregar 1 para verificar si hay más páginas)
         query = query.limit(limit + 1)
-        
+
         # Ejecutar query
         events_docs = query.get()
 
@@ -138,13 +121,13 @@ def events(req: https_fn.Request) -> https_fn.Response:
         # Procesar documentos
         events_data = []
         last_document_id = None
-        
+
         for doc in events_docs:
             try:
                 event_data = doc.to_dict()
                 if event_data is None:
                     continue
-                
+
                 # Convertir usando el modelo EventShortDocument con mapeo automático
                 event = EventShortDocument.from_firestore_data(event_data, doc.id)
                 # Convertir directamente a dict usando el método del modelo
@@ -152,9 +135,7 @@ def events(req: https_fn.Request) -> https_fn.Response:
                 last_document_id = doc.id
             except Exception as e:
                 # Solo loggear errores, no cada evento procesado
-                logging.warning(
-                    f"events: Error procesando evento {doc.id}: {str(e)}"
-                )
+                logging.warning(f"events: Error procesando evento {doc.id}: {str(e)}")
                 continue
 
         # Crear respuesta paginada usando el modelo genérico
@@ -184,7 +165,7 @@ def events(req: https_fn.Request) -> https_fn.Response:
         error_response = {
             "error": {
                 "code": "invalid-argument",
-                "message": f"Parámetros inválidos: {str(e)}"
+                "message": f"Parámetros inválidos: {str(e)}",
             }
         }
         return https_fn.Response(
@@ -197,7 +178,7 @@ def events(req: https_fn.Request) -> https_fn.Response:
         error_response = {
             "error": {
                 "code": "internal",
-                "message": f"Error interno del servidor: {str(e)}"
+                "message": f"Error interno del servidor: {str(e)}",
             }
         }
         return https_fn.Response(
@@ -205,4 +186,3 @@ def events(req: https_fn.Request) -> https_fn.Response:
             status=500,
             headers={"Content-Type": "application/json"},
         )
-
