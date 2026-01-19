@@ -1,5 +1,6 @@
 # Importar funciones de checkpoints
 from checkpoints import (
+    all_competitor_tracking,
     checkpoint,
     competitor_tracking,
     day_of_race_active,
@@ -39,3 +40,4 @@ initialize_app()
 # - checkpoint: checkpoints/checkpoint.py
 # - competitor_tracking: checkpoints/competitor_tracking.py
 # - days_of_race: checkpoints/days_of_race.py
+# - all_competitor_tracking: checkpoints/all_competitor_tracking.py

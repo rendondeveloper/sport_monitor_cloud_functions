@@ -32,6 +32,11 @@
         "region": "us-central1"
       },
       {
+        "source": "/api/checkpoint/all-competitor-tracking/**",
+        "function": "all_competitor_tracking",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/checkpoint/competitor-tracking/**",
         "function": "competitor_tracking",
         "region": "us-central1"
