@@ -24,7 +24,8 @@ functions/
 │   └── user_profile.py            # user_profile
 ├── checkpoints/         # Package: Gestión de Checkpoints
 │   ├── day_of_race_active.py       # day_of_race_active
-│   └── get_checkpoint.py            # get_checkpoint
+│   ├── checkpoint.py               # checkpoint
+│   └── competitor_tracking.py      # competitor_tracking
 ├── tracking/           # Package: Tracking de Competidores
 │   ├── tracking_checkpoint.py     # track_event_checkpoint
 │   └── tracking_competitors.py     # track_competitors, track_competitors_off
@@ -701,11 +702,218 @@ curl -X GET \
 
 ---
 
+### 6. `competitor_tracking`
+
+Obtiene la lista de competidores con su checkpoint específico y el nombre de la ruta asociada. Retorna un JSON mapeable a la clase `CompetitorTrackingWithRoute`, filtrando competidores visibles según su status y el tipo de checkpoint.
+
+**Tipo**: HTTP Request (GET)  
+**Endpoint**: `https://competitor-tracking-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitor-tracking/{eventId}/{dayOfRaceId}/{checkpointId}`
+
+**Nota**: Esta función requiere autenticación Bearer token para validar que el usuario esté autenticado.
+
+#### Headers Requeridos
+
+| Header          | Tipo   | Requerido | Descripción                                             |
+| --------------- | ------ | --------- | ------------------------------------------------------- |
+| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth (solo para autenticación) |
+
+#### Parámetros (Path o Query Parameters)
+
+| Parámetro      | Tipo   | Requerido | Descripción                                    |
+| -------------- | ------ | --------- | ---------------------------------------------- |
+| `eventId`      | string | **Sí**    | ID del evento (puede venir en path o query)   |
+| `dayOfRaceId`  | string | **Sí**    | ID del día de carrera (puede venir en path o query) |
+| `checkpointId` | string | **Sí**    | ID del checkpoint para filtrar (puede venir en path o query) |
+
+**Nota**: Los parámetros pueden venir en el path de la URL (`/api/competitor-tracking/{eventId}/{dayOfRaceId}/{checkpointId}`) o como query parameters (`?eventId=xxx&dayOfRaceId=yyy&checkpointId=zzz`).
+
+#### Campos Retornados (CompetitorTrackingWithRoute)
+
+**Estructura de respuesta:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "competitors": [...],
+    "routeName": "Nombre de la Ruta"
+  }
+}
+```
+
+**Campos de `competitors` (array de CompetitorTracking):**
+
+- `id`: ID del competidor
+- `name`: Nombre del competidor
+- `order`: Orden del competidor
+- `category`: Categoría del competidor
+- `number`: Número del competidor (string)
+- `timeToStart`: Fecha y hora de inicio en formato ISO 8601 (puede ser null)
+- `createdAt`: Fecha de creación en formato ISO 8601
+- `updatedAt`: Fecha de actualización en formato ISO 8601
+- `trackingCheckpoints`: Array con un solo elemento - el checkpoint específico solicitado:
+  - `id`: ID del checkpoint
+  - `name`: Nombre del checkpoint
+  - `order`: Orden del checkpoint
+  - `checkpointType`: Tipo de checkpoint (start, pass, timer, startTimer, endTimer, finish)
+  - `statusCompetitor`: Status del competidor (none, check, out, outStart, outLast, disqualified)
+  - `checkpointDisable`: ID del checkpoint deshabilitado (string vacío si no hay)
+  - `checkpointDisableName`: Nombre del checkpoint deshabilitado (string vacío si no hay)
+  - `passTime`: Fecha y hora de paso en formato ISO 8601
+  - `note`: Nota opcional (puede ser null)
+
+**Campo `routeName`:**
+
+- `routeName`: Nombre de la ruta que contiene el `checkpointId` (puede ser null si no se encuentra)
+
+#### Consultas Firestore
+
+- **Competidores**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors`
+- **Checkpoint por competidor**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors/{competitorId}/checkpoints/{checkpointId}`
+- **Rutas**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/routes`
+
+#### Lógica de Filtrado: isCompetitorVisible
+
+La función filtra competidores visibles según estas reglas:
+
+| Status | Checkpoint Type | Visible |
+|--------|----------------|---------|
+| `out` | Cualquiera | ✅ Sí |
+| `outStart` | `start` o `finish` | ✅ Sí |
+| `outStart` | Otros | ❌ No |
+| Otros | Cualquiera | ✅ Sí |
+
+#### Comandos cURL
+
+**Obtener tracking de competidores (con token Bearer y parámetros en query):**
+
+```bash
+curl -X GET \
+  'https://competitor-tracking-xa26lpxdea-uc.a.run.app?eventId=TU_EVENT_ID&dayOfRaceId=TU_DAY_ID&checkpointId=TU_CHECKPOINT_ID' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Ejemplo con IDs específicos:**
+
+```bash
+curl -X GET \
+  'https://competitor-tracking-xa26lpxdea-uc.a.run.app?eventId=abc123&dayOfRaceId=day1&checkpointId=cp123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Usando el endpoint con Hosting (parámetros en path):**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/competitor-tracking/abc123/day1/cp123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Con verbose (para ver headers y respuesta completa):**
+
+```bash
+curl -v -X GET \
+  'https://competitor-tracking-xa26lpxdea-uc.a.run.app?eventId=abc123&dayOfRaceId=day1&checkpointId=cp123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Probar error 400 (sin parámetros):**
+
+```bash
+curl -X GET \
+  'https://competitor-tracking-xa26lpxdea-uc.a.run.app' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+**Probar error 401 (sin token):**
+
+```bash
+curl -X GET \
+  'https://competitor-tracking-xa26lpxdea-uc.a.run.app?eventId=abc123&dayOfRaceId=day1&checkpointId=cp123' \
+  -H 'Content-Type: application/json' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+#### Respuestas
+
+**200 OK - Tracking de competidores encontrado:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "competitors": [
+      {
+        "id": "competitor_id",
+        "name": "Nombre del Competidor",
+        "order": 1,
+        "category": "Categoría",
+        "number": "123",
+        "timeToStart": "2025-11-13T10:00:00.000Z",
+        "createdAt": "2025-11-13T19:48:01.459Z",
+        "updatedAt": "2025-11-13T19:48:01.459Z",
+        "trackingCheckpoints": [
+          {
+            "id": "checkpoint_id",
+            "name": "CP 10 GASOLINA ENTRADA A PEÑON",
+            "order": 10,
+            "checkpointType": "pass",
+            "statusCompetitor": "check",
+            "checkpointDisable": "",
+            "checkpointDisableName": "",
+            "passTime": "2025-11-13T19:48:01.459Z",
+            "note": null
+          }
+        ]
+      }
+    ],
+    "routeName": "Nombre de la Ruta"
+  }
+}
+```
+
+**200 OK - Sin competidores (lista vacía):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "competitors": [],
+    "routeName": null
+  }
+}
+```
+
+**400 Bad Request** - Sin cuerpo (solo código HTTP) - cuando falta alguno de los parámetros (`eventId`, `dayOfRaceId` o `checkpointId`) o están vacíos
+
+**401 Unauthorized** - Sin cuerpo (solo código HTTP) - cuando el token Bearer es inválido, expirado o falta el header `Authorization`
+
+**500 Internal Server Error** - Sin cuerpo (solo código HTTP) - errores del servidor al consultar Firestore o procesar datos
+
+### Notas Importantes
+
+- **Autenticación**: El token Bearer solo se usa para validar que el usuario esté autenticado. No se extrae información del token.
+- **Consulta**: La función consulta `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors` y para cada competidor obtiene su checkpoint específico.
+- **Filtrado**: Solo se incluyen competidores que tienen el checkpoint específico solicitado y que pasan el filtro de visibilidad `isCompetitorVisible`.
+- **Ruta**: La función busca la ruta cuyo array `checkpointIds` contiene el `checkpointId` solicitado. Si no se encuentra, `routeName` será `null`.
+- **Timestamps**: Los campos de fecha se convierten automáticamente de Timestamps de Firestore a formato ISO 8601.
+- **Compatibilidad**: La respuesta JSON es compatible con modelos Flutter que esperen la estructura `CompetitorTrackingWithRoute`.
+- **Parámetros flexibles**: Los parámetros pueden venir en el path de la URL o como query parameters, facilitando su uso desde diferentes clientes.
+
+---
+
 ## 📦 Package: Tracking
 
 Funciones relacionadas con el tracking y seguimiento de competidores durante eventos deportivos.
 
-### 6. `track_event_checkpoint`
+### 7. `track_event_checkpoint`
 
 Crea la colección `tracking_checkpoint` para un evento cuando el status es `inProgress`. Inicializa la estructura de tracking de checkpoints.
 
@@ -756,7 +964,7 @@ curl -X POST \
 
 ---
 
-### 7. `track_competitors`
+### 8. `track_competitors`
 
 Crea la estructura de tracking de competidores para un evento y día específico. Inicializa el sistema de seguimiento de competidores.
 
@@ -809,7 +1017,7 @@ curl -X POST \
 
 ---
 
-### 8. `track_competitors_off`
+### 9. `track_competitors_off`
 
 Desactiva el tracking de competidores para un evento y día específico. Detiene el seguimiento activo.
 
@@ -870,6 +1078,7 @@ Las siguientes funciones requieren autenticación Bearer token:
 - `user_profile` - Obtiene perfil de usuario (requiere token para identificar usuario)
 - `day_of_race_active` - Obtiene día de carrera activo (requiere token para autenticación)
 - `get_checkpoint` - Obtiene checkpoint específico (requiere token para autenticación)
+- `competitor_tracking` - Obtiene tracking de competidores (requiere token para autenticación)
 - `track_event_checkpoint` - Modifica datos de tracking
 - `track_competitors` - Modifica datos de tracking
 - `track_competitors_off` - Modifica datos de tracking
@@ -959,6 +1168,9 @@ firebase deploy --only functions:day_of_race_active
 # Desplegar solo get_checkpoint
 firebase deploy --only functions:get_checkpoint
 
+# Desplegar solo competitor_tracking
+firebase deploy --only functions:competitor_tracking
+
 # Desplegar funciones de tracking
 firebase deploy --only functions:track_event_checkpoint,functions:track_competitors,functions:track_competitors_off
 ```
@@ -981,11 +1193,11 @@ firebase emulators:start
 
 1. **Paginación**: Para `events`, se recomienda usar `lastDocId` en lugar de `page` para mejor rendimiento con grandes volúmenes de datos.
 
-2. **Códigos HTTP**: Las funciones de eventos (`events`, `event_detail`), usuarios (`user_profile`) y checkpoints (`day_of_race_active`, `get_checkpoint`) retornan códigos HTTP estándar. Las funciones de tracking retornan objetos JSON con `success` y `message`.
+2. **Códigos HTTP**: Las funciones de eventos (`events`, `event_detail`), usuarios (`user_profile`) y checkpoints (`day_of_race_active`, `get_checkpoint`, `competitor_tracking`) retornan códigos HTTP estándar. Las funciones de tracking retornan objetos JSON con `success` y `message`.
 
-3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, mientras que las funciones de tracking retornan objetos JSON con información del error.
+3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, excepto `competitor_tracking` que retorna JSON con `success: false` en caso de error. Las funciones de tracking retornan objetos JSON con información del error.
 
-4. **Autenticación**: Las funciones `user_profile`, `day_of_race_active` y `get_checkpoint` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query o path, no se extraen del token. El token solo valida que el usuario esté autenticado.
+4. **Autenticación**: Las funciones `user_profile`, `day_of_race_active`, `get_checkpoint` y `competitor_tracking` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query o path, no se extraen del token. El token solo valida que el usuario esté autenticado.
 
 5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
 

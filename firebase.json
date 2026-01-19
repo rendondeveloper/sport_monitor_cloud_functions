@@ -32,6 +32,11 @@
         "region": "us-central1"
       },
       {
+        "source": "/api/competitor-tracking/**",
+        "function": "competitor_tracking",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/events",
         "function": "events",
         "region": "us-central1"

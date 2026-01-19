@@ -1,18 +1,17 @@
-from firebase_functions.options import set_global_options
+# Importar funciones de checkpoints
+from checkpoints import checkpoint, competitor_tracking, day_of_race_active
+
+# Importar funciones de events
+from events import event_detail, events
 from firebase_admin import initialize_app
+from firebase_functions.options import set_global_options
 
 # Importar funciones de tracking
 from tracking.tracking_checkpoint import track_event_checkpoint
 from tracking.tracking_competitors import track_competitors, track_competitors_off
 
-# Importar funciones de events
-from events import events, event_detail
-
 # Importar funciones de users
 from users import user_profile
-
-# Importar funciones de checkpoints
-from checkpoints import day_of_race_active, get_checkpoint
 
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
@@ -33,3 +32,4 @@ initialize_app()
 # - user_profile: users/user_profile.py
 # - day_of_race_active: checkpoints/day_of_race_active.py
 # - get_checkpoint: checkpoints/get_checkpoint.py
+# - competitor_tracking: checkpoints/competitor_tracking.py

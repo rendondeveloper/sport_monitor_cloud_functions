@@ -10,7 +10,7 @@ from utils.helpers import convert_firestore_value
 
 
 @https_fn.on_request()
-def get_checkpoint(req: https_fn.Request) -> https_fn.Response:
+def checkpoint(req: https_fn.Request) -> https_fn.Response:
     """
     Obtiene un checkpoint específico de un evento desde Firestore
 
