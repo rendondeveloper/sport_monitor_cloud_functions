@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from firebase_admin import firestore
@@ -42,6 +43,8 @@ def is_competitor_visible(status: str, checkpoint_type: str) -> bool:
 def competitor_tracking(req: https_fn.Request) -> https_fn.Response:
     """
     Obtiene la lista de competidores con su checkpoint específico y el nombre de la ruta asociada.
+    Retorna un JSON mapeable a la clase CompetitorTrackingWithRoute, filtrando competidores visibles
+    según su status y el tipo de checkpoint.
 
     Headers:
     - Authorization: Bearer {Firebase Auth Token} (requerido)
@@ -63,19 +66,21 @@ def competitor_tracking(req: https_fn.Request) -> https_fn.Response:
     - 500: Internal Server Error (sin respuesta JSON, solo código HTTP)
 
     Nota: Consulta events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/
-          y filtra competidores visibles según isCompetitorVisible
+          y filtra competidores visibles según isCompetitorVisible.
+          Los campos createdAt y updatedAt se generan en el momento de la consulta (DateTime.now()),
+          no se usan los valores de Firestore.
     """
     # Validar CORS y método HTTP
     validation_response = validate_request(
-        req, ["GET"], "get_competitor_tracking", return_json_error=False
+        req, ["GET"], "competitor_tracking", return_json_error=False
     )
     if validation_response is not None:
         return validation_response
 
     try:
         # Validar Bearer token (solo para autenticación)
-        if not verify_bearer_token(req, "get_competitor_tracking"):
-            logging.warning("get_competitor_tracking: Token inválido o faltante")
+        if not verify_bearer_token(req, "competitor_tracking"):
+            logging.warning("competitor_tracking: Token inválido o faltante")
             return https_fn.Response(
                 "",
                 status=401,
@@ -88,56 +93,60 @@ def competitor_tracking(req: https_fn.Request) -> https_fn.Response:
         checkpoint_id = req.args.get("checkpointId")
 
         # Si no vienen en query params, intentar extraerlos del path
-        # La URL será: /api/competitor-tracking/{eventId}/{dayOfRaceId}/{checkpointId}
-        if not event_id or not day_of_race_id or not checkpoint_id:
+        # La URL será: /api/checkpoint/competitor-tracking/{eventId}/{dayOfRaceId}/{checkpointId}
+        if (
+            not event_id
+            or event_id.strip() == ""
+            or not day_of_race_id
+            or day_of_race_id.strip() == ""
+            or not checkpoint_id
+            or checkpoint_id.strip() == ""
+        ):
             path = req.path
-            logging.info("get_competitor_tracking: Path recibido: %s", path)
+            logging.warning("competitor_tracking: Path recibido: %s", path)
             path_parts = [p for p in path.split("/") if p]  # Filtrar strings vacíos
-            logging.info("get_competitor_tracking: Path parts: %s", path_parts)
+            logging.warning("competitor_tracking: Path parts: %s", path_parts)
 
             try:
-                # Buscar el índice de "competitor-tracking" y tomar los siguientes elementos
+                # Buscar el patrón /competitor-tracking/{eventId}/{dayOfRaceId}/{checkpointId}
                 if "competitor-tracking" in path_parts:
                     tracking_index = path_parts.index("competitor-tracking")
-                    # Los siguientes 3 elementos deberían ser: eventId, dayOfRaceId, checkpointId
                     if tracking_index + 3 < len(path_parts):
-                        if not event_id:
+                        if not event_id or event_id.strip() == "":
                             event_id = path_parts[tracking_index + 1]
-                        if not day_of_race_id:
+                        if not day_of_race_id or day_of_race_id.strip() == "":
                             day_of_race_id = path_parts[tracking_index + 2]
-                        if not checkpoint_id:
+                        if not checkpoint_id or checkpoint_id.strip() == "":
                             checkpoint_id = path_parts[tracking_index + 3]
-                        logging.info(
-                            "get_competitor_tracking: Parámetros extraídos - eventId: %s, dayOfRaceId: %s, checkpointId: %s",
+                        logging.warning(
+                            "competitor_tracking: Parámetros extraídos - eventId: %s, dayOfRaceId: %s, checkpointId: %s",
                             event_id,
                             day_of_race_id,
                             checkpoint_id,
                         )
             except (ValueError, IndexError) as e:
                 logging.warning(
-                    "get_competitor_tracking: Error extrayendo parámetros del path: %s",
+                    "competitor_tracking: Error extrayendo parámetros del path: %s",
                     e,
                 )
 
         # Validar que todos los parámetros estén presentes
         if not event_id or event_id.strip() == "":
-            logging.warning("get_competitor_tracking: eventId faltante o vacío")
+            logging.warning("competitor_tracking: eventId faltante o vacío")
             return https_fn.Response(
                 "",
                 status=400,
                 headers={"Access-Control-Allow-Origin": "*"},
             )
-
         if not day_of_race_id or day_of_race_id.strip() == "":
-            logging.warning("get_competitor_tracking: dayOfRaceId faltante o vacío")
+            logging.warning("competitor_tracking: dayOfRaceId faltante o vacío")
             return https_fn.Response(
                 "",
                 status=400,
                 headers={"Access-Control-Allow-Origin": "*"},
             )
-
         if not checkpoint_id or checkpoint_id.strip() == "":
-            logging.warning("get_competitor_tracking: checkpointId faltante o vacío")
+            logging.warning("competitor_tracking: checkpointId faltante o vacío")
             return https_fn.Response(
                 "",
                 status=400,
@@ -152,8 +161,8 @@ def competitor_tracking(req: https_fn.Request) -> https_fn.Response:
 
         # 1. Obtener todos los competidores
         # events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors
-        logging.info(
-            "get_competitor_tracking: Obteniendo competidores para eventId=%s, dayOfRaceId=%s, trackingId=%s",
+        logging.warning(
+            "competitor_tracking: Obteniendo competidores para eventId=%s, dayOfRaceId=%s, trackingId=%s",
             event_id,
             day_of_race_id,
             tracking_id,
@@ -170,8 +179,8 @@ def competitor_tracking(req: https_fn.Request) -> https_fn.Response:
         if not competitors_snapshot:
             # Si no hay competidores, retornar lista vacía
             response_data = {
-                "success": True,
-                "data": {"competitors": [], "routeName": None},
+                "competitors": [],
+                "routeName": None,
             }
             return https_fn.Response(
                 json.dumps(response_data, ensure_ascii=False),
@@ -223,6 +232,9 @@ def competitor_tracking(req: https_fn.Request) -> https_fn.Response:
                 if checkpoint_type is None:
                     checkpoint_type = checkpoint_data.get("checkpointType", "pass")
 
+                # Generar createdAt y updatedAt en el momento de la consulta (DateTime.now())
+                current_time = datetime.utcnow().isoformat() + "Z"
+
                 # Construir objeto del competidor con su checkpoint
                 competitor_tracking = {
                     "id": competitor_id,
@@ -237,12 +249,8 @@ def competitor_tracking(req: https_fn.Request) -> https_fn.Response:
                     "timeToStart": convert_firestore_value(
                         competitor_data.get("timeToStart")
                     ),
-                    "createdAt": convert_firestore_value(
-                        competitor_data.get("createdAt")
-                    ),
-                    "updatedAt": convert_firestore_value(
-                        competitor_data.get("updatedAt")
-                    ),
+                    "createdAt": current_time,  # DateTime.now() - no de Firestore
+                    "updatedAt": current_time,  # DateTime.now() - no de Firestore
                     "trackingCheckpoints": [
                         {
                             "id": checkpoint_id,
@@ -254,14 +262,12 @@ def competitor_tracking(req: https_fn.Request) -> https_fn.Response:
                             "statusCompetitor": checkpoint_data.get(
                                 "statusCompetitor", "none"
                             ),
-                            "checkpointDisable": checkpoint_data.get(
-                                "checkpointDisable", ""
-                            )
-                            or "",
-                            "checkpointDisableName": checkpoint_data.get(
-                                "checkpointDisableName", ""
-                            )
-                            or "",
+                            "checkpointDisable": (
+                                checkpoint_data.get("checkpointDisable") or ""
+                            ),
+                            "checkpointDisableName": (
+                                checkpoint_data.get("checkpointDisableName") or ""
+                            ),
                             "passTime": convert_firestore_value(
                                 checkpoint_data.get("passTime")
                             ),
@@ -274,16 +280,33 @@ def competitor_tracking(req: https_fn.Request) -> https_fn.Response:
 
             except (ValueError, AttributeError, RuntimeError, TypeError) as e:
                 logging.warning(
-                    "get_competitor_tracking: Error procesando competidor %s: %s",
+                    "competitor_tracking: Error procesando competidor %s: %s",
                     competitor_doc.id,
                     e,
                 )
                 continue
 
+        # Si no hay competidores con checkpoint, retornar lista vacía
+        if not competitor_tracking_list:
+            response_data = {
+                "competitors": [],
+                "routeName": None,
+            }
+            return https_fn.Response(
+                json.dumps(response_data, ensure_ascii=False),
+                status=200,
+                headers={
+                    "Content-Type": "application/json; charset=utf-8",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                },
+            )
+
         # 3. Obtener todas las rutas
         # events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/routes
-        logging.info(
-            "get_competitor_tracking: Obteniendo rutas para eventId=%s, trackingId=%s",
+        logging.warning(
+            "competitor_tracking: Obteniendo rutas para eventId=%s, trackingId=%s",
             event_id,
             tracking_id,
         )
@@ -298,43 +321,61 @@ def competitor_tracking(req: https_fn.Request) -> https_fn.Response:
 
         # 4. Buscar ruta que contiene checkpointId
         route_name: Optional[str] = None
-        for route_doc in routes_snapshot:
-            try:
-                route_data = route_doc.to_dict()
-                if route_data is None:
+
+        if routes_snapshot:
+            for route_doc in routes_snapshot:
+                try:
+                    route_data = route_doc.to_dict()
+                    if route_data is None:
+                        continue
+
+                    checkpoint_ids = route_data.get("checkpointIds")
+                    if checkpoint_ids and isinstance(checkpoint_ids, list):
+                        if checkpoint_id in checkpoint_ids:
+                            route_name = route_data.get("name")
+                            logging.warning(
+                                "competitor_tracking: Ruta encontrada: %s", route_name
+                            )
+                            break
+                except (ValueError, AttributeError, RuntimeError, TypeError) as e:
+                    logging.warning(
+                        "competitor_tracking: Error procesando ruta %s: %s",
+                        route_doc.id,
+                        e,
+                    )
                     continue
 
-                checkpoint_ids = route_data.get("checkpointIds", [])
-                if isinstance(checkpoint_ids, list) and checkpoint_id in checkpoint_ids:
-                    route_name = route_data.get("name")
-                    break
-            except (ValueError, AttributeError, RuntimeError, TypeError) as e:
+        # 5. Filtrar competidores visibles usando isCompetitorVisible
+        if checkpoint_type is None:
+            # Si no hay checkpointType, usar el del primer competidor
+            if competitor_tracking_list:
+                first_checkpoint = competitor_tracking_list[0].get(
+                    "trackingCheckpoints", []
+                )
+                if first_checkpoint and len(first_checkpoint) > 0:
+                    checkpoint_type = first_checkpoint[0].get("checkpointType", "pass")
+
+        visible_competitors: List[Dict[str, Any]] = []
+
+        for competitor in competitor_tracking_list:
+            try:
+                status = competitor["trackingCheckpoints"][0].get(
+                    "statusCompetitor", "none"
+                )
+                if is_competitor_visible(status, checkpoint_type):
+                    visible_competitors.append(competitor)
+            except (KeyError, IndexError, TypeError) as e:
                 logging.warning(
-                    "get_competitor_tracking: Error procesando ruta %s: %s",
-                    route_doc.id,
+                    "competitor_tracking: Error filtrando competidor %s: %s",
+                    competitor.get("id", "unknown"),
                     e,
                 )
                 continue
 
-        # 5. Filtrar competidores visibles
-        visible_competitors = competitor_tracking_list
-        if competitor_tracking_list and checkpoint_type:
-            visible_competitors = [
-                competitor
-                for competitor in competitor_tracking_list
-                if is_competitor_visible(
-                    competitor["trackingCheckpoints"][0]["statusCompetitor"],
-                    checkpoint_type,
-                )
-            ]
-
-        # 6. Construir respuesta
+        # 6. Construir respuesta final
         response_data = {
-            "success": True,
-            "data": {
-                "competitors": visible_competitors,
-                "routeName": route_name,
-            },
+            "competitors": visible_competitors,
+            "routeName": route_name,
         }
 
         # Retornar respuesta HTTP 200
@@ -350,14 +391,14 @@ def competitor_tracking(req: https_fn.Request) -> https_fn.Response:
         )
 
     except ValueError as e:
-        logging.error("get_competitor_tracking: Error de validación: %s", e)
+        logging.error("competitor_tracking: Error de validación: %s", e)
         return https_fn.Response(
             "",
             status=400,
             headers={"Access-Control-Allow-Origin": "*"},
         )
     except (AttributeError, KeyError, RuntimeError, TypeError) as e:
-        logging.error("get_competitor_tracking: Error interno: %s", e, exc_info=True)
+        logging.error("competitor_tracking: Error interno: %s", e, exc_info=True)
         return https_fn.Response(
             "",
             status=500,

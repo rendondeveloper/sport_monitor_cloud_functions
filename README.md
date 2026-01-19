@@ -709,7 +709,7 @@ Obtiene la lista de competidores con su checkpoint específico y el nombre de la
 
 **Tipo**: HTTP Request (GET)  
 **Endpoint**: `https://competitor-tracking-xa26lpxdea-uc.a.run.app`  
-**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitor-tracking/{eventId}/{dayOfRaceId}/{checkpointId}`
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/checkpoint/competitor-tracking/{eventId}/{dayOfRaceId}/{checkpointId}`
 
 **Nota**: Esta función requiere autenticación Bearer token para validar que el usuario esté autenticado.
 
@@ -727,21 +727,20 @@ Obtiene la lista de competidores con su checkpoint específico y el nombre de la
 | `dayOfRaceId`  | string | **Sí**    | ID del día de carrera (puede venir en path o query) |
 | `checkpointId` | string | **Sí**    | ID del checkpoint para filtrar (puede venir en path o query) |
 
-**Nota**: Los parámetros pueden venir en el path de la URL (`/api/competitor-tracking/{eventId}/{dayOfRaceId}/{checkpointId}`) o como query parameters (`?eventId=xxx&dayOfRaceId=yyy&checkpointId=zzz`).
+**Nota**: Los parámetros pueden venir en el path de la URL (`/api/checkpoint/competitor-tracking/{eventId}/{dayOfRaceId}/{checkpointId}`) o como query parameters (`?eventId=xxx&dayOfRaceId=yyy&checkpointId=zzz`).
 
 #### Campos Retornados (CompetitorTrackingWithRoute)
 
-**Estructura de respuesta:**
+**Estructura de respuesta (sin wrapper):**
 
 ```json
 {
-  "success": true,
-  "data": {
-    "competitors": [...],
-    "routeName": "Nombre de la Ruta"
-  }
+  "competitors": [...],
+  "routeName": "Nombre de la Ruta"
 }
 ```
+
+**Nota importante**: La respuesta NO incluye un wrapper `{ "success": true, "data": {...} }`. Retorna directamente el objeto `CompetitorTrackingWithRoute`.
 
 **Campos de `competitors` (array de CompetitorTracking):**
 
@@ -751,8 +750,8 @@ Obtiene la lista de competidores con su checkpoint específico y el nombre de la
 - `category`: Categoría del competidor
 - `number`: Número del competidor (string)
 - `timeToStart`: Fecha y hora de inicio en formato ISO 8601 (puede ser null)
-- `createdAt`: Fecha de creación en formato ISO 8601
-- `updatedAt`: Fecha de actualización en formato ISO 8601
+- `createdAt`: Fecha de creación en formato ISO 8601 (**NOTA**: Se genera en el momento de la consulta con `DateTime.now()`, NO se usa el valor de Firestore)
+- `updatedAt`: Fecha de actualización en formato ISO 8601 (**NOTA**: Se genera en el momento de la consulta con `DateTime.now()`, NO se usa el valor de Firestore)
 - `trackingCheckpoints`: Array con un solo elemento - el checkpoint específico solicitado:
   - `id`: ID del checkpoint
   - `name`: Nombre del checkpoint
@@ -770,9 +769,21 @@ Obtiene la lista de competidores con su checkpoint específico y el nombre de la
 
 #### Consultas Firestore
 
-- **Competidores**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors`
-- **Checkpoint por competidor**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors/{competitorId}/checkpoints/{checkpointId}`
-- **Rutas**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/routes`
+**Consulta 1: Obtener Todos los Competidores**
+- **Ruta**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors`
+- **Método**: Obtener todos los documentos sin filtros
+- **Timeout**: 20 segundos
+
+**Consulta 2: Obtener Checkpoint Específico por Competidor**
+- **Ruta**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors/{competitorId}/checkpoints/{checkpointId}`
+- **Método**: Obtener documento específico por ID (para cada competidor)
+- **Timeout**: 5 segundos por competidor
+- **Nota**: Solo se incluyen competidores que tienen el checkpoint específico. Si el checkpoint no existe para un competidor, ese competidor se omite.
+
+**Consulta 3: Obtener Todas las Rutas**
+- **Ruta**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/routes`
+- **Método**: Obtener todos los documentos sin filtros
+- **Timeout**: 20 segundos
 
 #### Lógica de Filtrado: isCompetitorVisible
 
@@ -781,9 +792,14 @@ La función filtra competidores visibles según estas reglas:
 | Status | Checkpoint Type | Visible |
 |--------|----------------|---------|
 | `out` | Cualquiera | ✅ Sí |
-| `outStart` | `start` o `finish` | ✅ Sí |
-| `outStart` | Otros | ❌ No |
-| Otros | Cualquiera | ✅ Sí |
+| `outStart` | `start` | ✅ Sí |
+| `outStart` | `finish` | ✅ Sí |
+| `outStart` | Otros (pass, timer, etc.) | ❌ No |
+| Otros (none, check, outLast, disqualified) | Cualquiera | ✅ Sí |
+
+**Valores de Status**: `none`, `check`, `out`, `outStart`, `outLast`, `disqualified`
+
+**Valores de CheckpointType**: `start`, `pass`, `timer`, `startTimer`, `endTimer`, `finish`
 
 #### Comandos cURL
 
@@ -809,9 +825,18 @@ curl -X GET \
 
 ```bash
 curl -X GET \
-  'https://system-track-monitor.web.app/api/competitor-tracking/abc123/day1/cp123' \
+  'https://system-track-monitor.web.app/api/checkpoint/competitor-tracking/abc123/day1/cp123' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Ejemplo con valores reales:**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/checkpoint/competitor-tracking/cN6ykYvP5WortNOxr3j6/day1_2025-11-13/1AkqicDD0nJBgQSOwIKz' \
+  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IjEyMzQ1Njc4OTAifQ...' \
+  -H 'Content-Type: application/json'
 ```
 
 **Con verbose (para ver headers y respuesta completa):**
@@ -848,35 +873,32 @@ curl -X GET \
 
 ```json
 {
-  "success": true,
-  "data": {
-    "competitors": [
-      {
-        "id": "competitor_id",
-        "name": "Nombre del Competidor",
-        "order": 1,
-        "category": "Categoría",
-        "number": "123",
-        "timeToStart": "2025-11-13T10:00:00.000Z",
-        "createdAt": "2025-11-13T19:48:01.459Z",
-        "updatedAt": "2025-11-13T19:48:01.459Z",
-        "trackingCheckpoints": [
-          {
-            "id": "checkpoint_id",
-            "name": "CP 10 GASOLINA ENTRADA A PEÑON",
-            "order": 10,
-            "checkpointType": "pass",
-            "statusCompetitor": "check",
-            "checkpointDisable": "",
-            "checkpointDisableName": "",
-            "passTime": "2025-11-13T19:48:01.459Z",
-            "note": null
-          }
-        ]
-      }
-    ],
-    "routeName": "Nombre de la Ruta"
-  }
+  "competitors": [
+    {
+      "id": "competitor_123",
+      "name": "Juan Pérez",
+      "order": 1,
+      "category": "Moto",
+      "number": "123",
+      "timeToStart": "2025-11-13T10:00:00.000Z",
+      "createdAt": "2025-11-13T19:48:01.459Z",
+      "updatedAt": "2025-11-13T19:48:01.459Z",
+      "trackingCheckpoints": [
+        {
+          "id": "1AkqicDD0nJBgQSOwIKz",
+          "name": "CP 10 GASOLINA ENTRADA A PEÑON",
+          "order": 10,
+          "checkpointType": "pass",
+          "statusCompetitor": "check",
+          "checkpointDisable": "",
+          "checkpointDisableName": "",
+          "passTime": "2025-11-13T19:48:01.459Z",
+          "note": null
+        }
+      ]
+    }
+  ],
+  "routeName": "Ruta Principal"
 }
 ```
 
@@ -884,11 +906,8 @@ curl -X GET \
 
 ```json
 {
-  "success": true,
-  "data": {
-    "competitors": [],
-    "routeName": null
-  }
+  "competitors": [],
+  "routeName": null
 }
 ```
 
@@ -898,15 +917,28 @@ curl -X GET \
 
 **500 Internal Server Error** - Sin cuerpo (solo código HTTP) - errores del servidor al consultar Firestore o procesar datos
 
+### Algoritmo de Procesamiento
+
+1. **Obtener competidores**: Consulta `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors`
+2. **Para cada competidor**: Obtiene su checkpoint específico desde `competitors/{competitorId}/checkpoints/{checkpointId}`
+   - Si el checkpoint no existe, se omite el competidor
+   - Si existe, se agrega a la lista con `createdAt` y `updatedAt` generados en el momento (DateTime.now())
+3. **Obtener rutas**: Consulta `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/routes` en paralelo
+4. **Buscar ruta**: Itera sobre las rutas y busca la que contiene el `checkpointId` en su array `checkpointIds`
+5. **Filtrar competidores visibles**: Aplica `isCompetitorVisible()` usando el `statusCompetitor` y `checkpointType`
+6. **Construir respuesta**: Retorna `{ "competitors": [...], "routeName": ... }` sin wrapper
+
 ### Notas Importantes
 
 - **Autenticación**: El token Bearer solo se usa para validar que el usuario esté autenticado. No se extrae información del token.
 - **Consulta**: La función consulta `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors` y para cada competidor obtiene su checkpoint específico.
 - **Filtrado**: Solo se incluyen competidores que tienen el checkpoint específico solicitado y que pasan el filtro de visibilidad `isCompetitorVisible`.
 - **Ruta**: La función busca la ruta cuyo array `checkpointIds` contiene el `checkpointId` solicitado. Si no se encuentra, `routeName` será `null`.
-- **Timestamps**: Los campos de fecha se convierten automáticamente de Timestamps de Firestore a formato ISO 8601.
+- **Timestamps**: Los campos `createdAt` y `updatedAt` del `CompetitorTracking` se generan en el momento de la consulta usando `DateTime.now()`, **NO se usan los valores de Firestore**. Los demás campos de fecha (`timeToStart`, `passTime`) sí se convierten de Timestamps de Firestore a formato ISO 8601.
 - **Compatibilidad**: La respuesta JSON es compatible con modelos Flutter que esperen la estructura `CompetitorTrackingWithRoute`.
-- **Parámetros flexibles**: Los parámetros pueden venir en el path de la URL o como query parameters, facilitando su uso desde diferentes clientes.
+- **Parámetros flexibles**: Los parámetros pueden venir en el path de la URL (`/api/checkpoint/competitor-tracking/{eventId}/{dayOfRaceId}/{checkpointId}`) o como query parameters (`?eventId=xxx&dayOfRaceId=yyy&checkpointId=zzz`).
+- **Sin wrapper**: La respuesta NO incluye un wrapper `{ "success": true, "data": {...} }`. Retorna directamente el objeto `CompetitorTrackingWithRoute`.
+- **Array vacío**: Si no hay competidores o no se encuentran checkpoints, retorna `{ "competitors": [], "routeName": null }` con código 200 OK.
 
 ---
 
