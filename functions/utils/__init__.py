@@ -1,5 +1,5 @@
 # Utils package
-from .helpers import format_utc_to_local_datetime
+from .helpers import format_utc_to_local_datetime, convert_firestore_value
 from .helper_http import verify_bearer_token
 from .helper_http_verb import (
     handle_cors_preflight,
@@ -9,6 +9,7 @@ from .helper_http_verb import (
 
 __all__ = [
     "format_utc_to_local_datetime",
+    "convert_firestore_value",
     "verify_bearer_token",
     "handle_cors_preflight",
     "validate_http_method",

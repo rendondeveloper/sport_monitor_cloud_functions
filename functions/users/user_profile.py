@@ -1,13 +1,12 @@
 import json
 import logging
-from datetime import datetime
-from typing import Any
 
 from firebase_admin import firestore
 from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
 from utils.helper_http import verify_bearer_token
 from utils.helper_http_verb import validate_request
+from utils.helpers import convert_firestore_value
 
 
 @https_fn.on_request()
@@ -187,32 +186,6 @@ def user_profile(req: https_fn.Request) -> https_fn.Response:
                         "user_profile: Error procesando evento %s: %s", event_id, e
                     )
                     continue
-
-        # Función helper para convertir valores de Firestore a JSON serializable
-        def convert_firestore_value(value: Any) -> Any:
-            """Convierte valores de Firestore a tipos JSON serializables"""
-            if value is None:
-                return None
-            # Timestamp de Firestore (verificar por tipo o método)
-            if hasattr(value, "timestamp") and hasattr(value, "to_datetime"):
-                # Es un Timestamp de Firestore
-                dt = value.to_datetime()
-                return dt.isoformat() + "Z" if dt.tzinfo is None else dt.isoformat()
-            # datetime de Python
-            if isinstance(value, datetime):
-                return (
-                    value.isoformat() + "Z"
-                    if value.tzinfo is None
-                    else value.isoformat()
-                )
-            # dict - recursivo
-            if isinstance(value, dict):
-                return {k: convert_firestore_value(v) for k, v in value.items()}
-            # list - recursivo
-            if isinstance(value, list):
-                return [convert_firestore_value(item) for item in value]
-            # Otros tipos (str, int, float, bool) se retornan tal cual
-            return value
 
         # Construir UserProfile - copiar todos los campos del documento primero
         user_profile_data = {

@@ -22,6 +22,11 @@
     ],
     "rewrites": [
       {
+        "source": "/api/checkpoint/dayofrace/active/**",
+        "function": "day_of_race_active",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/events",
         "function": "events",
         "region": "us-central1"

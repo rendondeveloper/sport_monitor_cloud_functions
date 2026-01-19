@@ -11,6 +11,9 @@ from events import events, event_detail
 # Importar funciones de users
 from users import user_profile
 
+# Importar funciones de checkpoints
+from checkpoints import day_of_race_active
+
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
 # traffic spikes by instead downgrading performance. This limit is a per-function
@@ -28,3 +31,4 @@ initialize_app()
 # - events: events/events_customer.py
 # - event_detail: events/events_detail_customer.py
 # - user_profile: users/user_profile.py
+# - day_of_race_active: checkpoints/day_of_race_active.py

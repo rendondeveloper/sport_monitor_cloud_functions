@@ -24,4 +24,3 @@ class FirestoreCollections:
     EVENT_TRACKING_COMPETITOR_TRACKING = "competitor_tracking"
     EVENT_TRACKING_COMPETITOR = "competitor"
     EVENT_TRACKING_CHECKPOINTS = "checkpoints"
-
