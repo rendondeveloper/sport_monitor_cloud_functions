@@ -12,7 +12,7 @@ from events import events, event_detail
 from users import user_profile
 
 # Importar funciones de checkpoints
-from checkpoints import day_of_race_active
+from checkpoints import day_of_race_active, get_checkpoint
 
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
@@ -32,3 +32,4 @@ initialize_app()
 # - event_detail: events/events_detail_customer.py
 # - user_profile: users/user_profile.py
 # - day_of_race_active: checkpoints/day_of_race_active.py
+# - get_checkpoint: checkpoints/get_checkpoint.py

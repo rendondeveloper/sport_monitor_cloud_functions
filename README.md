@@ -23,7 +23,8 @@ functions/
 ├── users/               # Package: Gestión de Usuarios
 │   └── user_profile.py            # user_profile
 ├── checkpoints/         # Package: Gestión de Checkpoints
-│   └── day_of_race_active.py       # day_of_race_active
+│   ├── day_of_race_active.py       # day_of_race_active
+│   └── get_checkpoint.py            # get_checkpoint
 ├── tracking/           # Package: Tracking de Competidores
 │   ├── tracking_checkpoint.py     # track_event_checkpoint
 │   └── tracking_competitors.py     # track_competitors, track_competitors_off
@@ -546,11 +547,165 @@ curl -X GET \
 
 ---
 
+### 5. `get_checkpoint`
+
+Obtiene un checkpoint específico de un evento desde Firestore. Retorna el documento completo del checkpoint con todos sus campos.
+
+**Tipo**: HTTP Request (GET)  
+**Endpoint**: `https://get-checkpoint-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/checkpoint/{checkpointId}/event/{eventId}`
+
+**Nota**: Esta función requiere autenticación Bearer token para validar que el usuario esté autenticado.
+
+#### Headers Requeridos
+
+| Header          | Tipo   | Requerido | Descripción                                             |
+| --------------- | ------ | --------- | ------------------------------------------------------- |
+| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth (solo para autenticación) |
+
+#### Parámetros (Path o Query Parameters)
+
+| Parámetro     | Tipo   | Requerido | Descripción                                    |
+| ------------- | ------ | --------- | ---------------------------------------------- |
+| `checkpointId` | string | **Sí**    | ID del checkpoint (puede venir en path o query) |
+| `eventId`     | string | **Sí**    | ID del evento (puede venir en path o query)   |
+
+**Nota**: Los parámetros pueden venir en el path de la URL (`/api/checkpoint/{checkpointId}/event/{eventId}`) o como query parameters (`?checkpointId=xxx&eventId=yyy`).
+
+#### Campos Retornados (Checkpoint)
+
+- `id`: ID del documento del checkpoint
+- `name`: Nombre del checkpoint
+- `order`: Orden del checkpoint
+- `type`: Tipo del checkpoint (ej: "pass", "start", "finish")
+- `status`: Estado del checkpoint (ej: "active", "inactive")
+- `assignedStaffIds`: Array de IDs del staff asignado
+- `coordinates`: Coordenadas del checkpoint (formato: "lat,lng")
+- `logoUrl`: URL del logo del checkpoint (opcional, puede ser null)
+- `createdAt`: Fecha de creación en formato ISO 8601
+- `updatedAt`: Fecha de actualización en formato ISO 8601
+- `eventRouteId`: Array de IDs de rutas del evento (opcional)
+- `dayOfRaceId`: Array de IDs de días de carrera (opcional)
+- Cualquier otro campo presente en el documento
+
+#### Consulta Firestore
+
+- **Ruta de colección**: `events/{eventId}/checkpoints/{checkpointId}`
+- **Método**: Obtener documento por ID
+- **Retorno**: El documento del checkpoint, o `404` si no existe
+
+#### Comandos cURL
+
+**Obtener checkpoint (con token Bearer y parámetros en query):**
+
+```bash
+curl -X GET \
+  'https://get-checkpoint-xa26lpxdea-uc.a.run.app?checkpointId=TU_CHECKPOINT_ID&eventId=TU_EVENT_ID' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Ejemplo con IDs específicos:**
+
+```bash
+curl -X GET \
+  'https://get-checkpoint-xa26lpxdea-uc.a.run.app?checkpointId=7110Mif2Xx3AnmiN73HZ&eventId=abc123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Usando el endpoint con Hosting (parámetros en path):**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/checkpoint/7110Mif2Xx3AnmiN73HZ/event/abc123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Con verbose (para ver headers y respuesta completa):**
+
+```bash
+curl -v -X GET \
+  'https://get-checkpoint-xa26lpxdea-uc.a.run.app?checkpointId=7110Mif2Xx3AnmiN73HZ&eventId=abc123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Probar error 400 (sin parámetros):**
+
+```bash
+curl -X GET \
+  'https://get-checkpoint-xa26lpxdea-uc.a.run.app' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+**Probar error 401 (sin token):**
+
+```bash
+curl -X GET \
+  'https://get-checkpoint-xa26lpxdea-uc.a.run.app?checkpointId=7110Mif2Xx3AnmiN73HZ&eventId=abc123' \
+  -H 'Content-Type: application/json' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+**Probar error 404 (checkpoint no encontrado):**
+
+```bash
+curl -X GET \
+  'https://get-checkpoint-xa26lpxdea-uc.a.run.app?checkpointId=checkpoint-inexistente&eventId=abc123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+#### Respuestas
+
+**200 OK - Checkpoint encontrado:**
+
+```json
+{
+  "id": "7110Mif2Xx3AnmiN73HZ",
+  "name": "CP 10 GASOLINA ENTRADA A PEÑON",
+  "order": 10,
+  "type": "pass",
+  "status": "active",
+  "assignedStaffIds": ["85WfvOCFRVIusHHAFLYY"],
+  "coordinates": "19.0423226,-100.0936652",
+  "logoUrl": null,
+  "createdAt": "2025-11-13T19:48:01.459Z",
+  "updatedAt": "2025-11-13T19:48:01.459Z",
+  "eventRouteId": [],
+  "dayOfRaceId": []
+}
+```
+
+**400 Bad Request** - Sin cuerpo (solo código HTTP) - cuando falta alguno de los parámetros (`checkpointId` o `eventId`) o están vacíos
+
+**401 Unauthorized** - Sin cuerpo (solo código HTTP) - cuando el token Bearer es inválido, expirado o falta el header `Authorization`
+
+**404 Not Found** - Sin cuerpo (solo código HTTP) - cuando no se encuentra el checkpoint con el ID proporcionado en el evento especificado
+
+**500 Internal Server Error** - Sin cuerpo (solo código HTTP) - errores del servidor al consultar Firestore o procesar datos
+
+### Notas Importantes
+
+- **Autenticación**: El token Bearer solo se usa para validar que el usuario esté autenticado. No se extrae información del token.
+- **Consulta**: La función consulta directamente el documento `events/{eventId}/checkpoints/{checkpointId}` en Firestore.
+- **Retorno**: Si el checkpoint no existe, la función retorna `404 Not Found`.
+- **Timestamps**: Los campos `createdAt` y `updatedAt` se convierten automáticamente de Timestamps de Firestore a formato ISO 8601.
+- **Compatibilidad**: La respuesta JSON es compatible con modelos Flutter que esperen estos campos.
+- **Parámetros flexibles**: Los parámetros pueden venir en el path de la URL o como query parameters, facilitando su uso desde diferentes clientes.
+
+---
+
 ## 📦 Package: Tracking
 
 Funciones relacionadas con el tracking y seguimiento de competidores durante eventos deportivos.
 
-### 5. `track_event_checkpoint`
+### 6. `track_event_checkpoint`
 
 Crea la colección `tracking_checkpoint` para un evento cuando el status es `inProgress`. Inicializa la estructura de tracking de checkpoints.
 
@@ -601,7 +756,7 @@ curl -X POST \
 
 ---
 
-### 6. `track_competitors`
+### 7. `track_competitors`
 
 Crea la estructura de tracking de competidores para un evento y día específico. Inicializa el sistema de seguimiento de competidores.
 
@@ -654,7 +809,7 @@ curl -X POST \
 
 ---
 
-### 7. `track_competitors_off`
+### 8. `track_competitors_off`
 
 Desactiva el tracking de competidores para un evento y día específico. Detiene el seguimiento activo.
 
@@ -714,6 +869,7 @@ Las siguientes funciones requieren autenticación Bearer token:
 
 - `user_profile` - Obtiene perfil de usuario (requiere token para identificar usuario)
 - `day_of_race_active` - Obtiene día de carrera activo (requiere token para autenticación)
+- `get_checkpoint` - Obtiene checkpoint específico (requiere token para autenticación)
 - `track_event_checkpoint` - Modifica datos de tracking
 - `track_competitors` - Modifica datos de tracking
 - `track_competitors_off` - Modifica datos de tracking
@@ -800,6 +956,9 @@ firebase deploy --only functions:user_profile
 # Desplegar solo day_of_race_active
 firebase deploy --only functions:day_of_race_active
 
+# Desplegar solo get_checkpoint
+firebase deploy --only functions:get_checkpoint
+
 # Desplegar funciones de tracking
 firebase deploy --only functions:track_event_checkpoint,functions:track_competitors,functions:track_competitors_off
 ```
@@ -822,11 +981,11 @@ firebase emulators:start
 
 1. **Paginación**: Para `events`, se recomienda usar `lastDocId` en lugar de `page` para mejor rendimiento con grandes volúmenes de datos.
 
-2. **Códigos HTTP**: Las funciones de eventos (`events`, `event_detail`), usuarios (`user_profile`) y checkpoints (`day_of_race_active`) retornan códigos HTTP estándar. Las funciones de tracking retornan objetos JSON con `success` y `message`.
+2. **Códigos HTTP**: Las funciones de eventos (`events`, `event_detail`), usuarios (`user_profile`) y checkpoints (`day_of_race_active`, `get_checkpoint`) retornan códigos HTTP estándar. Las funciones de tracking retornan objetos JSON con `success` y `message`.
 
 3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, mientras que las funciones de tracking retornan objetos JSON con información del error.
 
-4. **Autenticación**: Las funciones `user_profile` y `day_of_race_active` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros (`userId` y `eventId` respectivamente) se reciben como parámetros query o path, no se extraen del token. El token solo valida que el usuario esté autenticado.
+4. **Autenticación**: Las funciones `user_profile`, `day_of_race_active` y `get_checkpoint` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query o path, no se extraen del token. El token solo valida que el usuario esté autenticado.
 
 5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
 

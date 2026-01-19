@@ -27,6 +27,11 @@
         "region": "us-central1"
       },
       {
+        "source": "/api/checkpoint/**/event/**",
+        "function": "get_checkpoint",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/events",
         "function": "events",
         "region": "us-central1"
