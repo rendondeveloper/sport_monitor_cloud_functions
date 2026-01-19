@@ -28,12 +28,17 @@
       },
       {
         "source": "/api/checkpoint/**/event/**",
-        "function": "get_checkpoint",
+        "function": "checkpoint",
         "region": "us-central1"
       },
       {
-        "source": "/api/competitor-tracking/**",
+        "source": "/api/checkpoint/competitor-tracking/**",
         "function": "competitor_tracking",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/checkpoint/days-of-race/**",
+        "function": "days_of_race",
         "region": "us-central1"
       },
       {
@@ -49,11 +54,6 @@
       {
         "source": "/api/users/profile",
         "function": "user_profile",
-        "region": "us-central1"
-      },
-      {
-        "source": "/api/**",
-        "function": "events",
         "region": "us-central1"
       }
     ],

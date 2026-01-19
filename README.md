@@ -25,7 +25,8 @@ functions/
 ├── checkpoints/         # Package: Gestión de Checkpoints
 │   ├── day_of_race_active.py       # day_of_race_active
 │   ├── checkpoint.py               # checkpoint
-│   └── competitor_tracking.py      # competitor_tracking
+│   ├── competitor_tracking.py      # competitor_tracking
+│   └── days_of_race.py         # days_of_race
 ├── tracking/           # Package: Tracking de Competidores
 │   ├── tracking_checkpoint.py     # track_event_checkpoint
 │   └── tracking_competitors.py     # track_competitors, track_competitors_off
@@ -909,11 +910,157 @@ curl -X GET \
 
 ---
 
+### 7. `days_of_race`
+
+Obtiene todos los días de carrera de un evento específico desde Firestore. Retorna un array directo de días de carrera mapeable a `List<DayOfRaces>`, sin aplicar filtros.
+
+**Tipo**: HTTP Request (GET)  
+**Endpoint**: `https://get-days-of-race-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/days-of-race/{eventId}`
+
+**Nota**: Esta función requiere autenticación Bearer token para validar que el usuario esté autenticado.
+
+#### Headers Requeridos
+
+| Header          | Tipo   | Requerido | Descripción                                             |
+| --------------- | ------ | --------- | ------------------------------------------------------- |
+| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth (solo para autenticación) |
+
+#### Parámetros (Path o Query Parameters)
+
+| Parámetro | Tipo   | Requerido | Descripción                                    |
+| --------- | ------ | --------- | ---------------------------------------------- |
+| `eventId` | string | **Sí**    | ID del evento (puede venir en path o query)   |
+
+**Nota**: El parámetro puede venir en el path de la URL (`/api/days-of-race/{eventId}`) o como query parameter (`?eventId=xxx`).
+
+#### Campos Retornados (Array de DayOfRace)
+
+Cada elemento del array contiene:
+
+- `id`: ID del documento del día de carrera
+- `day`: Fecha del día de carrera (formato: "YYYY-MM-DD")
+- `isActivate`: Estado activo del día (boolean)
+- `createdAt`: Fecha de creación en formato ISO 8601
+- `updatedAt`: Fecha de actualización en formato ISO 8601
+- Cualquier otro campo presente en el documento
+
+#### Consulta Firestore
+
+- **Ruta de colección**: `events/{eventId}/dayOfRaces`
+- **Método**: Obtener todos los documentos sin filtros
+- **Retorno**: Array de todos los días de carrera del evento (activos e inactivos)
+
+#### Comandos cURL
+
+**Obtener días de carrera (con token Bearer y eventId en query):**
+
+```bash
+curl -X GET \
+  'https://get-days-of-race-xa26lpxdea-uc.a.run.app?eventId=TU_EVENT_ID' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Ejemplo con eventId específico:**
+
+```bash
+curl -X GET \
+  'https://get-days-of-race-xa26lpxdea-uc.a.run.app?eventId=abc123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Usando el endpoint con Hosting (eventId en path):**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/days-of-race/abc123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Con verbose (para ver headers y respuesta completa):**
+
+```bash
+curl -v -X GET \
+  'https://get-days-of-race-xa26lpxdea-uc.a.run.app?eventId=abc123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Probar error 400 (sin eventId):**
+
+```bash
+curl -X GET \
+  'https://get-days-of-race-xa26lpxdea-uc.a.run.app' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+**Probar error 401 (sin token):**
+
+```bash
+curl -X GET \
+  'https://get-days-of-race-xa26lpxdea-uc.a.run.app?eventId=abc123' \
+  -H 'Content-Type: application/json' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+#### Respuestas
+
+**200 OK - Días de carrera encontrados (array directo):**
+
+```json
+[
+  {
+    "id": "day_of_race_id_1",
+    "day": "2025-11-13",
+    "isActivate": true,
+    "createdAt": "2025-11-13T19:48:01.459Z",
+    "updatedAt": "2025-11-13T19:48:01.459Z"
+  },
+  {
+    "id": "day_of_race_id_2",
+    "day": "2025-11-14",
+    "isActivate": false,
+    "createdAt": "2025-11-13T19:48:01.459Z",
+    "updatedAt": "2025-11-13T19:48:01.459Z"
+  }
+]
+```
+
+**200 OK - Sin días de carrera (array vacío):**
+
+```json
+[]
+```
+
+**400 Bad Request** - Sin cuerpo (solo código HTTP) - cuando falta el parámetro `eventId` o está vacío
+
+**401 Unauthorized** - Sin cuerpo (solo código HTTP) - cuando el token Bearer es inválido, expirado o falta el header `Authorization`
+
+**500 Internal Server Error** - Sin cuerpo (solo código HTTP) - errores del servidor al consultar Firestore o procesar datos
+
+### Notas Importantes
+
+- **Autenticación**: El token Bearer solo se usa para validar que el usuario esté autenticado. No se extrae información del token.
+- **Consulta**: La función consulta la subcolección `events/{eventId}/dayOfRaces` sin aplicar filtros. Retorna todos los días de carrera, activos e inactivos.
+- **Formato de respuesta**: Retorna un array directo (sin wrapper) para facilitar el mapeo a `List<DayOfRaces>` en Flutter.
+- **Array vacío**: Si no hay días de carrera, retorna `[]` (array vacío) con código 200 OK.
+- **Timestamps**: Los campos `createdAt` y `updatedAt` se convierten automáticamente de Timestamps de Firestore a formato ISO 8601.
+- **Compatibilidad**: La respuesta JSON es compatible con modelos Flutter que esperen la estructura `DayOfRaces`.
+- **Parámetros flexibles**: El parámetro puede venir en el path de la URL o como query parameter, facilitando su uso desde diferentes clientes.
+- **Sin filtros**: Esta API no aplica filtros (por ejemplo, por `isActivate`). Si se necesita filtrar, debe hacerse en el cliente.
+
+---
+
 ## 📦 Package: Tracking
 
 Funciones relacionadas con el tracking y seguimiento de competidores durante eventos deportivos.
 
-### 7. `track_event_checkpoint`
+### 8. `track_event_checkpoint`
 
 Crea la colección `tracking_checkpoint` para un evento cuando el status es `inProgress`. Inicializa la estructura de tracking de checkpoints.
 
@@ -964,7 +1111,7 @@ curl -X POST \
 
 ---
 
-### 8. `track_competitors`
+### 9. `track_competitors`
 
 Crea la estructura de tracking de competidores para un evento y día específico. Inicializa el sistema de seguimiento de competidores.
 
@@ -1017,7 +1164,7 @@ curl -X POST \
 
 ---
 
-### 9. `track_competitors_off`
+### 10. `track_competitors_off`
 
 Desactiva el tracking de competidores para un evento y día específico. Detiene el seguimiento activo.
 
@@ -1077,8 +1224,9 @@ Las siguientes funciones requieren autenticación Bearer token:
 
 - `user_profile` - Obtiene perfil de usuario (requiere token para identificar usuario)
 - `day_of_race_active` - Obtiene día de carrera activo (requiere token para autenticación)
-- `get_checkpoint` - Obtiene checkpoint específico (requiere token para autenticación)
+- `checkpoint` - Obtiene checkpoint específico (requiere token para autenticación)
 - `competitor_tracking` - Obtiene tracking de competidores (requiere token para autenticación)
+- `days_of_race` - Obtiene todos los días de carrera (requiere token para autenticación)
 - `track_event_checkpoint` - Modifica datos de tracking
 - `track_competitors` - Modifica datos de tracking
 - `track_competitors_off` - Modifica datos de tracking
@@ -1171,6 +1319,9 @@ firebase deploy --only functions:get_checkpoint
 # Desplegar solo competitor_tracking
 firebase deploy --only functions:competitor_tracking
 
+# Desplegar solo days_of_race
+firebase deploy --only functions:days_of_race
+
 # Desplegar funciones de tracking
 firebase deploy --only functions:track_event_checkpoint,functions:track_competitors,functions:track_competitors_off
 ```
@@ -1193,11 +1344,11 @@ firebase emulators:start
 
 1. **Paginación**: Para `events`, se recomienda usar `lastDocId` en lugar de `page` para mejor rendimiento con grandes volúmenes de datos.
 
-2. **Códigos HTTP**: Las funciones de eventos (`events`, `event_detail`), usuarios (`user_profile`) y checkpoints (`day_of_race_active`, `get_checkpoint`, `competitor_tracking`) retornan códigos HTTP estándar. Las funciones de tracking retornan objetos JSON con `success` y `message`.
+2. **Códigos HTTP**: Las funciones de eventos (`events`, `event_detail`), usuarios (`user_profile`) y checkpoints (`day_of_race_active`, `checkpoint`, `competitor_tracking`, `days_of_race`) retornan códigos HTTP estándar. Las funciones de tracking retornan objetos JSON con `success` y `message`.
 
 3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, excepto `competitor_tracking` que retorna JSON con `success: false` en caso de error. Las funciones de tracking retornan objetos JSON con información del error.
 
-4. **Autenticación**: Las funciones `user_profile`, `day_of_race_active`, `get_checkpoint` y `competitor_tracking` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query o path, no se extraen del token. El token solo valida que el usuario esté autenticado.
+4. **Autenticación**: Las funciones `user_profile`, `day_of_race_active`, `checkpoint`, `competitor_tracking` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query o path, no se extraen del token. El token solo valida que el usuario esté autenticado.
 
 5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
 
