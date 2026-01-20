@@ -16,7 +16,6 @@ def all_competitor_tracking(req: https_fn.Request) -> https_fn.Response:
     """
     Obtiene todos los competidores de un evento y día de carrera específico,
     incluyendo TODOS los checkpoints de cada competidor (sin filtrar por checkpoint específico).
-    Retorna una lista de CompetitorTracking con todos sus checkpoints.
 
     Headers:
     - Authorization: Bearer {Firebase Auth Token} (requerido)
@@ -30,10 +29,10 @@ def all_competitor_tracking(req: https_fn.Request) -> https_fn.Response:
     - dayOfRaceId: ID del día de carrera (si no viene en path)
 
     Returns:
-    - 200: Array de objetos CompetitorTracking en formato JSON (array directo)
-    - 400: Bad Request (sin respuesta JSON, solo código HTTP) - parámetros faltantes
-    - 401: Unauthorized (sin respuesta JSON, solo código HTTP) - token inválido o faltante
-    - 500: Internal Server Error (sin respuesta JSON, solo código HTTP)
+    - 200: {"success": True} - Operación exitosa
+    - 400: Bad Request - parámetros faltantes o inválidos
+    - 401: Unauthorized - token inválido o faltante
+    - 500: Internal Server Error
 
     Nota: Consulta events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors
           y para cada competidor obtiene TODOS sus checkpoints desde
@@ -52,9 +51,19 @@ def all_competitor_tracking(req: https_fn.Request) -> https_fn.Response:
         if not verify_bearer_token(req, "all_competitor_tracking"):
             logging.warning("all_competitor_tracking: Token inválido o faltante")
             return https_fn.Response(
-                "",
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": "Unauthorized",
+                        "error": "Token inválido o faltante",
+                    },
+                    ensure_ascii=False,
+                ),
                 status=401,
-                headers={"Access-Control-Allow-Origin": "*"},
+                headers={
+                    "Content-Type": "application/json; charset=utf-8",
+                    "Access-Control-Allow-Origin": "*",
+                },
             )
 
         # Obtener parámetros de query parameters primero
@@ -104,16 +113,36 @@ def all_competitor_tracking(req: https_fn.Request) -> https_fn.Response:
         if not event_id or event_id.strip() == "":
             logging.warning("all_competitor_tracking: eventId faltante o vacío")
             return https_fn.Response(
-                "",
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": "Bad Request",
+                        "error": "eventId es requerido",
+                    },
+                    ensure_ascii=False,
+                ),
                 status=400,
-                headers={"Access-Control-Allow-Origin": "*"},
+                headers={
+                    "Content-Type": "application/json; charset=utf-8",
+                    "Access-Control-Allow-Origin": "*",
+                },
             )
         if not day_of_race_id or day_of_race_id.strip() == "":
             logging.warning("all_competitor_tracking: dayOfRaceId faltante o vacío")
             return https_fn.Response(
-                "",
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": "Bad Request",
+                        "error": "dayOfRaceId es requerido",
+                    },
+                    ensure_ascii=False,
+                ),
                 status=400,
-                headers={"Access-Control-Allow-Origin": "*"},
+                headers={
+                    "Content-Type": "application/json; charset=utf-8",
+                    "Access-Control-Allow-Origin": "*",
+                },
             )
 
         # Inicializar Firestore
@@ -140,9 +169,12 @@ def all_competitor_tracking(req: https_fn.Request) -> https_fn.Response:
         competitors_snapshot = competitors_ref.get()
 
         if not competitors_snapshot:
-            # Si no hay competidores, retornar lista vacía
+            # Si no hay competidores, retornar éxito
             return https_fn.Response(
-                json.dumps([], ensure_ascii=False),
+                json.dumps(
+                    {"success": True},
+                    ensure_ascii=False,
+                ),
                 status=200,
                 headers={
                     "Content-Type": "application/json; charset=utf-8",
@@ -251,9 +283,12 @@ def all_competitor_tracking(req: https_fn.Request) -> https_fn.Response:
                 )
                 continue
 
-        # Retornar respuesta HTTP 200 con array directo de CompetitorTracking
+        # Retornar respuesta exitosa
         return https_fn.Response(
-            json.dumps(competitor_tracking_list, ensure_ascii=False),
+            json.dumps(
+                {"success": True},
+                ensure_ascii=False,
+            ),
             status=200,
             headers={
                 "Content-Type": "application/json; charset=utf-8",
@@ -266,14 +301,34 @@ def all_competitor_tracking(req: https_fn.Request) -> https_fn.Response:
     except ValueError as e:
         logging.error("all_competitor_tracking: Error de validación: %s", e)
         return https_fn.Response(
-            "",
+            json.dumps(
+                {
+                    "success": False,
+                    "message": "Bad Request",
+                    "error": str(e),
+                },
+                ensure_ascii=False,
+            ),
             status=400,
-            headers={"Access-Control-Allow-Origin": "*"},
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",
+            },
         )
     except (AttributeError, KeyError, RuntimeError, TypeError) as e:
         logging.error("all_competitor_tracking: Error interno: %s", e, exc_info=True)
         return https_fn.Response(
-            "",
+            json.dumps(
+                {
+                    "success": False,
+                    "message": "Internal Server Error",
+                    "error": "Error procesando la solicitud",
+                },
+                ensure_ascii=False,
+            ),
             status=500,
-            headers={"Access-Control-Allow-Origin": "*"},
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",
+            },
         )
