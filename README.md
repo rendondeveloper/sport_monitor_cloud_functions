@@ -28,6 +28,8 @@ functions/
 │   ├── checkpoint.py               # checkpoint
 │   ├── competitor_tracking.py      # competitor_tracking
 │   ├── all_competitor_tracking.py  # all_competitor_tracking
+│   ├── update_competitor_status.py # update_competitor_status
+│   ├── change_competitor_status.py # change_competitor_status
 │   └── days_of_race.py             # days_of_race
 ├── tracking/           # Package: Tracking de Competidores
 │   ├── tracking_checkpoint.py     # track_event_checkpoint
@@ -1307,7 +1309,206 @@ curl -X GET \
 
 ---
 
-### 8. `days_of_race`
+### 8. `update_competitor_status`
+
+Actualiza el estado de un competidor en un checkpoint específico. Incluye lógica condicional para manejar diferentes estados y actualiza campos relacionados como `checkpointDisable` y `checkpointDisableName`.
+
+**Tipo**: HTTP Request (PUT)  
+**Endpoint**: `https://update-competitor-status-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/checkpoint/update-competitor-status/{eventId}/{dayOfRaceId}/{competitorId}/{checkpointId}`
+
+**Nota**: Esta función requiere autenticación Bearer token para validar que el usuario esté autenticado.
+
+#### Headers Requeridos
+
+| Header          | Tipo   | Requerido | Descripción                                             |
+| --------------- | ------ | --------- | ------------------------------------------------------- |
+| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth (solo para autenticación) |
+| `Content-Type`  | string | **Sí**    | `application/json`                                      |
+
+#### Parámetros (Path)
+
+| Parámetro     | Tipo   | Requerido | Descripción                                    |
+| ------------- | ------ | --------- | ---------------------------------------------- |
+| `eventId`     | string | **Sí**    | ID del evento (viene en el path)              |
+| `dayOfRaceId` | string | **Sí**    | ID del día de carrera (viene en el path)      |
+| `competitorId` | string | **Sí**    | ID del competidor (viene en el path)           |
+| `checkpointId` | string | **Sí**    | ID del checkpoint (viene en el path)          |
+
+#### Request Body
+
+```json
+{
+  "status": "check",
+  "checkpointDisableName": "Nombre del Checkpoint",
+  "note": "Nota opcional"
+}
+```
+
+**Campos del Request:**
+
+- `status` (string, requerido): Nuevo estado del competidor. Valores válidos: `none`, `check`, `out`, `outStart`, `outLast`, `disqualified`
+- `checkpointDisableName` (string, condicional): Nombre del checkpoint. **Requerido** cuando `status` es `out`, `outStart` o `outLast`
+- `note` (string, opcional): Nota opcional sobre la actualización
+
+#### Lógica Condicional de Actualización
+
+**Cuando `status` NO es `out`, `outStart` o `outLast`:**
+- `checkpointDisable`: `null`
+- `checkpointDisableName`: `null`
+
+**Cuando `status` ES `out`, `outStart` o `outLast`:**
+- `checkpointDisable`: `checkpointId` (del path)
+- `checkpointDisableName`: Valor del request (o nombre del checkpoint si no se proporciona)
+
+**Campos siempre actualizados:**
+- `statusCompetitor`: Valor del campo `status` del request
+- `passTime`: Fecha/hora actual (generada automáticamente)
+- `updatedAt`: Fecha/hora actual (generada automáticamente)
+- `note`: Nota opcional (si se proporciona)
+
+#### Consulta Firestore
+
+- **Ruta**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors/{competitorId}/checkpoints/{checkpointId}`
+- **Método**: `update()` - Actualiza el documento del checkpoint específico
+
+#### Comandos cURL
+
+**Actualizar estado del competidor (con token Bearer):**
+
+```bash
+curl -X PUT \
+  'https://system-track-monitor.web.app/api/checkpoint/update-competitor-status/{eventId}/{dayOfRaceId}/{competitorId}/{checkpointId}' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "status": "check",
+    "checkpointDisableName": "Checkpoint Intermedio",
+    "note": "Competidor registrado correctamente"
+  }'
+```
+
+**Ejemplo con valores reales:**
+
+```bash
+curl -X PUT \
+  'https://system-track-monitor.web.app/api/checkpoint/update-competitor-status/cN6ykYvP5WortNOxr3j6/MelNPSXdEOgyA5ALu0QT/competitor123/1AkqicDD0nJBgQSOwIKz' \
+  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Ij...' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "status": "check",
+    "checkpointDisableName": "Checkpoint Intermedio",
+    "note": "Competidor registrado correctamente"
+  }'
+```
+
+**Actualizar con status 'out' (requiere checkpointDisableName):**
+
+```bash
+curl -X PUT \
+  'https://system-track-monitor.web.app/api/checkpoint/update-competitor-status/cN6ykYvP5WortNOxr3j6/MelNPSXdEOgyA5ALu0QT/competitor123/1AkqicDD0nJBgQSOwIKz' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "status": "out",
+    "checkpointDisableName": "Checkpoint Inicio",
+    "note": "Competidor fuera de carrera"
+  }'
+```
+
+**Con verbose (para ver headers y respuesta completa):**
+
+```bash
+curl -v -X PUT \
+  'https://system-track-monitor.web.app/api/checkpoint/update-competitor-status/cN6ykYvP5WortNOxr3j6/MelNPSXdEOgyA5ALu0QT/competitor123/1AkqicDD0nJBgQSOwIKz' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "status": "check",
+    "note": "Actualización de estado"
+  }'
+```
+
+#### Respuestas
+
+**200 OK - Estado actualizado exitosamente:**
+
+```json
+{
+  "success": true,
+  "message": "Estado del competidor actualizado exitosamente",
+  "data": {
+    "competitorId": "competitor123",
+    "checkpointId": "checkpoint456",
+    "status": "check",
+    "updatedAt": "2024-01-15T10:00:00Z"
+  }
+}
+```
+
+**400 Bad Request** - Cuando faltan parámetros, el request body es inválido, o `checkpointDisableName` es requerido pero no se proporciona:
+
+```json
+{
+  "success": false,
+  "message": "Bad Request",
+  "error": "status es requerido"
+}
+```
+
+**401 Unauthorized** - Cuando el token Bearer es inválido, expirado o falta el header `Authorization`:
+
+```json
+{
+  "success": false,
+  "message": "Unauthorized",
+  "error": "Token inválido o faltante"
+}
+```
+
+**404 Not Found** - Cuando el checkpoint no existe:
+
+```json
+{
+  "success": false,
+  "message": "Not Found",
+  "error": "Checkpoint no encontrado"
+}
+```
+
+**500 Internal Server Error** - Errores del servidor al actualizar Firestore:
+
+```json
+{
+  "success": false,
+  "message": "Internal Server Error",
+  "error": "Error procesando la solicitud"
+}
+```
+
+### Algoritmo de Procesamiento
+
+1. **Validar token**: Verificar que el token Bearer sea válido
+2. **Validar parámetros**: Verificar que `eventId`, `dayOfRaceId`, `competitorId`, `checkpointId` existan
+3. **Validar request body**: Verificar que `status` sea válido y que `checkpointDisableName` esté presente si `status` es `out`, `outStart` o `outLast`
+4. **Verificar checkpoint**: Verificar que el checkpoint exista en Firestore
+5. **Construir datos de actualización**: Aplicar lógica condicional según el `status`
+6. **Actualizar Firestore**: Actualizar el documento del checkpoint
+7. **Retornar respuesta**: Retornar respuesta JSON con el resultado
+
+### Notas Importantes
+
+- **Autenticación**: El token Bearer solo se usa para validar que el usuario esté autenticado. No se extrae información del token.
+- **Lógica condicional**: El endpoint implementa lógica condicional para establecer `checkpointDisable` y `checkpointDisableName` según el `status`.
+- **Timestamps automáticos**: `passTime` y `updatedAt` se generan automáticamente en el servidor (no se envían en el request).
+- **Validación de status**: El `status` debe ser uno de los valores válidos del enum `CompetitorsTrackingStatus`.
+- **checkpointDisableName requerido**: Cuando el `status` es `out`, `outStart` o `outLast`, el campo `checkpointDisableName` es requerido en el request.
+- **Actualización atómica**: La actualización se realiza en una sola operación de Firestore usando `update()`.
+- **Compatibilidad**: La respuesta JSON es compatible con modelos Flutter que esperen la estructura de respuesta con `success`, `message` y `data`.
+
+---
+
+### 9. `days_of_race`
 
 Obtiene todos los días de carrera de un evento específico desde Firestore. Retorna un array directo de días de carrera mapeable a `List<DayOfRaces>`, sin aplicar filtros.
 
@@ -1450,6 +1651,251 @@ curl -X GET \
 - **Compatibilidad**: La respuesta JSON es compatible con modelos Flutter que esperen la estructura `DayOfRaces`.
 - **Parámetros flexibles**: El parámetro puede venir en el path de la URL o como query parameter, facilitando su uso desde diferentes clientes.
 - **Sin filtros**: Esta API no aplica filtros (por ejemplo, por `isActivate`). Si se necesita filtrar, debe hacerse en el cliente.
+
+---
+
+### 10. `change_competitor_status`
+
+Cambia el estado de un competidor y actualiza todos sus checkpoints relacionados. Esta función consolida tres operaciones:
+1. Actualiza el checkpoint específico con el nuevo estado
+2. Limpia checkpoints superiores si el status anterior era 'out'
+3. Actualiza checkpoints superiores si el nuevo status es 'out'
+
+**Tipo**: HTTP Request (PUT)  
+**Endpoint**: `https://change-competitor-status-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/checkpoint/change-competitor-status`
+
+**Nota**: Esta función requiere autenticación Bearer token para validar que el usuario esté autenticado.
+
+#### Headers Requeridos
+
+| Header          | Tipo   | Requerido | Descripción                                             |
+| --------------- | ------ | --------- | ------------------------------------------------------- |
+| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth (solo para autenticación) |
+| `Content-Type`  | string | **Sí**    | `application/json`                                      |
+
+#### Request Body
+
+```json
+{
+  "eventId": "string (requerido)",
+  "dayOfRaceId": "string (requerido)",
+  "checkpointId": "string (requerido)",
+  "orderCheckpoint": "integer (requerido)",
+  "competitorId": "string (requerido)",
+  "status": "string (requerido)",
+  "lastStatusCompetitor": "string (requerido)",
+  "checkpointName": "string (requerido)",
+  "note": "string (opcional)"
+}
+```
+
+**Campos del Request:**
+
+| Parámetro             | Tipo    | Requerido | Descripción                                                                 |
+| --------------------- | ------- | --------- | --------------------------------------------------------------------------- |
+| `eventId`             | string  | **Sí**    | ID del evento al que pertenece el competidor                                |
+| `dayOfRaceId`         | string  | **Sí**    | ID del día de carrera activo                                                |
+| `checkpointId`         | string  | **Sí**    | ID del checkpoint donde se actualiza el estado                              |
+| `orderCheckpoint`      | integer | **Sí**    | Orden numérico del checkpoint (usado para determinar checkpoints superiores) |
+| `competitorId`         | string  | **Sí**    | ID del competidor cuyo estado se actualiza                                  |
+| `status`               | string  | **Sí**    | Nuevo estado del competidor. Valores válidos: `none`, `noneStart`, `noneLast`, `check`, `checkStart`, `checkLast`, `out`, `outStart`, `outLast` |
+| `lastStatusCompetitor` | string  | **Sí**    | Estado anterior del competidor. Mismos valores válidos que `status`          |
+| `checkpointName`       | string  | **Sí**    | Nombre del checkpoint (usado para `checkpointDisableName`)                  |
+| `note`                 | string  | No        | Nota opcional asociada al cambio de estado                                 |
+
+**Valores Válidos para `status` y `lastStatusCompetitor`:**
+
+- `none`, `noneStart`, `noneLast`
+- `check`, `checkStart`, `checkLast`
+- `out`, `outStart`, `outLast`
+
+**Estados que se consideran "out" (descalificado):** `out`, `outStart`, `outLast`
+
+#### Lógica de Implementación
+
+**Paso 1: Actualizar Checkpoint Específico**
+- Actualiza el checkpoint indicado con el nuevo `status`
+- Si el nuevo status NO es 'out', limpia `checkpointDisable` y `checkpointDisableName`
+- Si el nuevo status ES 'out', establece `checkpointDisable = checkpointId` y `checkpointDisableName = checkpointName`
+- Actualiza `passTime` y `updatedAt` con la fecha/hora actual
+
+**Paso 2: Limpiar Checkpoints Superiores** (solo si `lastStatusCompetitor` era 'out')
+- Obtiene todos los checkpoints del competidor
+- Filtra checkpoints con `order > orderCheckpoint`
+- Para cada checkpoint superior:
+  - Establece `statusCompetitor = "none"`
+  - Limpia `checkpointDisable` y `checkpointDisableName` (establece `null`)
+  - Actualiza `updatedAt`
+
+**Paso 3: Actualizar Checkpoints Superiores** (solo si el nuevo `status` es 'out')
+- Obtiene todos los checkpoints del competidor
+- Filtra checkpoints con `order > orderCheckpoint`
+- Para cada checkpoint superior:
+  - Establece `statusCompetitor = status` (nuevo status 'out')
+  - Establece `checkpointDisable = checkpointId` y `checkpointDisableName = checkpointName`
+  - Actualiza `updatedAt`
+  - Si se proporciona `note`, la agrega
+
+#### Consulta Firestore
+
+- **Ruta base**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors/{competitorId}/checkpoints`
+- **Checkpoint específico**: `checkpoints/{checkpointId}`
+- **Método**: `update()` - Actualiza documentos de checkpoints
+
+#### Comandos cURL
+
+**Cambiar estado del competidor (con token Bearer):**
+
+```bash
+curl -X PUT \
+  'https://change-competitor-status-xa26lpxdea-uc.a.run.app' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "eventId": "event123",
+    "dayOfRaceId": "day456",
+    "checkpointId": "checkpoint789",
+    "orderCheckpoint": 5,
+    "competitorId": "competitor101",
+    "status": "check",
+    "lastStatusCompetitor": "none",
+    "checkpointName": "Checkpoint 5",
+    "note": "Competidor pasó correctamente"
+  }'
+```
+
+**Ejemplo con valores reales:**
+
+```bash
+curl -X PUT \
+  'https://change-competitor-status-xa26lpxdea-uc.a.run.app' \
+  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Ij...' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "eventId": "cN6ykYvP5WortNOxr3j6",
+    "dayOfRaceId": "MelNPSXdEOgyA5ALu0QT",
+    "checkpointId": "1AkqicDD0nJBgQSOwIKz",
+    "orderCheckpoint": 10,
+    "competitorId": "competitor123",
+    "status": "out",
+    "lastStatusCompetitor": "check",
+    "checkpointName": "CP 10 GASOLINA ENTRADA A PEÑON",
+    "note": "Competidor descalificado"
+  }'
+```
+
+**Cambiar de 'out' a 'check' (recuperación - limpia checkpoints superiores):**
+
+```bash
+curl -X PUT \
+  'https://change-competitor-status-xa26lpxdea-uc.a.run.app' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "eventId": "event123",
+    "dayOfRaceId": "day456",
+    "checkpointId": "checkpoint789",
+    "orderCheckpoint": 5,
+    "competitorId": "competitor101",
+    "status": "check",
+    "lastStatusCompetitor": "out",
+    "checkpointName": "Checkpoint 5",
+    "note": "Competidor recuperado"
+  }'
+```
+
+**Con verbose (para ver headers y respuesta completa):**
+
+```bash
+curl -v -X PUT \
+  'https://change-competitor-status-xa26lpxdea-uc.a.run.app' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "eventId": "event123",
+    "dayOfRaceId": "day456",
+    "checkpointId": "checkpoint789",
+    "orderCheckpoint": 5,
+    "competitorId": "competitor101",
+    "status": "check",
+    "lastStatusCompetitor": "none",
+    "checkpointName": "Checkpoint 5"
+  }'
+```
+
+#### Respuestas
+
+**200 OK - Estado actualizado exitosamente:**
+
+```json
+{
+  "success": true
+}
+```
+
+**400 Bad Request** - Cuando faltan parámetros, el request body es inválido, o los valores de status son inválidos:
+
+```json
+{
+  "success": false,
+  "message": "Bad Request",
+  "error": "Faltan los siguientes parámetros: eventId, dayOfRaceId"
+}
+```
+
+**401 Unauthorized** - Cuando el token Bearer es inválido, expirado o falta el header `Authorization`:
+
+```json
+{
+  "success": false,
+  "message": "Unauthorized",
+  "error": "Token inválido o faltante"
+}
+```
+
+**404 Not Found** - Cuando el competidor o checkpoint no existe:
+
+```json
+{
+  "success": false,
+  "message": "Not Found",
+  "error": "Competidor con ID 'competitor123' no encontrado"
+}
+```
+
+**500 Internal Server Error** - Errores del servidor al actualizar Firestore:
+
+```json
+{
+  "success": false,
+  "message": "Internal Server Error",
+  "error": "Error procesando la solicitud"
+}
+```
+
+### Algoritmo de Procesamiento
+
+1. **Validar token**: Verificar que el token Bearer sea válido
+2. **Validar parámetros**: Verificar que todos los parámetros requeridos estén presentes y sean válidos
+3. **Validar tipos**: Verificar que `orderCheckpoint` sea un número entero positivo
+4. **Validar status**: Verificar que `status` y `lastStatusCompetitor` sean valores válidos
+5. **Verificar recursos**: Verificar que el competidor y checkpoint existan en Firestore
+6. **Verificar order**: Verificar que el `order` del checkpoint coincida con `orderCheckpoint`
+7. **Paso 1**: Actualizar checkpoint específico con el nuevo status
+8. **Paso 2**: Si `lastStatusCompetitor` era 'out', limpiar checkpoints superiores
+9. **Paso 3**: Si el nuevo `status` es 'out', actualizar checkpoints superiores
+10. **Retornar respuesta**: Retornar `{"success": true}` con código 200
+
+### Notas Importantes
+
+- **Autenticación**: El token Bearer solo se usa para validar que el usuario esté autenticado. No se extrae información del token.
+- **Lógica de 3 pasos**: La función implementa una lógica compleja que actualiza el checkpoint específico y maneja checkpoints superiores según el estado anterior y nuevo.
+- **Manejo de errores parciales**: Si los Pasos 2 o 3 fallan, se loguea el error pero se retorna éxito (el checkpoint específico ya se actualizó correctamente).
+- **Timestamps automáticos**: `passTime` y `updatedAt` se generan automáticamente en el servidor (no se envían en el request).
+- **Validación de order**: El `orderCheckpoint` debe coincidir con el `order` del checkpoint en Firestore.
+- **Actualización masiva**: Para competidores con muchos checkpoints, las operaciones de actualización masiva pueden tomar tiempo.
+- **Compatibilidad**: La respuesta JSON es compatible con modelos Flutter que esperen la estructura de respuesta con `success`.
 
 ---
 
@@ -1624,6 +2070,8 @@ Las siguientes funciones requieren autenticación Bearer token:
 - `checkpoint` - Obtiene checkpoint específico (requiere token para autenticación)
 - `competitor_tracking` - Obtiene tracking de competidores filtrado por checkpoint (requiere token para autenticación)
 - `all_competitor_tracking` - Obtiene todos los competidores con todos sus checkpoints (requiere token para autenticación)
+- `update_competitor_status` - Actualiza el estado de un competidor en un checkpoint (requiere token para autenticación)
+- `change_competitor_status` - Cambia el estado de un competidor y actualiza checkpoints relacionados (requiere token para autenticación)
 - `days_of_race` - Obtiene todos los días de carrera (requiere token para autenticación)
 - `track_event_checkpoint` - Modifica datos de tracking
 - `track_competitors` - Modifica datos de tracking
@@ -1723,6 +2171,12 @@ firebase deploy --only functions:competitor_tracking
 # Desplegar solo all_competitor_tracking
 firebase deploy --only functions:all_competitor_tracking
 
+# Desplegar solo update_competitor_status
+firebase deploy --only functions:update_competitor_status
+
+# Desplegar solo change_competitor_status
+firebase deploy --only functions:change_competitor_status
+
 # Desplegar solo days_of_race
 firebase deploy --only functions:days_of_race
 
@@ -1748,11 +2202,11 @@ firebase emulators:start
 
 1. **Paginación**: Para `events`, se recomienda usar `lastDocId` en lugar de `page` para mejor rendimiento con grandes volúmenes de datos.
 
-2. **Códigos HTTP**: Las funciones de eventos (`events`, `event_detail`, `event_categories`), usuarios (`user_profile`) y checkpoints (`day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `days_of_race`) retornan códigos HTTP estándar. Las funciones de tracking retornan objetos JSON con `success` y `message`.
+2. **Códigos HTTP**: Las funciones de eventos (`events`, `event_detail`, `event_categories`), usuarios (`user_profile`) y checkpoints (`day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `days_of_race`) retornan códigos HTTP estándar. Las funciones `update_competitor_status` y `change_competitor_status` retornan objetos JSON con `success`, `message` y `error`. Las funciones de tracking retornan objetos JSON con `success` y `message`.
 
-3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, excepto `competitor_tracking` que retorna JSON con `success: false` en caso de error. Las funciones de tracking retornan objetos JSON con información del error.
+3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, excepto `competitor_tracking`, `update_competitor_status` y `change_competitor_status` que retornan JSON con `success: false` en caso de error. Las funciones de tracking retornan objetos JSON con información del error.
 
-4. **Autenticación**: Las funciones `user_profile`, `event_categories`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query o path, no se extraen del token. El token solo valida que el usuario esté autenticado.
+4. **Autenticación**: Las funciones `user_profile`, `event_categories`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
 
 5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
 
