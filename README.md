@@ -19,7 +19,8 @@ Las funciones están desplegadas en **Firebase Cloud Functions** y proporcionan 
 functions/
 ├── events/              # Package: Gestión de Eventos
 │   ├── events_customer.py          # events
-│   └── events_detail_customer.py  # event_detail
+│   ├── events_detail_customer.py  # event_detail
+│   └── event_categories.py        # event_categories
 ├── users/               # Package: Gestión de Usuarios
 │   └── user_profile.py            # user_profile
 ├── checkpoints/         # Package: Gestión de Checkpoints
@@ -220,11 +221,169 @@ curl -v -X GET \
 
 ---
 
+### 3. `event_categories`
+
+Obtiene todas las categorías de un evento específico desde Firestore. Retorna un array directo de categorías mapeable a `List<EventCategory>`, sin aplicar filtros.
+
+**Tipo**: HTTP Request (GET)  
+**Endpoint**: `https://event-categories-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/event/event-categories/{eventId}`
+
+**Nota**: Esta función requiere autenticación Bearer token para validar que el usuario esté autenticado.
+
+#### Headers Requeridos
+
+| Header          | Tipo   | Requerido | Descripción                                             |
+| --------------- | ------ | --------- | ------------------------------------------------------- |
+| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth (solo para autenticación) |
+
+#### Parámetros (Path o Query Parameters)
+
+| Parámetro | Tipo   | Requerido | Descripción                                    |
+| --------- | ------ | --------- | ---------------------------------------------- |
+| `eventId` | string | **Sí**    | ID del evento (puede venir en path o query)   |
+
+**Nota**: El parámetro puede venir en el path de la URL (`/api/event/event-categories/{eventId}`) o como query parameter (`?eventId=xxx`).
+
+#### Campos Retornados (Array de EventCategory)
+
+Cada elemento del array contiene:
+
+- `id`: ID del documento de la categoría
+- `name`: Nombre de la categoría
+- `createdAt`: Fecha de creación en formato ISO 8601
+- `updatedAt`: Fecha de actualización en formato ISO 8601
+
+#### Consulta Firestore
+
+- **Ruta de colección**: `events/{eventId}/eventCategories`
+- **Método**: Obtener todos los documentos sin filtros, ordenados por `name` alfabéticamente
+- **Retorno**: Array de todas las categorías del evento
+
+#### Comandos cURL
+
+**Obtener categorías de evento (con token Bearer y eventId en query):**
+
+```bash
+curl -X GET \
+  'https://event-categories-xa26lpxdea-uc.a.run.app?eventId=TU_EVENT_ID' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Ejemplo con eventId específico:**
+
+```bash
+curl -X GET \
+  'https://event-categories-xa26lpxdea-uc.a.run.app?eventId=abc123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Usando el endpoint con Hosting (eventId en path):**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/event/event-categories/abc123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Ejemplo con valores reales:**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/event/event-categories/cN6ykYvP5WortNOxr3j6' \
+  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IjEyMzQ1Njc4OTAifQ...' \
+  -H 'Content-Type: application/json'
+```
+
+**Con verbose (para ver headers y respuesta completa):**
+
+```bash
+curl -v -X GET \
+  'https://event-categories-xa26lpxdea-uc.a.run.app?eventId=abc123' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Probar error 400 (sin eventId):**
+
+```bash
+curl -X GET \
+  'https://event-categories-xa26lpxdea-uc.a.run.app' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+**Probar error 401 (sin token):**
+
+```bash
+curl -X GET \
+  'https://event-categories-xa26lpxdea-uc.a.run.app?eventId=abc123' \
+  -H 'Content-Type: application/json' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+#### Respuestas
+
+**200 OK - Categorías encontradas (array directo):**
+
+```json
+[
+  {
+    "id": "category123",
+    "name": "Moto A",
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T12:00:00Z"
+  },
+  {
+    "id": "category456",
+    "name": "Moto B",
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T12:00:00Z"
+  },
+  {
+    "id": "category789",
+    "name": "Auto",
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T12:00:00Z"
+  }
+]
+```
+
+**200 OK - Sin categorías (array vacío):**
+
+```json
+[]
+```
+
+**400 Bad Request** - Sin cuerpo (solo código HTTP) - cuando falta el parámetro `eventId` o está vacío
+
+**401 Unauthorized** - Sin cuerpo (solo código HTTP) - cuando el token Bearer es inválido, expirado o falta el header `Authorization`
+
+**500 Internal Server Error** - Sin cuerpo (solo código HTTP) - errores del servidor al consultar Firestore o procesar datos
+
+### Notas Importantes
+
+- **Autenticación**: El token Bearer solo se usa para validar que el usuario esté autenticado. No se extrae información del token.
+- **Consulta**: La función consulta la subcolección `events/{eventId}/eventCategories` sin aplicar filtros.
+- **Ordenamiento**: Las categorías se ordenan alfabéticamente por `name` para facilitar su uso.
+- **Formato de respuesta**: Retorna un array directo (sin wrapper) para facilitar el mapeo a `List<EventCategory>` en Flutter.
+- **Array vacío**: Si no hay categorías, retorna `[]` (array vacío) con código 200 OK.
+- **Timestamps**: Los campos `createdAt` y `updatedAt` se convierten automáticamente de Timestamps de Firestore a formato ISO 8601.
+- **Compatibilidad**: La respuesta JSON es compatible con modelos Flutter que esperen la estructura `EventCategory`.
+- **Parámetros flexibles**: El parámetro puede venir en el path de la URL o como query parameter, facilitando su uso desde diferentes clientes.
+- **Sin filtros**: Esta API no aplica filtros. Retorna todas las categorías del evento.
+
+---
+
 ## 📦 Package: Users
 
 Funciones relacionadas con la gestión y consulta de perfiles de usuario.
 
-### 3. `user_profile`
+### 4. `user_profile`
 
 Obtiene el perfil completo de un usuario desde Firestore. Retorna el objeto `UserProfile` completo con todos sus campos, incluyendo eventos asignados y checkpoints filtrados según las relaciones del usuario.
 
@@ -1546,6 +1705,9 @@ firebase deploy --only functions:events
 # Desplegar solo event_detail
 firebase deploy --only functions:event_detail
 
+# Desplegar solo event_categories
+firebase deploy --only functions:event_categories
+
 # Desplegar solo user_profile
 firebase deploy --only functions:user_profile
 
@@ -1586,11 +1748,11 @@ firebase emulators:start
 
 1. **Paginación**: Para `events`, se recomienda usar `lastDocId` en lugar de `page` para mejor rendimiento con grandes volúmenes de datos.
 
-2. **Códigos HTTP**: Las funciones de eventos (`events`, `event_detail`), usuarios (`user_profile`) y checkpoints (`day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `days_of_race`) retornan códigos HTTP estándar. Las funciones de tracking retornan objetos JSON con `success` y `message`.
+2. **Códigos HTTP**: Las funciones de eventos (`events`, `event_detail`, `event_categories`), usuarios (`user_profile`) y checkpoints (`day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `days_of_race`) retornan códigos HTTP estándar. Las funciones de tracking retornan objetos JSON con `success` y `message`.
 
 3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, excepto `competitor_tracking` que retorna JSON con `success: false` en caso de error. Las funciones de tracking retornan objetos JSON con información del error.
 
-4. **Autenticación**: Las funciones `user_profile`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query o path, no se extraen del token. El token solo valida que el usuario esté autenticado.
+4. **Autenticación**: Las funciones `user_profile`, `event_categories`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query o path, no se extraen del token. El token solo valida que el usuario esté autenticado.
 
 5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
 

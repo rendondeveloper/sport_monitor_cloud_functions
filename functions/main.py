@@ -8,7 +8,7 @@ from checkpoints import (
 )
 
 # Importar funciones de events
-from events import event_detail, events
+from events import event_categories, event_detail, events
 from firebase_admin import initialize_app
 from firebase_functions.options import set_global_options
 

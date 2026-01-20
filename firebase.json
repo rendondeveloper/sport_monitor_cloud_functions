@@ -57,6 +57,11 @@
         "region": "us-central1"
       },
       {
+        "source": "/api/event/event-categories/**",
+        "function": "event_categories",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/users/profile",
         "function": "user_profile",
         "region": "us-central1"
