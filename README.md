@@ -1785,6 +1785,26 @@ curl -X PUT \
   }'
 ```
 
+**Usando el endpoint con Hosting:**
+
+```bash
+curl -X PUT \
+  'https://system-track-monitor.web.app/api/checkpoint/change-competitor-status' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "eventId": "event123",
+    "dayOfRaceId": "day456",
+    "checkpointId": "checkpoint789",
+    "orderCheckpoint": 5,
+    "competitorId": "competitor101",
+    "status": "check",
+    "lastStatusCompetitor": "none",
+    "checkpointName": "Checkpoint 5",
+    "note": "Competidor pasó correctamente"
+  }'
+```
+
 **Cambiar de 'out' a 'check' (recuperación - limpia checkpoints superiores):**
 
 ```bash
