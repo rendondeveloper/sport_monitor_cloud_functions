@@ -88,7 +88,8 @@ Crear una Cloud Function GET que:
 - [ ] Filtrar rutas donde `categoryIds` (array) contenga el `categoryId` obtenido
 - [ ] De las rutas filtradas, filtrar donde `dayOfRaceIds` (array) contenga el `dayId`
 - [ ] Si no se encuentra ruta → 404
-- [ ] Obtener campos: `name` y `routeUrl`
+- [ ] Obtener campos: `name`, `routeUrl`, `totalDistance`, `typedistance` (si existen en Firestore)
+- [ ] Si `totalDistance` o `typedistance` no existen en Firestore, usar valores por defecto o hardcodeados según corresponda
 
 ### Respuesta de la API
 
@@ -103,7 +104,9 @@ Crear una Cloud Function GET que:
   "route": {
     "name": "ORO ruta",
     "routeUrl": "url",
-    "version": 1
+    "version": 1,
+    "totalDistance": 200,
+    "typedistance": "km/millas"
   },
   "lastUpdate": "2026-01-13T12:52:32.000000"
 }
@@ -113,6 +116,8 @@ Crear una Cloud Function GET que:
 - [ ] `route.name` = `routes/{routeId}/name`
 - [ ] `route.routeUrl` = `routes/{routeId}/routeUrl`
 - [ ] `route.version` = `1` (hardcodeado, no viene de Firestore)
+- [ ] `route.totalDistance` = Valor numérico de la distancia total (obtenido de Firestore o hardcodeado según corresponda)
+- [ ] `route.typedistance` = Tipo de distancia: `"km/millas"` (string, puede venir de Firestore o estar hardcodeado)
 - [ ] `lastUpdate` = Fecha y hora actual del servidor en formato ISO 8601 (generado con `datetime.utcnow().isoformat()`)
 - [ ] Código HTTP 200 para respuesta exitosa
 - [ ] Código HTTP 400 para parámetros faltantes o inválidos (sin JSON, solo código)
@@ -177,6 +182,8 @@ Crear una Cloud Function GET que:
 - [ ] Función filtra rutas correctamente por `categoryIds` y `dayOfRaceIds`
 - [ ] Función retorna objeto directo con estructura correcta (sin wrappers)
 - [ ] El campo `route.version` está presente con valor `1` (hardcodeado)
+- [ ] El campo `route.totalDistance` está presente y es un número
+- [ ] El campo `route.typedistance` está presente y es un string
 - [ ] El campo `lastUpdate` está presente con fecha y hora actual del servidor en formato ISO 8601
 - [ ] Errores retornan solo código HTTP (sin JSON)
 - [ ] Función implementa patrón Early Return
@@ -203,6 +210,8 @@ Crear una Cloud Function GET que:
 - [ ] Verificar que `competitor.nombre` viene de `registrationCategory`
 - [ ] Verificar que `route.name` y `route.routeUrl` vienen de la ruta encontrada
 - [ ] Verificar que `route.version` está presente y tiene el valor `1` (hardcodeado)
+- [ ] Verificar que `route.totalDistance` está presente y es un número
+- [ ] Verificar que `route.typedistance` está presente y es un string
 - [ ] Verificar que `lastUpdate` está presente y contiene una fecha/hora válida en formato ISO 8601
 
 ## Notas Adicionales
@@ -220,6 +229,8 @@ Crear una Cloud Function GET que:
   - `route.name` = `routes/{routeId}/name`
   - `route.routeUrl` = `routes/{routeId}/routeUrl`
   - `route.version` = `1` (hardcodeado, no viene de Firestore)
+  - `route.totalDistance` = Distancia total (número, puede venir de Firestore o estar hardcodeado)
+  - `route.typedistance` = Tipo de distancia: `"km/millas"` (string, puede venir de Firestore o estar hardcodeado)
   - `lastUpdate` = Fecha y hora actual del servidor en formato ISO 8601 (generado con `datetime.utcnow().isoformat()`)
 - Usar constantes de `FirestoreCollections` en lugar de strings hardcodeados
 - El campo `name` para buscar la categoría viene de `competitionCategory.registrationCategory`
