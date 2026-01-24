@@ -1,0 +1,634 @@
+---
+description: Reglas para desarrollo de Cloud Functions
+alwaysApply: true
+---
+
+# Reglas para Cloud Functions - Firebase
+
+## 📋 Principios Fundamentales
+
+### 1. Validación Obligatoria
+**TODAS** las Cloud Functions deben usar:
+- `validate_request()` - Para validar CORS y método HTTP
+- `verify_bearer_token()` - Para autenticación
+
+### 2. Respuestas Directas (Sin Wrappers)
+**NUNCA** usar wrappers como `success`, `message`, `data` en respuestas exitosas.
+
+**✅ CORRECTO:**
+```python
+# Respuesta de catálogo
+return https_fn.Response(
+    json.dumps([
+        {"label": "uno"},
+        {"label": "dos"}
+    ], ensure_ascii=False),
+    status=200,
+    headers={
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+    },
+)
+
+# Respuesta de objeto único
+return https_fn.Response(
+    json.dumps({
+        "id": "123",
+        "name": "Ejemplo"
+    }, ensure_ascii=False),
+    status=200,
+    headers={
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+    },
+)
+```
+
+**❌ INCORRECTO:**
+```python
+# NO usar wrappers
+return https_fn.Response(
+    json.dumps({
+        "success": True,
+        "message": "Operación exitosa",
+        "data": [...]
+    }, ensure_ascii=False),
+    status=200,
+)
+```
+
+### 3. Errores con Códigos HTTP Apropiados
+Los errores deben retornar **solo el código HTTP** sin cuerpo JSON (excepto casos específicos).
+
+**✅ CORRECTO:**
+```python
+# Error 400 - Bad Request
+return https_fn.Response(
+    "",
+    status=400,
+    headers={"Access-Control-Allow-Origin": "*"},
+)
+
+# Error 401 - Unauthorized
+return https_fn.Response(
+    "",
+    status=401,
+    headers={"Access-Control-Allow-Origin": "*"},
+)
+
+# Error 404 - Not Found
+return https_fn.Response(
+    "",
+    status=404,
+    headers={"Access-Control-Allow-Origin": "*"},
+)
+
+# Error 500 - Internal Server Error
+return https_fn.Response(
+    "",
+    status=500,
+    headers={"Access-Control-Allow-Origin": "*"},
+)
+```
+
+**❌ INCORRECTO:**
+```python
+# NO retornar JSON en errores
+return https_fn.Response(
+    json.dumps({
+        "success": False,
+        "error": "Mensaje de error"
+    }, ensure_ascii=False),
+    status=400,
+)
+```
+
+### 4. Patrón Early Return
+**SIEMPRE** usar Early Return para validaciones y errores. Esto mejora la legibilidad y reduce anidación.
+
+**✅ CORRECTO:**
+```python
+@https_fn.on_request()
+def my_function(req: https_fn.Request) -> https_fn.Response:
+    # Validar CORS y método HTTP
+    validation_response = validate_request(
+        req, ["GET"], "my_function", return_json_error=False
+    )
+    if validation_response is not None:
+        return validation_response
+
+    try:
+        # Validar Bearer token
+        if not verify_bearer_token(req, "my_function"):
+            logging.warning("my_function: Token inválido o faltante")
+            return https_fn.Response(
+                "",
+                status=401,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        # Validar parámetros
+        param = req.args.get("param")
+        if not param or param.strip() == "":
+            logging.warning("my_function: Parámetro faltante")
+            return https_fn.Response(
+                "",
+                status=400,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        # Lógica principal
+        # ... código de la función ...
+
+        # Retornar respuesta exitosa (JSON directo)
+        return https_fn.Response(
+            json.dumps(result, ensure_ascii=False),
+            status=200,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",
+            },
+        )
+
+    except ValueError as e:
+        logging.error("my_function: Error de validación: %s", e)
+        return https_fn.Response(
+            "",
+            status=400,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+    except (AttributeError, KeyError, RuntimeError, TypeError) as e:
+        logging.error("my_function: Error interno: %s", e, exc_info=True)
+        return https_fn.Response(
+            "",
+            status=500,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+```
+
+**❌ INCORRECTO (sin Early Return):**
+```python
+@https_fn.on_request()
+def my_function(req: https_fn.Request) -> https_fn.Response:
+    validation_response = validate_request(...)
+    if validation_response is None:
+        if verify_bearer_token(req, "my_function"):
+            param = req.args.get("param")
+            if param and param.strip() != "":
+                # Lógica anidada...
+                return response
+            else:
+                return error_response
+        else:
+            return error_response
+    else:
+        return validation_response
+```
+
+## 🏗️ Estructura de una Cloud Function
+
+### Template Base
+
+```python
+import json
+import logging
+from typing import Any, Dict, List
+
+from firebase_admin import firestore
+from firebase_functions import https_fn
+from models.firestore_collections import FirestoreCollections
+from utils.helper_http import verify_bearer_token
+from utils.helper_http_verb import validate_request
+
+
+@https_fn.on_request()
+def function_name(req: https_fn.Request) -> https_fn.Response:
+    """
+    Descripción de la función.
+
+    Headers:
+    - Authorization: Bearer {Firebase Auth Token} (requerido)
+
+    Parámetros:
+    - param1: Descripción (requerido)
+    - param2: Descripción (opcional)
+
+    Returns:
+    - 200: JSON directo con los datos
+    - 400: Bad Request - parámetros faltantes o inválidos
+    - 401: Unauthorized - token inválido o faltante
+    - 404: Not Found - recurso no encontrado
+    - 500: Internal Server Error
+    """
+    # 1. Validar CORS y método HTTP (OBLIGATORIO)
+    validation_response = validate_request(
+        req, ["GET"], "function_name", return_json_error=False
+    )
+    if validation_response is not None:
+        return validation_response
+
+    try:
+        # 2. Validar Bearer token (OBLIGATORIO)
+        if not verify_bearer_token(req, "function_name"):
+            logging.warning("function_name: Token inválido o faltante")
+            return https_fn.Response(
+                "",
+                status=401,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        # 3. Validar parámetros (Early Return)
+        param1 = req.args.get("param1")
+        if not param1 or param1.strip() == "":
+            logging.warning("function_name: param1 faltante o vacío")
+            return https_fn.Response(
+                "",
+                status=400,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        # 4. Lógica principal
+        db = firestore.client()
+        # ... código de la función ...
+
+        # 5. Retornar respuesta exitosa (JSON directo, sin wrapper)
+        return https_fn.Response(
+            json.dumps(result, ensure_ascii=False),
+            status=200,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+        )
+
+    except ValueError as e:
+        logging.error("function_name: Error de validación: %s", e)
+        return https_fn.Response(
+            "",
+            status=400,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+    except (AttributeError, KeyError, RuntimeError, TypeError) as e:
+        logging.error("function_name: Error interno: %s", e, exc_info=True)
+        return https_fn.Response(
+            "",
+            status=500,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+```
+
+## 📝 Ejemplos por Tipo de Respuesta
+
+### 1. Respuesta de Array (Catálogo/Lista)
+
+```python
+# Obtener lista de categorías
+@https_fn.on_request()
+def get_categories(req: https_fn.Request) -> https_fn.Response:
+    validation_response = validate_request(
+        req, ["GET"], "get_categories", return_json_error=False
+    )
+    if validation_response is not None:
+        return validation_response
+
+    try:
+        if not verify_bearer_token(req, "get_categories"):
+            logging.warning("get_categories: Token inválido o faltante")
+            return https_fn.Response(
+                "",
+                status=401,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        # Lógica para obtener categorías
+        categories = [
+            {"id": "1", "label": "Categoría 1"},
+            {"id": "2", "label": "Categoría 2"},
+        ]
+
+        # Retornar array directo
+        return https_fn.Response(
+            json.dumps(categories, ensure_ascii=False),
+            status=200,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",
+            },
+        )
+
+    except Exception as e:
+        logging.error("get_categories: Error: %s", e, exc_info=True)
+        return https_fn.Response(
+            "",
+            status=500,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+```
+
+### 2. Respuesta de Objeto Único
+
+```python
+# Obtener detalle de un recurso
+@https_fn.on_request()
+def get_resource_detail(req: https_fn.Request) -> https_fn.Response:
+    validation_response = validate_request(
+        req, ["GET"], "get_resource_detail", return_json_error=False
+    )
+    if validation_response is not None:
+        return validation_response
+
+    try:
+        if not verify_bearer_token(req, "get_resource_detail"):
+            logging.warning("get_resource_detail: Token inválido o faltante")
+            return https_fn.Response(
+                "",
+                status=401,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        resource_id = req.args.get("resourceId")
+        if not resource_id or resource_id.strip() == "":
+            logging.warning("get_resource_detail: resourceId faltante")
+            return https_fn.Response(
+                "",
+                status=400,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        # Lógica para obtener recurso
+        resource = {
+            "id": resource_id,
+            "name": "Nombre del Recurso",
+            "description": "Descripción",
+        }
+
+        # Retornar objeto directo
+        return https_fn.Response(
+            json.dumps(resource, ensure_ascii=False),
+            status=200,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",
+            },
+        )
+
+    except Exception as e:
+        logging.error("get_resource_detail: Error: %s", e, exc_info=True)
+        return https_fn.Response(
+            "",
+            status=500,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+```
+
+### 3. Respuesta de Array Vacío
+
+```python
+# Si no hay datos, retornar array vacío
+if not items:
+    return https_fn.Response(
+        json.dumps([], ensure_ascii=False),
+        status=200,
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+```
+
+### 4. Respuesta 404 (Recurso No Encontrado)
+
+```python
+# Verificar existencia del recurso
+resource_doc = db.collection("resources").document(resource_id).get()
+if not resource_doc.exists:
+    logging.warning("get_resource: Recurso no encontrado: %s", resource_id)
+    return https_fn.Response(
+        "",
+        status=404,
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+```
+
+## 🔍 Validaciones Comunes
+
+### Validación de Parámetros Query
+
+```python
+# Validar parámetro requerido
+param = req.args.get("param")
+if not param or param.strip() == "":
+    logging.warning("function_name: param faltante o vacío")
+    return https_fn.Response(
+        "",
+        status=400,
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+```
+
+### Validación de Request Body (POST/PUT)
+
+```python
+# Parsear request body
+try:
+    request_data = req.get_json(silent=True)
+    if request_data is None:
+        logging.warning("function_name: Request body inválido o faltante")
+        return https_fn.Response(
+            "",
+            status=400,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+except (ValueError, TypeError) as e:
+    logging.warning("function_name: Error parseando JSON: %s", e)
+    return https_fn.Response(
+        "",
+        status=400,
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+# Validar campos requeridos
+required_fields = ["field1", "field2"]
+missing_fields = [f for f in required_fields if f not in request_data]
+if missing_fields:
+    logging.warning("function_name: Campos faltantes: %s", missing_fields)
+    return https_fn.Response(
+        "",
+        status=400,
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+```
+
+### Validación de Tipos
+
+```python
+# Validar que un campo sea un número
+try:
+    order = int(request_data.get("order"))
+    if order < 0:
+        raise ValueError("order debe ser positivo")
+except (ValueError, TypeError):
+    logging.warning("function_name: order inválido")
+    return https_fn.Response(
+        "",
+        status=400,
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+```
+
+## 🎯 Aislamiento de Tareas
+
+### Separar Lógica en Funciones Auxiliares
+
+**✅ CORRECTO:**
+```python
+def _get_competitors_from_firestore(db, event_id, day_of_race_id):
+    """Obtiene competidores desde Firestore."""
+    tracking_id = f"{event_id}_{day_of_race_id}"
+    competitors_ref = (
+        db.collection(FirestoreCollections.EVENT_TRACKING)
+        .document(event_id)
+        .collection(FirestoreCollections.EVENT_TRACKING_COMPETITOR_TRACKING)
+        .document(tracking_id)
+        .collection(FirestoreCollections.EVENT_TRACKING_COMPETITOR)
+    )
+    return competitors_ref.get()
+
+
+def _build_competitor_dict(competitor_doc):
+    """Construye diccionario de competidor."""
+    competitor_data = competitor_doc.to_dict()
+    return {
+        "id": competitor_doc.id,
+        "name": competitor_data.get("name", ""),
+        "order": competitor_data.get("order", 0),
+    }
+
+
+@https_fn.on_request()
+def get_competitors(req: https_fn.Request) -> https_fn.Response:
+    # Validaciones...
+    
+    db = firestore.client()
+    competitors_snapshot = _get_competitors_from_firestore(db, event_id, day_of_race_id)
+    
+    result = [
+        _build_competitor_dict(doc) 
+        for doc in competitors_snapshot
+    ]
+    
+    return https_fn.Response(
+        json.dumps(result, ensure_ascii=False),
+        status=200,
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+```
+
+**❌ INCORRECTO (todo en una función):**
+```python
+@https_fn.on_request()
+def get_competitors(req: https_fn.Request) -> https_fn.Response:
+    # Validaciones...
+    
+    # Todo el código mezclado
+    db = firestore.client()
+    tracking_id = f"{event_id}_{day_of_race_id}"
+    competitors_ref = (
+        db.collection(FirestoreCollections.EVENT_TRACKING)
+        .document(event_id)
+        .collection(FirestoreCollections.EVENT_TRACKING_COMPETITOR_TRACKING)
+        .document(tracking_id)
+        .collection(FirestoreCollections.EVENT_TRACKING_COMPETITOR)
+    )
+    competitors_snapshot = competitors_ref.get()
+    
+    result = []
+    for doc in competitors_snapshot:
+        competitor_data = doc.to_dict()
+        result.append({
+            "id": doc.id,
+            "name": competitor_data.get("name", ""),
+            "order": competitor_data.get("order", 0),
+        })
+    
+    return https_fn.Response(...)
+```
+
+## 📋 Checklist de Implementación
+
+Antes de crear una Cloud Function, verificar:
+
+- [ ] ✅ Usa `validate_request()` para validar CORS y método HTTP
+- [ ] ✅ Usa `verify_bearer_token()` para autenticación
+- [ ] ✅ Respuesta exitosa retorna JSON directo (sin wrappers)
+- [ ] ✅ Errores retornan solo código HTTP (sin JSON)
+- [ ] ✅ Usa patrón Early Return para validaciones
+- [ ] ✅ Lógica separada en funciones auxiliares
+- [ ] ✅ Logging apropiado para errores y warnings
+- [ ] ✅ Headers CORS correctos
+- [ ] ✅ Manejo de excepciones con try/except
+- [ ] ✅ Validación de parámetros con Early Return
+- [ ] ✅ Documentación en docstring
+
+## 🚫 Errores Comunes a Evitar
+
+### ❌ NO hacer esto:
+
+1. **Usar wrappers en respuestas exitosas:**
+   ```python
+   # ❌ INCORRECTO
+   return json.dumps({"success": True, "data": result})
+   ```
+
+2. **Retornar JSON en errores:**
+   ```python
+   # ❌ INCORRECTO
+   return json.dumps({"error": "Mensaje"}, status=400)
+   ```
+
+3. **Anidar validaciones:**
+   ```python
+   # ❌ INCORRECTO
+   if condition1:
+       if condition2:
+           if condition3:
+               # código
+   ```
+
+4. **Mezclar lógica en la función principal:**
+   ```python
+   # ❌ INCORRECTO
+   @https_fn.on_request()
+   def my_function(req):
+       # 200 líneas de código mezclado
+   ```
+
+5. **Olvidar validar token:**
+   ```python
+   # ❌ INCORRECTO
+   @https_fn.on_request()
+   def my_function(req):
+       # No valida token
+       return result
+   ```
+
+## 📚 Referencias
+
+- `utils/helper_http.py` - Función `verify_bearer_token()`
+- `utils/helper_http_verb.py` - Función `validate_request()`
+- `models/firestore_collections.py` - Constantes de colecciones
+
+## ✅ Resumen de Reglas
+
+1. **SIEMPRE** usar `validate_request()` y `verify_bearer_token()`
+2. **NUNCA** usar wrappers (`success`, `message`) en respuestas exitosas
+3. **SIEMPRE** retornar solo código HTTP en errores (sin JSON)
+4. **SIEMPRE** usar Early Return para validaciones
+5. **SIEMPRE** separar lógica en funciones auxiliares
+6. **SIEMPRE** usar logging para errores y warnings
+7. **SIEMPRE** incluir headers CORS apropiados
