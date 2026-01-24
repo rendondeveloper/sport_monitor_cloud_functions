@@ -574,6 +574,21 @@ Antes de crear una Cloud Function, verificar:
 - [ ] ✅ Manejo de excepciones con try/except
 - [ ] ✅ Validación de parámetros con Early Return
 - [ ] ✅ Documentación en docstring
+- [ ] ✅ Usa constantes de `FirestoreCollections` (no strings hardcodeados)
+- [ ] ✅ Si necesita nueva colección, la agregó a `FirestoreCollections` antes de usarla
+
+### Checklist Post-Implementación
+
+Después de crear y desplegar una Cloud Function, verificar:
+
+- [ ] ✅ Función documentada completamente en `README.md`
+- [ ] ✅ Endpoint URL documentado (directo y con hosting)
+- [ ] ✅ Parámetros documentados (query, path, body)
+- [ ] ✅ Ejemplos de cURL incluidos en README
+- [ ] ✅ Respuestas documentadas (éxito y errores)
+- [ ] ✅ Función agregada a lista de funciones con autenticación en README
+- [ ] ✅ Comando de deploy agregado en sección de despliegue del README
+- [ ] ✅ Estructura del proyecto actualizada en README si es necesario
 
 ## 🚫 Errores Comunes a Evitar
 
@@ -623,6 +638,131 @@ Antes de crear una Cloud Function, verificar:
 - `utils/helper_http_verb.py` - Función `validate_request()`
 - `models/firestore_collections.py` - Constantes de colecciones
 
+## 🗄️ Uso de FirestoreCollections
+
+### Regla Obligatoria: Usar Constantes de FirestoreCollections
+
+**SIEMPRE** usar las constantes del archivo `FirestoreCollections` en lugar de strings hardcodeados.
+
+**✅ CORRECTO:**
+```python
+from models.firestore_collections import FirestoreCollections
+
+# Usar constantes
+event_ref = db.collection(FirestoreCollections.EVENTS).document(event_id)
+categories_ref = event_ref.collection(FirestoreCollections.EVENT_CATEGORIES)
+vehicles_ref = user_ref.collection(FirestoreCollections.USER_VEHICLES)
+```
+
+**❌ INCORRECTO:**
+```python
+# NO usar strings hardcodeados
+event_ref = db.collection("events").document(event_id)
+categories_ref = event_ref.collection("event_categories")
+vehicles_ref = user_ref.collection("vehicles")
+```
+
+### Agregar Nuevas Colecciones
+
+**SIEMPRE** que se necesite una nueva colección de Firestore que no existe en `FirestoreCollections`, agregarla al archivo antes de usarla.
+
+**Proceso:**
+1. Abrir `functions/models/firestore_collections.py`
+2. Identificar la sección apropiada (colecciones principales, de eventos, de usuarios, de tracking, etc.)
+3. Agregar la constante siguiendo el formato existente
+4. Usar la constante en la Cloud Function
+
+**Ejemplo:**
+```python
+# En FirestoreCollections
+class FirestoreCollections:
+    # Colecciones principales
+    EVENTS = "events"
+    USERS = "users"
+    
+    # Colecciones de usuarios relacionados
+    USER_VEHICLES = "vehicles"  # ← Nueva colección agregada
+    USER_PROFILE = "profile"
+```
+
+**Ubicación del archivo:** `functions/models/firestore_collections.py`
+
+## 📖 Documentación en README
+
+### Regla Obligatoria: Documentar Endpoints en README
+
+**SIEMPRE** que se finalice la creación de un endpoint (Cloud Function), agregar su documentación completa al archivo `README.md`.
+
+**Proceso de Documentación:**
+
+1. **Identificar la sección apropiada** en el README según el package:
+   - Package `events` → Sección "📦 Package: Events"
+   - Package `users` → Sección "📦 Package: Users"
+   - Package `checkpoints` → Sección "📦 Package: Checkpoints"
+   - Package `vehicles` → Sección "📦 Package: Vehicles" (crear si no existe)
+   - Package `tracking` → Sección "📦 Package: Tracking"
+
+2. **Agregar documentación completa** con:
+   - Descripción de la función
+   - Tipo de request (GET, POST, PUT, DELETE)
+   - Endpoint URL (directo y con hosting)
+   - Headers requeridos
+   - Parámetros (query, path, body)
+   - Campos retornados
+   - Ejemplos de comandos cURL
+   - Respuestas exitosas y de error
+   - Notas importantes
+
+3. **Actualizar secciones relacionadas:**
+   - Agregar función a la lista de funciones que requieren autenticación
+   - Agregar comando de deploy en la sección de despliegue
+   - Actualizar estructura del proyecto si es necesario
+
+**Ejemplo de estructura en README:**
+
+```markdown
+## 📦 Package: Vehicles
+
+Funciones relacionadas con la gestión de vehículos de competidores.
+
+### X. `function_name`
+
+Descripción breve de la función.
+
+**Tipo**: HTTP Request (GET/POST/PUT/DELETE)  
+**Endpoint**: `https://function-name-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/vehicles/...`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+...
+
+#### Parámetros
+...
+
+#### Campos Retornados
+...
+
+#### Comandos cURL
+...
+
+#### Respuestas
+...
+```
+
+**Ubicación del archivo:** `README.md` en la raíz del proyecto
+
+**Checklist de Documentación:**
+- [ ] Función documentada en la sección apropiada del README
+- [ ] Endpoint URL documentado (directo y con hosting)
+- [ ] Parámetros documentados (query, path, body)
+- [ ] Ejemplos de cURL incluidos
+- [ ] Respuestas documentadas (éxito y errores)
+- [ ] Función agregada a lista de funciones con autenticación
+- [ ] Comando de deploy agregado en sección de despliegue
+- [ ] Estructura del proyecto actualizada si es necesario
+
 ## ✅ Resumen de Reglas
 
 1. **SIEMPRE** usar `validate_request()` y `verify_bearer_token()`
@@ -632,3 +772,6 @@ Antes de crear una Cloud Function, verificar:
 5. **SIEMPRE** separar lógica en funciones auxiliares
 6. **SIEMPRE** usar logging para errores y warnings
 7. **SIEMPRE** incluir headers CORS apropiados
+8. **SIEMPRE** usar constantes de `FirestoreCollections` (nunca strings hardcodeados)
+9. **SIEMPRE** agregar nuevas colecciones a `FirestoreCollections` antes de usarlas
+10. **SIEMPRE** documentar endpoints completos en `README.md` al finalizar su creación
