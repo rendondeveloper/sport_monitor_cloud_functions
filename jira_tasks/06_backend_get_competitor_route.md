@@ -104,7 +104,8 @@ Crear una Cloud Function GET que:
     "name": "ORO ruta",
     "routeUrl": "url",
     "version": 1
-  }
+  },
+  "lastUpdate": "2026-01-13T12:52:32.000000"
 }
 ```
 - [ ] `competitor.category` = `participants/{competitorId}/competitionCategory/pilotNumber`
@@ -112,6 +113,7 @@ Crear una Cloud Function GET que:
 - [ ] `route.name` = `routes/{routeId}/name`
 - [ ] `route.routeUrl` = `routes/{routeId}/routeUrl`
 - [ ] `route.version` = `1` (hardcodeado, no viene de Firestore)
+- [ ] `lastUpdate` = Fecha y hora actual del servidor en formato ISO 8601 (generado con `datetime.utcnow().isoformat()`)
 - [ ] Código HTTP 200 para respuesta exitosa
 - [ ] Código HTTP 400 para parámetros faltantes o inválidos (sin JSON, solo código)
 - [ ] Código HTTP 401 para token inválido (sin JSON, solo código)
@@ -133,6 +135,7 @@ Crear una Cloud Function GET que:
 - [ ] Separar lógica de búsqueda de ruta en función auxiliar `_find_route_by_category_and_day()`
 - [ ] Separar lógica de construcción de respuesta en función auxiliar `_build_response()`
 - [ ] En la función `_build_response()`, agregar campo `version: 1` al objeto `route` (hardcodeado)
+- [ ] En la función `_build_response()`, agregar campo `lastUpdate` con fecha y hora actual del servidor usando `datetime.utcnow().isoformat()`
 - [ ] Función principal solo orquesta validaciones y respuestas
 
 ### Logging
@@ -174,6 +177,7 @@ Crear una Cloud Function GET que:
 - [ ] Función filtra rutas correctamente por `categoryIds` y `dayOfRaceIds`
 - [ ] Función retorna objeto directo con estructura correcta (sin wrappers)
 - [ ] El campo `route.version` está presente con valor `1` (hardcodeado)
+- [ ] El campo `lastUpdate` está presente con fecha y hora actual del servidor en formato ISO 8601
 - [ ] Errores retornan solo código HTTP (sin JSON)
 - [ ] Función implementa patrón Early Return
 - [ ] Lógica separada en funciones auxiliares
@@ -199,6 +203,7 @@ Crear una Cloud Function GET que:
 - [ ] Verificar que `competitor.nombre` viene de `registrationCategory`
 - [ ] Verificar que `route.name` y `route.routeUrl` vienen de la ruta encontrada
 - [ ] Verificar que `route.version` está presente y tiene el valor `1` (hardcodeado)
+- [ ] Verificar que `lastUpdate` está presente y contiene una fecha/hora válida en formato ISO 8601
 
 ## Notas Adicionales
 
@@ -215,6 +220,7 @@ Crear una Cloud Function GET que:
   - `route.name` = `routes/{routeId}/name`
   - `route.routeUrl` = `routes/{routeId}/routeUrl`
   - `route.version` = `1` (hardcodeado, no viene de Firestore)
+  - `lastUpdate` = Fecha y hora actual del servidor en formato ISO 8601 (generado con `datetime.utcnow().isoformat()`)
 - Usar constantes de `FirestoreCollections` en lugar de strings hardcodeados
 - El campo `name` para buscar la categoría viene de `competitionCategory.registrationCategory`
 ```
