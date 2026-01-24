@@ -22,6 +22,21 @@ Crear una Cloud Function GET que:
 
 ## Requisitos Técnicos
 
+### Endpoint HTTP
+
+- [ ] **Método HTTP**: `GET`
+- [ ] **Path**: `/api/vehicles`
+- [ ] **Query Parameters**: `userId` (UUID del usuario, requerido)
+- [ ] **Ejemplo de URL**: `https://system-track-monitor.web.app/api/vehicles?userId={userId}`
+- [ ] Agregar ruta en `firebase.json` en la sección `hosting.rewrites`:
+  ```json
+  {
+    "source": "/api/vehicles",
+    "function": "get_vehicles",
+    "region": "us-central1"
+  }
+  ```
+
 ### Package y Ubicación
 
 - [ ] **Package**: `vehicles` (traducido de "vehiculo" a inglés)
@@ -79,7 +94,7 @@ Crear una Cloud Function GET que:
 - [ ] Crear archivo `functions/vehicles/__init__.py` si no existe
 - [ ] Exportar función `get_vehicles` en `__init__.py`
 - [ ] Importar función en `functions/main.py`
-- [ ] Agregar ruta en `firebase.json` para hosting (opcional)
+- [ ] Agregar ruta en `firebase.json` para hosting (ver sección Endpoint HTTP arriba)
 
 ## Dependencias
 
@@ -89,6 +104,7 @@ Crear una Cloud Function GET que:
 ## Criterios de Aceptación
 
 - [ ] Cloud Function creada y desplegada en Firebase
+- [ ] Endpoint HTTP configurado en `firebase.json` con path `/api/vehicles`
 - [ ] Función usa `validate_request()` y `verify_bearer_token()` correctamente
 - [ ] Función retorna array directo de vehículos (sin wrappers)
 - [ ] Errores retornan solo código HTTP (sin JSON)

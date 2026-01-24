@@ -25,6 +25,21 @@ Crear una Cloud Function GET que:
 
 ## Requisitos Técnicos
 
+### Endpoint HTTP
+
+- [ ] **Método HTTP**: `GET`
+- [ ] **Path**: `/api/competitors/competitor-route`
+- [ ] **Query Parameters**: `eventId` (UUID del evento, requerido), `competitorId` (UUID del competidor, requerido), `dayId` (UUID del día de carrera, requerido)
+- [ ] **Ejemplo de URL**: `https://system-track-monitor.web.app/api/competitors/competitor-route?eventId={eventId}&competitorId={competitorId}&dayId={dayId}`
+- [ ] Agregar ruta en `firebase.json` en la sección `hosting.rewrites`:
+  ```json
+  {
+    "source": "/api/competitors/competitor-route",
+    "function": "get_competitor_route",
+    "region": "us-central1"
+  }
+  ```
+
 ### Package y Ubicación
 
 - [ ] **Package**: `competitors` (obligatorio)
@@ -130,7 +145,7 @@ Crear una Cloud Function GET que:
 - [ ] Crear archivo `functions/competitors/__init__.py` si no existe
 - [ ] Exportar función `get_competitor_route` en `__init__.py`
 - [ ] Importar función en `functions/main.py`
-- [ ] Agregar ruta en `firebase.json` para hosting (opcional)
+- [ ] Agregar ruta en `firebase.json` para hosting (ver sección Endpoint HTTP arriba)
 
 ### Uso de FirestoreCollections
 
@@ -148,6 +163,7 @@ Crear una Cloud Function GET que:
 ## Criterios de Aceptación
 
 - [ ] Cloud Function creada y desplegada en Firebase
+- [ ] Endpoint HTTP configurado en `firebase.json` con path `/api/competitors/competitor-route`
 - [ ] Función usa `validate_request()` y `verify_bearer_token()` correctamente
 - [ ] Función valida que el competidor existe y está activo (`isAvailable: true`)
 - [ ] Función valida que el día existe y está activo (`isActivate: true`)

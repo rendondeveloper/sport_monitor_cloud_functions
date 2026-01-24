@@ -23,6 +23,22 @@ Crear una Cloud Function DELETE que:
 
 ## Requisitos Técnicos
 
+### Endpoint HTTP
+
+- [ ] **Método HTTP**: `DELETE`
+- [ ] **Path**: `/api/vehicles/{vehicleId}`
+- [ ] **Path Parameters**: `vehicleId` (UUID del vehículo, requerido)
+- [ ] **Query Parameters**: `userId` (UUID del usuario, requerido), `authUserId` (UUID del usuario autenticado, requerido)
+- [ ] **Ejemplo de URL**: `https://system-track-monitor.web.app/api/vehicles/{vehicleId}?userId={userId}&authUserId={authUserId}`
+- [ ] Agregar ruta en `firebase.json` en la sección `hosting.rewrites`:
+  ```json
+  {
+    "source": "/api/vehicles/**",
+    "function": "delete_vehicle",
+    "region": "us-central1"
+  }
+  ```
+
 ### Package y Ubicación
 
 - [ ] **Package**: `vehicles` (traducido de "vehiculo" a inglés)
@@ -79,7 +95,7 @@ Crear una Cloud Function DELETE que:
 
 - [ ] Exportar función `delete_vehicle` en `functions/vehicles/__init__.py`
 - [ ] Importar función en `functions/main.py`
-- [ ] Agregar ruta en `firebase.json` para hosting (opcional)
+- [ ] Agregar ruta en `firebase.json` para hosting (ver sección Endpoint HTTP arriba)
 
 ## Dependencias
 
@@ -90,6 +106,7 @@ Crear una Cloud Function DELETE que:
 ## Criterios de Aceptación
 
 - [ ] Cloud Function creada y desplegada en Firebase
+- [ ] Endpoint HTTP configurado en `firebase.json` con path `/api/vehicles/**`
 - [ ] Función usa `validate_request()` y `verify_bearer_token()` correctamente
 - [ ] Función valida todos los parámetros requeridos
 - [ ] Función valida que el usuario y vehículo existen
