@@ -102,7 +102,8 @@ Crear una Cloud Function GET que:
   },
   "route": {
     "name": "ORO ruta",
-    "routeUrl": "url"
+    "routeUrl": "url",
+    "version": 1
   }
 }
 ```
@@ -110,6 +111,7 @@ Crear una Cloud Function GET que:
 - [ ] `competitor.nombre` = `participants/{competitorId}/competitionCategory/registrationCategory`
 - [ ] `route.name` = `routes/{routeId}/name`
 - [ ] `route.routeUrl` = `routes/{routeId}/routeUrl`
+- [ ] `route.version` = `1` (hardcodeado, no viene de Firestore)
 - [ ] Código HTTP 200 para respuesta exitosa
 - [ ] Código HTTP 400 para parámetros faltantes o inválidos (sin JSON, solo código)
 - [ ] Código HTTP 401 para token inválido (sin JSON, solo código)
@@ -130,6 +132,7 @@ Crear una Cloud Function GET que:
 - [ ] Separar lógica de obtención de categoría en función auxiliar `_get_category_id_by_name()`
 - [ ] Separar lógica de búsqueda de ruta en función auxiliar `_find_route_by_category_and_day()`
 - [ ] Separar lógica de construcción de respuesta en función auxiliar `_build_response()`
+- [ ] En la función `_build_response()`, agregar campo `version: 1` al objeto `route` (hardcodeado)
 - [ ] Función principal solo orquesta validaciones y respuestas
 
 ### Logging
@@ -170,6 +173,7 @@ Crear una Cloud Function GET que:
 - [ ] Función obtiene correctamente el `categoryId` desde `event_categories` usando el `name` de `registrationCategory`
 - [ ] Función filtra rutas correctamente por `categoryIds` y `dayOfRaceIds`
 - [ ] Función retorna objeto directo con estructura correcta (sin wrappers)
+- [ ] El campo `route.version` está presente con valor `1` (hardcodeado)
 - [ ] Errores retornan solo código HTTP (sin JSON)
 - [ ] Función implementa patrón Early Return
 - [ ] Lógica separada en funciones auxiliares
@@ -194,6 +198,7 @@ Crear una Cloud Function GET que:
 - [ ] Verificar que `competitor.category` viene de `pilotNumber`
 - [ ] Verificar que `competitor.nombre` viene de `registrationCategory`
 - [ ] Verificar que `route.name` y `route.routeUrl` vienen de la ruta encontrada
+- [ ] Verificar que `route.version` está presente y tiene el valor `1` (hardcodeado)
 
 ## Notas Adicionales
 
@@ -209,6 +214,7 @@ Crear una Cloud Function GET que:
   - `competitor.nombre` = `competitionCategory.registrationCategory`
   - `route.name` = `routes/{routeId}/name`
   - `route.routeUrl` = `routes/{routeId}/routeUrl`
+  - `route.version` = `1` (hardcodeado, no viene de Firestore)
 - Usar constantes de `FirestoreCollections` en lugar de strings hardcodeados
 - El campo `name` para buscar la categoría viene de `competitionCategory.registrationCategory`
 ```
