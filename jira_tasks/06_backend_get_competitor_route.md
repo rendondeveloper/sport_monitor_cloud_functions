@@ -25,6 +25,12 @@ Crear una Cloud Function GET que:
 
 ## Requisitos Técnicos
 
+### Package y Ubicación
+
+- [ ] **Package**: `competitors` (obligatorio)
+- [ ] **Ubicación**: `functions/competitors/` (NO en la raíz del proyecto)
+- [ ] Crear directorio `functions/competitors/` si no existe
+
 ### Cloud Function en Python
 
 - [ ] Crear archivo `functions/competitors/get_competitor_route.py`
@@ -176,6 +182,7 @@ Crear una Cloud Function GET que:
 ## Notas Adicionales
 
 - La función debe seguir las reglas definidas en `.cursor/rules/cloud_functions_rules.mdc`
+- **Package obligatorio**: `competitors` - El archivo debe estar en `functions/competitors/` (NO en la raíz del proyecto)
 - Rutas en Firestore:
   - `events/{eventId}/participants/{competitorId}` - Validar competidor
   - `events/{eventId}/day_of_races/{dayId}` - Validar día
@@ -187,6 +194,5 @@ Crear una Cloud Function GET que:
   - `route.name` = `routes/{routeId}/name`
   - `route.routeUrl` = `routes/{routeId}/routeUrl`
 - Usar constantes de `FirestoreCollections` en lugar de strings hardcodeados
-- Package sugerido: `competitors` (nuevo package para funciones relacionadas con competidores)
 - El campo `name` para buscar la categoría viene de `competitionCategory.registrationCategory`
 ```

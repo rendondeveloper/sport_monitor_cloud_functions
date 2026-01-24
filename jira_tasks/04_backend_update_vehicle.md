@@ -23,6 +23,12 @@ Crear una Cloud Function PUT que:
 
 ## Requisitos Técnicos
 
+### Package y Ubicación
+
+- [ ] **Package**: `vehicles` (traducido de "vehiculo" a inglés)
+- [ ] **Ubicación**: `functions/vehicles/` (NO en la raíz del proyecto)
+- [ ] Crear directorio `functions/vehicles/` si no existe
+
 ### Cloud Function en Python
 
 - [ ] Crear archivo `functions/vehicles/update_vehicle.py`
@@ -140,5 +146,5 @@ Crear una Cloud Function PUT que:
 - La ruta en Firestore es: `users/{userId}/vehicles/{vehicleId}`
 - Campos requeridos: `branch` (string), `year` (integer), `model` (string), `color` (string)
 - Usar constantes de `FirestoreCollections` en lugar de strings hardcodeados
-- Package: `vehicles` (traducido de "vehiculo" a inglés)
+- **Package obligatorio**: `vehicles` - Todos los archivos del CRUD de vehículos deben estar en `functions/vehicles/` (NO en la raíz)
 ```

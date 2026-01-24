@@ -22,6 +22,12 @@ Crear una Cloud Function GET que:
 
 ## Requisitos Técnicos
 
+### Package y Ubicación
+
+- [ ] **Package**: `vehicles` (traducido de "vehiculo" a inglés)
+- [ ] **Ubicación**: `functions/vehicles/` (NO en la raíz del proyecto)
+- [ ] Crear directorio `functions/vehicles/` si no existe
+
 ### Cloud Function en Python
 
 - [ ] Crear archivo `functions/vehicles/get_vehicles.py`
@@ -108,5 +114,5 @@ Crear una Cloud Function GET que:
 - La función debe seguir las reglas definidas en `.cursor/rules/cloud_functions_rules.mdc`
 - La ruta en Firestore es: `users/{userId}/vehicles`
 - Usar constantes de `FirestoreCollections` en lugar de strings hardcodeados
-- Package: `vehicles` (traducido de "vehiculo" a inglés)
+- **Package obligatorio**: `vehicles` - Todos los archivos del CRUD de vehículos deben estar en `functions/vehicles/` (NO en la raíz)
 ```
