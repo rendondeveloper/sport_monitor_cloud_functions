@@ -1,10 +1,12 @@
 # Importar funciones de checkpoints
 from checkpoints import (
     all_competitor_tracking,
+    change_competitor_status,
     checkpoint,
     competitor_tracking,
     day_of_race_active,
     days_of_race,
+    update_competitor_status,
 )
 
 # Importar funciones de events
@@ -35,9 +37,12 @@ initialize_app()
 # - track_competitors_off: tracking/tracking_competitors.py
 # - events: events/events_customer.py
 # - event_detail: events/events_detail_customer.py
+# - event_categories: events/event_categories.py
 # - user_profile: users/user_profile.py
 # - day_of_race_active: checkpoints/day_of_race_active.py
 # - checkpoint: checkpoints/checkpoint.py
 # - competitor_tracking: checkpoints/competitor_tracking.py
 # - days_of_race: checkpoints/days_of_race.py
 # - all_competitor_tracking: checkpoints/all_competitor_tracking.py
+# - change_competitor_status: checkpoints/change_competitor_status.py
+# - update_competitor_status: checkpoints/update_competitor_status.py
