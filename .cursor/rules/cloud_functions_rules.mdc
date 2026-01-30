@@ -576,10 +576,18 @@ Antes de crear una Cloud Function, verificar:
 - [ ] ✅ Documentación en docstring
 - [ ] ✅ Usa constantes de `FirestoreCollections` (no strings hardcodeados)
 - [ ] ✅ Si necesita nueva colección, la agregó a `FirestoreCollections` antes de usarla
+- [ ] ✅ Tipos de parámetros definidos o confirmados con el usuario si no se pueden inferir
+
+### Checklist Pruebas unitarias
+
+- [ ] ✅ Existe archivo de pruebas unitarias para la función (p. ej. `test_<nombre>.py`)
+- [ ] ✅ Librería de pruebas (p. ej. pytest, pytest-cov) añadida a `requirements.txt` o dev si no existía
+- [ ] ✅ Cobertura mínima 90% configurada y alcanzada
+- [ ] ✅ Casos: happy path, parámetros faltantes, valor/tipo incorrecto, consultas con data, escrituras que validen éxito, múltiples llamadas al mismo API
 
 ### Checklist Post-Implementación
 
-Después de crear y desplegar una Cloud Function, verificar:
+Después de que las pruebas unitarias pasen y antes del deploy, verificar:
 
 - [ ] ✅ Función documentada completamente en `README.md`
 - [ ] ✅ Endpoint URL documentado (directo y con hosting)
@@ -589,6 +597,55 @@ Después de crear y desplegar una Cloud Function, verificar:
 - [ ] ✅ Función agregada a lista de funciones con autenticación en README
 - [ ] ✅ Comando de deploy agregado en sección de despliegue del README
 - [ ] ✅ Estructura del proyecto actualizada en README si es necesario
+- [ ] ✅ Commit realizado con descripción de cambios y ticket de Jira si aplica
+- [ ] ✅ Deploy de las funciones afectadas ejecutado
+
+## 🧪 Pruebas unitarias
+
+### Regla obligatoria: archivo de pruebas por Cloud Function
+
+**TODAS** las Cloud Functions deben tener su **archivo de pruebas unitarias** asociado (por ejemplo `test_<nombre_funcion>.py` en `functions/tests/` o junto al módulo). Si la librería para pruebas unitarias no existe en el proyecto, se debe **agregar** (por ejemplo `pytest`, `pytest-cov`) y configurar la ejecución y el reporte de cobertura.
+
+### Cobertura mínima
+
+- Las pruebas deben alcanzar al menos **90% de cobertura** (coverage) del código de la función. Configurar el comando de pruebas con reporte de cobertura (por ejemplo `pytest --cov=... --cov-report=... --cov-fail-under=90`).
+
+### Tipos de parámetros antes de implementar
+
+- Antes de crear la Cloud Function, se debe conocer de forma **explícita** el **tipo** de cada parámetro (query, path, body): string, número, booleano, array, objeto, etc.
+- Si los tipos **no se pueden inferir** de la especificación del endpoint, del ticket o del contexto, **se debe preguntar al usuario** antes de continuar con la implementación. No asumir tipos sin confirmación.
+
+### Casos de prueba obligatorios
+
+Incluir al menos los siguientes casos en el archivo de pruebas unitarias:
+
+1. **Happy path**: petición válida con todos los parámetros correctos; respuesta exitosa (200 u otro código de éxito) y estructura esperada.
+2. **Parámetros faltantes**: casos donde **uno o más** parámetros requeridos no vienen en la petición; debe esperarse 400 (o el código que aplique).
+3. **Parámetros con valor o tipo incorrecto**: parámetro que no contiene el valor esperado o tiene tipo incorrecto (por ejemplo string donde se espera número, formato inválido). Debe validarse el tipo según lo definido y retornar el código de error apropiado (por ejemplo 400).
+4. **Consultas (lectura de información)**: las funciones que solicitan información de forma interna (por ejemplo lecturas a Firestore) deben tener casos donde se **simule que la consulta arroja data** y se verifique que la respuesta incluye esos datos correctamente.
+5. **Modificaciones (create, update, delete)**: las funciones que realizan escrituras deben tener casos donde se **simule que la operación se ejecutó correctamente** y la respuesta (o el código HTTP) permita **validar que la operación funcionó** (por ejemplo 200/204, o el contrato definido para la función).
+6. **Múltiples llamadas al mismo API**: incluir al menos un caso que simule **varias llamadas seguidas** al mismo endpoint (por ejemplo dos o más requests al mismo handler) para comprobar que el comportamiento es estable y no hay efectos colaterales incorrectos.
+
+Usar mocks (por ejemplo `unittest.mock` o `pytest` fixtures) para Firestore, `verify_bearer_token`, `validate_request` y cualquier dependencia externa, de modo que las pruebas sean unitarias y no dependan de servicios reales.
+
+### Orden de trabajo
+
+1. Implementar la Cloud Function.
+2. Añadir o configurar la librería de pruebas y cobertura si no existe.
+3. Escribir y ejecutar las pruebas unitarias hasta alcanzar al menos 90% de cobertura y que todos los casos obligatorios pasen.
+4. Solo después de que las pruebas pasen: documentar el API en `README.md` (ver sección de documentación).
+5. Una vez finalizada la documentación: hacer **commit** con una descripción clara de los cambios y **relacionar el ticket de Jira** en el mensaje de commit si existe (por ejemplo `SPRTMNTRPP-74 Add competitor_route function`).
+6. Realizar el **deploy** de las funciones afectadas (por ejemplo `firebase deploy --only functions:NOMBRE_FUNCION` o `firebase deploy --only functions` según corresponda).
+
+## 📤 Consultas y operaciones de escritura
+
+### Consultas (lectura de información)
+
+- Las funciones que realizan **consultas** para obtener información (por ejemplo get document, list collection) deben diseñarse de forma que la respuesta **arroje data**: retornar los datos solicitados en el cuerpo de la respuesta exitosa (JSON directo, sin wrappers), o el código/estructura acordada para “sin resultados” (por ejemplo array vacío o 404 según el contrato).
+
+### Modificaciones (create, update, delete)
+
+- Las funciones que realizan **create**, **update** o **delete** deben permitir **validar que la operación funcionó correctamente**: mediante el código HTTP (por ejemplo 200, 204) y, si el contrato del API lo define, mediante una respuesta que indique éxito. No dejar operaciones de escritura sin una forma clara de verificar el resultado en las pruebas y en el uso del API.
 
 ## 🚫 Errores Comunes a Evitar
 
@@ -775,3 +832,8 @@ Descripción breve de la función.
 8. **SIEMPRE** usar constantes de `FirestoreCollections` (nunca strings hardcodeados)
 9. **SIEMPRE** agregar nuevas colecciones a `FirestoreCollections` antes de usarlas
 10. **SIEMPRE** documentar endpoints completos en `README.md` al finalizar su creación
+11. **SIEMPRE** crear archivo de pruebas unitarias por Cloud Function; si no hay librería de tests, agregarla; cobertura mínima 90%
+12. **SIEMPRE** conocer los tipos de los parámetros antes de implementar; si no se pueden inferir, preguntar al usuario antes de continuar
+13. **SIEMPRE** incluir casos de prueba: happy path, parámetros faltantes, valor/tipo incorrecto, consultas que retornen data, operaciones de escritura que permitan validar éxito, múltiples llamadas al mismo API
+14. **SIEMPRE** diseñar consultas para que arrojen data; operaciones create/update/delete para que se pueda validar si funcionaron correctamente
+15. **SIEMPRE** tras pruebas pasando: documentar el API; luego commit con descripción de cambios y ticket de Jira si aplica; después deploy de las funciones
