@@ -1,3 +1,6 @@
+# Importar funciones de competitors
+from competitors import competitor_route
+
 # Importar funciones de checkpoints
 from checkpoints import (
     all_competitor_tracking,
@@ -46,3 +49,4 @@ initialize_app()
 # - all_competitor_tracking: checkpoints/all_competitor_tracking.py
 # - change_competitor_status: checkpoints/change_competitor_status.py
 # - update_competitor_status: checkpoints/update_competitor_status.py
+# - competitor_route: competitors/competitor_route.py

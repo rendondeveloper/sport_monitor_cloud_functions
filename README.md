@@ -23,6 +23,8 @@ functions/
 │   └── event_categories.py        # event_categories
 ├── users/               # Package: Gestión de Usuarios
 │   └── user_profile.py            # user_profile
+├── competitors/         # Package: Competidores y rutas
+│   └── competitor_route.py        # competitor_route
 ├── checkpoints/         # Package: Gestión de Checkpoints
 │   ├── day_of_race_active.py       # day_of_race_active
 │   ├── checkpoint.py               # checkpoint
@@ -565,6 +567,94 @@ curl -X GET \
 - **Eventos Asignados**: Los eventos se obtienen desde `eventStaffRelations` del usuario. Solo se incluyen los checkpoints cuyo ID esté en el array `checkpointIds` de cada relación.
 - **Campos Opcionales**: Los campos `avatarUrl`, `deletedAt`, y `disableAt` pueden ser `null` si no están definidos en el documento.
 - **Compatibilidad**: La respuesta JSON es compatible con `UserProfile.fromMap()` o `UserProfile.fromJson()` en Flutter.
+
+---
+
+## 📦 Package: Competitors
+
+Funciones relacionadas con competidores y sus rutas en eventos (API pública).
+
+### 1. `competitor_route` (SPRTMNTRPP-74)
+
+Obtiene la información del competidor y su ruta para un evento y día de carrera. **API pública**: no requiere Bearer token.
+
+**Tipo**: HTTP Request (GET)  
+**Endpoint**: `https://competitor-route-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/competitor-route/{eventId}/{dayId}/{competitorId}`
+
+**Nota**: Esta función es pública y no requiere autenticación.
+
+#### Parámetros (Path o Query Parameters)
+
+| Parámetro     | Tipo   | Requerido | Descripción                                                                 |
+| ------------- | ------ | --------- | --------------------------------------------------------------------------- |
+| `eventId`     | string | **Sí**    | ID del evento                                                               |
+| `dayId`       | string | **Sí**    | ID del día de carrera                                                       |
+| `competitorId`| string | **Sí**    | ID del competidor (documento en `events/{eventId}/participants/{competitorId}`) |
+
+Los parámetros pueden ir en el path (`/api/competitors/competitor-route/{eventId}/{dayId}/{competitorId}`) o en query (`?eventId=xxx&dayId=yyy&competitorId=zzz`).
+
+#### Validaciones realizadas
+
+- El participante `events/{eventId}/participants/{competitorId}` debe existir y tener `isAvailable == true`.
+- El día de carrera `events/{eventId}/day_of_races/{dayId}` debe existir y tener `isActivate == true`.
+- Se obtiene el `categoryId` desde `event_categories` donde `name == competitionCategory.registrationCategory` del participante.
+- Se busca en `routes` un documento donde `categoryIds` contenga ese `categoryId` y `dayOfRaceIds` contenga `dayId`.
+
+#### Campos Retornados (200)
+
+- `competitor`: Objeto con:
+  - `category`: Valor de `pilotNumber` del participante (ej: "ORO")
+  - `nombre`: Valor de `registrationCategory` (ej: "25F")
+- `route`: Objeto con:
+  - `name`: Nombre de la ruta
+  - `route`: URL de la ruta (campo `routeUrl` en Firestore)
+  - `version`: Siempre `1`
+  - `totalDistance`: Distancia total (numérico)
+  - `typedistance`: Unidad (ej: "km/millas")
+- `lastUpdate`: Fecha/hora del servidor en formato ISO 8601 (ej: `2026-01-13T12:52:32Z`)
+
+#### Comandos cURL
+
+**Con path:**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/competitors/competitor-route/{eventId}/{dayId}/{competitorId}'
+```
+
+**Con query parameters:**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/competitors/competitor-route?eventId=EVENT_ID&dayId=DAY_ID&competitorId=COMPETITOR_ID'
+```
+
+#### Respuestas
+
+- **200 OK**: JSON con `competitor`, `route` y `lastUpdate`.
+- **400 Bad Request**: Parámetros faltantes o vacíos (sin cuerpo).
+- **404 Not Found**: Participante no encontrado o no disponible, día no activo, categoría no encontrada o ruta no encontrada (sin cuerpo).
+- **500 Internal Server Error**: Error interno (sin cuerpo).
+
+#### Ejemplo de respuesta exitosa
+
+```json
+{
+  "competitor": {
+    "category": "ORO",
+    "nombre": "25F"
+  },
+  "route": {
+    "name": "Ruta Principal",
+    "route": "https://example.com/route.gpx",
+    "version": 1,
+    "totalDistance": 200,
+    "typedistance": "km/millas"
+  },
+  "lastUpdate": "2026-01-13T12:52:32Z"
+}
+```
 
 ---
 
@@ -2210,11 +2300,86 @@ firebase deploy --only functions:track_event_checkpoint,functions:track_competit
 
 Para probar las funciones localmente, consulta el archivo [README_TESTING.md](./README_TESTING.md).
 
+### Comandos: deploy y emulador
+
+**Despliegue (producción):**
+
+| Acción | Comando |
+| ------ | ------- |
+| Desplegar todas las funciones | `firebase deploy --only functions` |
+| Desplegar una función concreta | `firebase deploy --only functions:NOMBRE_FUNCION` |
+
+Ejemplos: `firebase deploy --only functions:competitor_route`, `firebase deploy --only functions:events`.
+
+**Emulador (local):**
+
+| Acción | Comando |
+| ------ | ------- |
+| Iniciar emulador (functions + hosting, con path `/api/...`) | `firebase emulators:start --only functions,hosting` |
+| Iniciar con Firestore | `firebase emulators:start --only functions,hosting,firestore` |
+| Solo functions (sin path del API) | `firebase emulators:start --only functions` |
+
+**Emulador con debug e inspect:**
+
+| Acción | Comando |
+| ------ | ------- |
+| Emulador con logs detallados (debug) | `firebase emulators:start --only functions,hosting --debug` |
+| Emulador con inspector para depurador (Node.js) | `firebase emulators:start --only functions,hosting --inspect-functions` |
+
+**Nota:** `--inspect-functions` solo funciona con funciones en **Node.js**. En proyectos con funciones en **Python** el emulador mostrará *"--inspect-functions not supported for Python functions. Ignored."* Para depurar funciones Python con breakpoints, usa el flujo descrito en [Depuración con breakpoints](#depuración-con-breakpoints) (debugpy + Attach).
+
+---
+
 ### Iniciar emulador
 
+Para poder usar **tanto el path del API como la URL directa de la función**, arranca el emulador con **functions** y **hosting**:
+
 ```bash
-firebase emulators:start
+firebase emulators:start --only functions,hosting
 ```
+
+(O con Firestore: `firebase emulators:start --only functions,hosting,firestore`.)
+
+**Puertos** (definidos en [firebase.json](firebase.json)):
+
+| Servicio   | Puerto | Uso |
+| ---------- | ------ | ----- |
+| Hosting    | 5050   | Acceso por **path del API** (rewrites) |
+| Functions  | 5001   | Acceso **directo por nombre de función** |
+| Firestore | 8080   | Emulador de base de datos |
+| UI         | 4000   | Interfaz del emulador |
+
+**Nota:** El puerto de Hosting está en 5050 (no 5000) para evitar conflicto con otros servicios que suelen usar 5000 (p. ej. AirPlay en macOS).
+
+**Dos formas de llamar a una función:**
+
+1. **Por path del API** (igual que en producción con hosting): las peticiones pasan por Hosting y los rewrites envían a la función.
+   ```
+   http://localhost:5050/api/competitors/competitor-route?eventId=...&dayId=...&competitorId=...
+   http://localhost:5050/api/checkpoint/dayofrace/active/EVENT_ID
+   http://localhost:5050/api/checkpoint/competitor-tracking/...
+   http://localhost:5050/api/checkpoint/update-competitor-status/...
+   http://localhost:5050/api/events
+   http://localhost:5050/api/events/detail
+   http://localhost:5050/api/event/event-categories/EVENT_ID
+   http://localhost:5050/api/users/profile
+   http://localhost:5050/api/tracking/track-event-checkpoint
+   http://localhost:5050/api/tracking/track-competitors
+   http://localhost:5050/api/tracking/track-competitors-off
+   ```
+
+2. **Por URL directa de la función** (sin pasar por hosting):
+   ```
+   http://localhost:5001/system-track-monitor/us-central1/competitor_route?...
+   http://localhost:5001/system-track-monitor/us-central1/day_of_race_active?...
+   http://localhost:5001/system-track-monitor/us-central1/events
+   http://localhost:5001/system-track-monitor/us-central1/track_event_checkpoint
+   http://localhost:5001/system-track-monitor/us-central1/track_competitors
+   http://localhost:5001/system-track-monitor/us-central1/track_competitors_off
+   ```
+   Sustituye `system-track-monitor` por tu Project ID si es distinto. Todas las funciones HTTP tienen su path en `/api/...` (ver rewrites en [firebase.json](firebase.json)).
+
+Si solo ejecutas `firebase emulators:start --only functions` (sin hosting), solo funcionará la URL directa en el puerto 5001; el path `/api/...` no estará disponible. Si el puerto 5050 también estuviera ocupado, puedes cambiarlo en `firebase.json` bajo `emulators.hosting.port`.
 
 ---
 

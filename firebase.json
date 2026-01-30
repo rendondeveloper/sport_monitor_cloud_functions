@@ -75,6 +75,26 @@
         "source": "/api/users/profile",
         "function": "user_profile",
         "region": "us-central1"
+      },
+      {
+        "source": "/api/competitors/competitor-route/**",
+        "function": "competitor_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/tracking/track-event-checkpoint",
+        "function": "track_event_checkpoint",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/tracking/track-competitors",
+        "function": "track_competitors",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/tracking/track-competitors-off",
+        "function": "track_competitors_off",
+        "region": "us-central1"
       }
     ],
     "headers": [
@@ -103,6 +123,9 @@
     },
     "firestore": {
       "port": 8080
+    },
+    "hosting": {
+      "port": 5050
     },
     "ui": {
       "enabled": true,
