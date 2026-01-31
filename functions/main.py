@@ -24,7 +24,7 @@ from tracking.tracking_checkpoint import track_event_checkpoint
 from tracking.tracking_competitors import track_competitors, track_competitors_off
 
 # Importar funciones de users
-from users import user_profile
+from users import user_profile, create_user
 
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
@@ -49,6 +49,7 @@ initialize_app(options=_options if _options else None)
 # - event_detail: events/events_detail_customer.py
 # - event_categories: events/event_categories.py
 # - user_profile: users/user_profile.py
+# - create_user: users/user_create.py
 # - day_of_race_active: checkpoints/day_of_race_active.py
 # - checkpoint: checkpoints/checkpoint.py
 # - competitor_tracking: checkpoints/competitor_tracking.py

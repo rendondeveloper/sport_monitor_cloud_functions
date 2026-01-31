@@ -22,7 +22,8 @@ functions/
 │   ├── events_detail_customer.py  # event_detail
 │   └── event_categories.py        # event_categories
 ├── users/               # Package: Gestión de Usuarios
-│   └── user_profile.py            # user_profile
+│   ├── user_create.py               # create_user
+│   └── user_profile.py              # user_profile
 ├── competitors/         # Package: Competidores y rutas
 │   └── competitor_route.py        # competitor_route
 ├── checkpoints/         # Package: Gestión de Checkpoints
@@ -568,6 +569,87 @@ curl -X GET \
 - **Eventos Asignados**: Los eventos se obtienen desde `eventStaffRelations` del usuario. Solo se incluyen los checkpoints cuyo ID esté en el array `checkpointIds` de cada relación.
 - **Campos Opcionales**: Los campos `avatarUrl`, `deletedAt`, y `disableAt` pueden ser `null` si no están definidos en el documento.
 - **Compatibilidad**: La respuesta JSON es compatible con `UserProfile.fromMap()` o `UserProfile.fromJson()` en Flutter.
+
+### 5. `create_user`
+
+Crea un nuevo documento de usuario en la colección `users`. Recibe un cuerpo JSON con estructura **UserDocument** (personalData, emergencyContact, userData, eventStaffRelations, authUserId, createdAt, updatedAt, isActive); **todos los campos son opcionales**. Requiere Bearer token. Firestore genera el ID del documento.
+
+**Tipo**: HTTP Request (POST)  
+**Endpoint**: `https://create-user-....run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/users/create`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Tipo   | Requerido | Descripción                                             |
+| --------------- | ------ | --------- | ------------------------------------------------------- |
+| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth (solo para autenticación) |
+| `Content-Type`  | string | **Sí**    | `application/json`                                     |
+
+#### Request Body (JSON, UserDocument, todos los campos opcionales)
+
+| Campo                 | Tipo    | Descripción                                                                 |
+| --------------------- | ------- | --------------------------------------------------------------------------- |
+| `personalData`        | object  | `{ fullName, email, phone }` (UserPersonalData)                             |
+| `emergencyContact`    | object  | `{ fullName, phone }` (UserEmergencyContact)                               |
+| `userData`            | object  | `{ username }` (UserData)                                                   |
+| `eventStaffRelations` | array   | Relaciones usuario-evento (ver estructura abajo)                             |
+| `authUserId`          | string  | ID de autenticación Firebase                                                |
+| `avatarUrl`           | string \| null | URL del avatar del usuario                                           |
+| `createdAt`           | string  | Fecha de creación (ISO 8601)                                                 |
+| `updatedAt`           | string  | Fecha de última actualización (ISO 8601)                                     |
+| `isActive`            | boolean | Indica si el usuario está activo                                             |
+
+**Estructura de `eventStaffRelations` (cada elemento, UserEventStaffRelation):**  
+`eventId`, `role` (organizador | staff), `assignedAt` (ISO 8601), `checkpointIds` (array de strings).
+
+#### Comandos cURL
+
+**Crear usuario (campos opcionales):**
+
+```bash
+curl -X POST \
+  'https://system-track-monitor.web.app/api/users/create' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -d '{"personalData":{"fullName":"Usuario1","email":"user1@gmail.com"},"userData":{"username":"user1@gmail.com"}}'
+```
+
+**Probar error 400 (body inválido o faltante):**
+
+```bash
+curl -X POST \
+  'https://system-track-monitor.web.app/api/users/create' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+**Probar error 401 (sin token):**
+
+```bash
+curl -X POST \
+  'https://system-track-monitor.web.app/api/users/create' \
+  -H 'Content-Type: application/json' \
+  -d '{"personalData":{"fullName":"Test"}}' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+#### Respuestas
+
+**201 Created** - JSON con el id del nuevo documento: `{"id": "<document_id>"}`.
+
+**400 Bad Request** - Sin cuerpo. Body no es un JSON válido o falta.
+
+**401 Unauthorized** - Sin cuerpo. Token Bearer inválido, expirado o faltante.
+
+**500 Internal Server Error** - Sin cuerpo. Error del servidor al crear en Firestore.
+
+#### Notas
+
+- Solo se guardan las claves permitidas; el resto del body se ignora.
+- Body vacío `{}` es válido: crea un documento sin campos adicionales.
 
 ---
 
@@ -2242,6 +2324,7 @@ Las siguientes funciones pueden ser públicas y no requieren autenticación:
 Las siguientes funciones requieren autenticación Bearer token:
 
 - `user_profile` - Obtiene perfil de usuario (requiere token para identificar usuario)
+- `create_user` - Crea usuario en colección users (requiere Bearer token)
 - `day_of_race_active` - Obtiene día de carrera activo (requiere token para autenticación)
 - `checkpoint` - Obtiene checkpoint específico (requiere token para autenticación)
 - `competitor_tracking` - Obtiene tracking de competidores filtrado por checkpoint (requiere token para autenticación)
@@ -2334,6 +2417,9 @@ firebase deploy --only functions:event_categories
 
 # Desplegar solo user_profile
 firebase deploy --only functions:user_profile
+
+# Desplegar solo create_user
+firebase deploy --only functions:create_user
 
 # Desplegar solo day_of_race_active
 firebase deploy --only functions:day_of_race_active
@@ -2432,6 +2518,7 @@ firebase emulators:start --only functions,hosting
    http://localhost:5050/api/events/detail
    http://localhost:5050/api/event/event-categories/EVENT_ID
    http://localhost:5050/api/users/profile
+   http://localhost:5050/api/users/create
    http://localhost:5050/api/tracking/track-event-checkpoint
    http://localhost:5050/api/tracking/track-competitors
    http://localhost:5050/api/tracking/track-competitors-off
@@ -2447,6 +2534,7 @@ firebase emulators:start --only functions,hosting
    http://localhost:5001/system-track-monitor/us-central1/track_competitors
    http://localhost:5001/system-track-monitor/us-central1/track_competitors_off
    http://localhost:5001/system-track-monitor/us-central1/track_competitor_position
+   http://localhost:5001/system-track-monitor/us-central1/create_user
    ```
    (Para POST a competitor-position usar el mismo host con body JSON.)
    Sustituye `system-track-monitor` por tu Project ID si es distinto. Todas las funciones HTTP tienen su path en `/api/...` (ver rewrites en [firebase.json](firebase.json)).
@@ -2463,7 +2551,7 @@ Si solo ejecutas `firebase emulators:start --only functions` (sin hosting), solo
 
 3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, excepto `competitor_tracking`, `update_competitor_status` y `change_competitor_status` que retornan JSON con `success: false` en caso de error. Las funciones de tracking retornan objetos JSON con información del error.
 
-4. **Autenticación**: Las funciones `user_profile`, `event_categories`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
+4. **Autenticación**: Las funciones `user_profile`, `create_user`, `event_categories`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
 
 5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
 

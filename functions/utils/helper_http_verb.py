@@ -2,23 +2,29 @@ from typing import List, Optional
 from firebase_functions import https_fn
 
 
-def handle_cors_preflight(req: https_fn.Request) -> Optional[https_fn.Response]:
+def handle_cors_preflight(
+    req: https_fn.Request,
+    allowed_methods: Optional[List[str]] = None,
+) -> Optional[https_fn.Response]:
     """
-    Maneja la petición CORS preflight (OPTIONS)
+    Maneja la petición CORS preflight (OPTIONS).
 
     Args:
         req: Request HTTP de Firebase Functions
+        allowed_methods: Métodos que acepta el endpoint (ej: ["GET"], ["POST"]).
+                        Se incluyen en Access-Control-Allow-Methods junto con OPTIONS.
 
     Returns:
         Response con headers CORS si es OPTIONS, None si no es OPTIONS
     """
     if req.method == "OPTIONS":
+        methods = ", ".join((allowed_methods or ["GET"]) + ["OPTIONS"])
         return https_fn.Response(
             "",
             status=204,
             headers={
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Methods": methods,
                 "Access-Control-Allow-Headers": "Content-Type, Authorization",
                 "Access-Control-Max-Age": "3600",
             },
@@ -97,8 +103,8 @@ def validate_request(
     Returns:
         Response si hay que retornar algo (CORS o error de método), None si todo está bien
     """
-    # Primero manejar CORS preflight
-    cors_response = handle_cors_preflight(req)
+    # Primero manejar CORS preflight (incluye los métodos permitidos en la respuesta)
+    cors_response = handle_cors_preflight(req, allowed_methods)
     if cors_response is not None:
         return cors_response
 

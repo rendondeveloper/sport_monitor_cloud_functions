@@ -77,6 +77,16 @@
         "region": "us-central1"
       },
       {
+        "source": "/api/users/create",
+        "function": "create_user",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/create/**",
+        "function": "create_user",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/competitors/competitor-route/**",
         "function": "competitor_route",
         "region": "us-central1"
