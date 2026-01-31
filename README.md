@@ -34,6 +34,7 @@ functions/
 │   ├── change_competitor_status.py # change_competitor_status
 │   └── days_of_race.py             # days_of_race
 ├── tracking/           # Package: Tracking de Competidores
+│   ├── track_competitor_position.py # track_competitor_position
 │   ├── tracking_checkpoint.py     # track_event_checkpoint
 │   └── tracking_competitors.py     # track_competitors, track_competitors_off
 ├── models/             # Modelos de datos
@@ -2162,6 +2163,69 @@ curl -X POST \
 
 ---
 
+### 12. `track_competitor_position` (SPRTMNTRPP-75)
+
+Recibe posición y datos del competidor en tiempo real (coordenadas, velocidad, tipo, timestamp) y los guarda en **Realtime Database** en la ruta `sport_monitor/tracking/{eventId}/{dayId}/{competitorId}/` con `current` e `historial`. **API pública**: no requiere Bearer token.
+
+**Tipo**: HTTP Request (POST)  
+**Endpoint**: `https://track-competitor-position-....run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/tracking/competitor-position?eventId=...&dayId=...&competitorId=...`
+
+**Nota**: Esta función es pública y no requiere autenticación.
+
+#### Parámetros (Query Parameters)
+
+| Parámetro     | Tipo   | Requerido | Descripción                          |
+| ------------- | ------ | --------- | ------------------------------------ |
+| `eventId`     | string | **Sí**    | UUID del evento                      |
+| `dayId`       | string | **Sí**    | UUID del día de carrera              |
+| `competitorId`| string | **Sí**    | UUID del competidor                  |
+
+#### Request Body (JSON)
+
+| Campo          | Tipo   | Requerido | Descripción                                    |
+| -------------- | ------ | --------- | ---------------------------------------------- |
+| `coordinates`  | object | **Sí**    | `latitude` (number), `longitude` (number)       |
+| `data`         | object | **Sí**    | `speed` (string), `type` (string)             |
+| `timeStamp`    | string | **Sí**    | Fecha/hora captura (ej. "DD/MM/YYYY HH:mm:ss")|
+
+Ejemplo:
+
+```json
+{
+  "coordinates": { "latitude": 19.0, "longitude": 18.0 },
+  "data": { "speed": "45", "type": "Millas/km" },
+  "timeStamp": "12/12/2026 00:10:10"
+}
+```
+
+#### Comportamiento
+
+- Los datos se escriben en **Realtime Database** en la ruta `sport_monitor/tracking/{eventId}/{dayId}/{competitorId}/`. **Si la ruta no existe, se crea** al escribir (`update`).
+- Se actualizan `current` (posición actual: uuid, latitude, longitude) e `historial` (lista de entradas con coordinates, data, timeStamp). La función genera un `uuid` (timestamp) y lo asigna a `current` y a la nueva entrada de `historial`. El historial tiene un límite de 2000 entradas.
+- **Requisito**: El proyecto debe tener Realtime Database habilitado. En producción/config, define la variable de entorno `FIREBASE_DATABASE_URL` (ej. `https://PROJECT_ID-default-rtdb.firebaseio.com`) para que la función pueda conectar; en Cloud Functions se puede configurar en la consola o en el deploy.
+
+#### Respuestas
+
+- **200 OK**: Sin body; la operación se realizó correctamente.
+- **400 Bad Request**: Parámetros o body inválidos (sin cuerpo).
+- **500 Internal Server Error**: Error interno (sin cuerpo).
+
+#### Comando cURL
+
+```bash
+curl -X POST \
+  'https://system-track-monitor.web.app/api/tracking/competitor-position?eventId=EVENT_ID&dayId=DAY_ID&competitorId=COMPETITOR_ID' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "coordinates": { "latitude": 19.0, "longitude": 18.0 },
+    "data": { "speed": "45", "type": "Millas/km" },
+    "timeStamp": "12/12/2026 00:10:10"
+  }'
+```
+
+---
+
 ## 🔐 Autenticación
 
 ### Funciones Públicas (sin autenticación)
@@ -2170,6 +2234,8 @@ Las siguientes funciones pueden ser públicas y no requieren autenticación:
 
 - `events` - Solo lectura de datos públicos
 - `event_detail` - Solo lectura de datos públicos
+- `competitor_route` - Obtiene competidor y ruta asignada
+- `track_competitor_position` - Registra posición y datos del competidor en tiempo real
 
 ### Funciones que Requieren Autenticación
 
@@ -2290,8 +2356,11 @@ firebase deploy --only functions:change_competitor_status
 # Desplegar solo days_of_race
 firebase deploy --only functions:days_of_race
 
+# Desplegar solo track_competitor_position
+firebase deploy --only functions:track_competitor_position
+
 # Desplegar funciones de tracking
-firebase deploy --only functions:track_event_checkpoint,functions:track_competitors,functions:track_competitors_off
+firebase deploy --only functions:track_event_checkpoint,functions:track_competitors,functions:track_competitors_off,functions:track_competitor_position
 ```
 
 ---
@@ -2366,6 +2435,7 @@ firebase emulators:start --only functions,hosting
    http://localhost:5050/api/tracking/track-event-checkpoint
    http://localhost:5050/api/tracking/track-competitors
    http://localhost:5050/api/tracking/track-competitors-off
+   http://localhost:5050/api/tracking/competitor-position
    ```
 
 2. **Por URL directa de la función** (sin pasar por hosting):
@@ -2376,7 +2446,9 @@ firebase emulators:start --only functions,hosting
    http://localhost:5001/system-track-monitor/us-central1/track_event_checkpoint
    http://localhost:5001/system-track-monitor/us-central1/track_competitors
    http://localhost:5001/system-track-monitor/us-central1/track_competitors_off
+   http://localhost:5001/system-track-monitor/us-central1/track_competitor_position
    ```
+   (Para POST a competitor-position usar el mismo host con body JSON.)
    Sustituye `system-track-monitor` por tu Project ID si es distinto. Todas las funciones HTTP tienen su path en `/api/...` (ver rewrites en [firebase.json](firebase.json)).
 
 Si solo ejecutas `firebase emulators:start --only functions` (sin hosting), solo funcionará la URL directa en el puerto 5001; el path `/api/...` no estará disponible. Si el puerto 5050 también estuviera ocupado, puedes cambiarlo en `firebase.json` bajo `emulators.hosting.port`.

@@ -14,10 +14,12 @@ from checkpoints import (
 
 # Importar funciones de events
 from events import event_categories, event_detail, events
+import os
 from firebase_admin import initialize_app
 from firebase_functions.options import set_global_options
 
 # Importar funciones de tracking
+from tracking.track_competitor_position import track_competitor_position
 from tracking.tracking_checkpoint import track_event_checkpoint
 from tracking.tracking_competitors import track_competitors, track_competitors_off
 
@@ -32,7 +34,12 @@ from users import user_profile
 set_global_options(max_instances=10)
 
 # Initialize Firebase Admin
-initialize_app()
+# Realtime Database (track_competitor_position) requiere databaseURL.
+# Opcional: setear FIREBASE_DATABASE_URL, ej. https://PROJECT_ID-default-rtdb.firebaseio.com
+_options = {}
+if os.environ.get("FIREBASE_DATABASE_URL"):
+    _options["databaseURL"] = os.environ["FIREBASE_DATABASE_URL"]
+initialize_app(options=_options if _options else None)
 
 # Las funciones están definidas en sus respectivos módulos:
 # - track_event_checkpoint: tracking/tracking_checkpoint.py
@@ -50,3 +57,4 @@ initialize_app()
 # - change_competitor_status: checkpoints/change_competitor_status.py
 # - update_competitor_status: checkpoints/update_competitor_status.py
 # - competitor_route: competitors/competitor_route.py
+# - track_competitor_position: tracking/track_competitor_position.py

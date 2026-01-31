@@ -95,6 +95,11 @@
         "source": "/api/tracking/track-competitors-off",
         "function": "track_competitors_off",
         "region": "us-central1"
+      },
+      {
+        "source": "/api/tracking/competitor-position",
+        "function": "track_competitor_position",
+        "region": "us-central1"
       }
     ],
     "headers": [
