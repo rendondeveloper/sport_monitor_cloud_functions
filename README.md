@@ -24,6 +24,8 @@ functions/
 ├── users/               # Package: Gestión de Usuarios
 │   ├── user_create.py               # create_user
 │   └── user_profile.py              # user_profile
+├── vehicles/            # Package: Vehículos de usuarios/competidores
+│   └── get_vehicles.py            # get_vehicles
 ├── competitors/         # Package: Competidores y rutas
 │   └── competitor_route.py        # competitor_route
 ├── checkpoints/         # Package: Gestión de Checkpoints
@@ -650,6 +652,90 @@ curl -X POST \
 
 - Solo se guardan las claves permitidas; el resto del body se ignora.
 - Body vacío `{}` es válido: crea un documento sin campos adicionales.
+
+---
+
+## 📦 Package: Vehicles
+
+Funciones para obtener y gestionar vehículos de usuarios/competidores (subcolección `users/{userId}/vehicles`).
+
+### 1. `get_vehicles` (SPRTMNTRPP-70)
+
+Obtiene todos los vehículos de un usuario desde Firestore. Retorna un array directo de vehículos (sin wrappers). Requiere Bearer token.
+
+**Tipo**: HTTP Request (GET)  
+**Endpoint**: `https://get-vehicles-....run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/vehicles?userId={userId}`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Tipo   | Requerido | Descripción                             |
+| --------------- | ------ | --------- | --------------------------------------- |
+| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth           |
+
+#### Parámetros (Query Parameters)
+
+| Parámetro | Tipo   | Requerido | Descripción                                        |
+| --------- | ------ | --------- | -------------------------------------------------- |
+| `userId`  | string | **Sí**    | UUID del usuario (ID del documento en `users`)     |
+
+#### Campos retornados (cada elemento del array)
+
+| Campo      | Tipo   | Descripción                    |
+| ---------- | ------ | ------------------------------ |
+| `id`       | string | ID del documento del vehículo |
+| `branch`   | string | Marca                          |
+| `year`     | number | Año                            |
+| `model`    | string | Modelo                         |
+| `color`    | string | Color                          |
+| `createdAt`| string | Fecha de creación (ISO 8601)   |
+| `updatedAt`| string | Fecha de actualización (ISO 8601) |
+
+#### Comandos cURL
+
+**Obtener vehículos de un usuario:**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/vehicles?userId=UUID_DEL_USUARIO' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Probar error 400 (userId faltante):**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/vehicles' \
+  -H 'Authorization: Bearer TU_TOKEN' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+**Probar error 401 (sin token):**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/vehicles?userId=UUID' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+#### Respuestas
+
+**200 OK** - Array directo de vehículos: `[{id, branch, year, model, color, createdAt, updatedAt}, ...]`. Si no hay vehículos: `[]`.
+
+**400 Bad Request** - Sin cuerpo. `userId` faltante o vacío.
+
+**401 Unauthorized** - Sin cuerpo. Token inválido o faltante.
+
+**404 Not Found** - Sin cuerpo. Usuario no encontrado (no existe el documento `users/{userId}`).
+
+**500 Internal Server Error** - Sin cuerpo. Error del servidor.
+
+#### Notas
+
+- Ruta en Firestore: `users/{userId}/vehicles`.
+- Usa constantes `FirestoreCollections.USERS` y `FirestoreCollections.USER_VEHICLES`.
 
 ---
 
@@ -2325,6 +2411,7 @@ Las siguientes funciones requieren autenticación Bearer token:
 
 - `user_profile` - Obtiene perfil de usuario (requiere token para identificar usuario)
 - `create_user` - Crea usuario en colección users (requiere Bearer token)
+- `get_vehicles` - Obtiene vehículos de un usuario (requiere Bearer token)
 - `day_of_race_active` - Obtiene día de carrera activo (requiere token para autenticación)
 - `checkpoint` - Obtiene checkpoint específico (requiere token para autenticación)
 - `competitor_tracking` - Obtiene tracking de competidores filtrado por checkpoint (requiere token para autenticación)
@@ -2420,6 +2507,9 @@ firebase deploy --only functions:user_profile
 
 # Desplegar solo create_user
 firebase deploy --only functions:create_user
+
+# Desplegar solo get_vehicles
+firebase deploy --only functions:get_vehicles
 
 # Desplegar solo day_of_race_active
 firebase deploy --only functions:day_of_race_active
@@ -2519,6 +2609,7 @@ firebase emulators:start --only functions,hosting
    http://localhost:5050/api/event/event-categories/EVENT_ID
    http://localhost:5050/api/users/profile
    http://localhost:5050/api/users/create
+   http://localhost:5050/api/vehicles?userId=UUID
    http://localhost:5050/api/tracking/track-event-checkpoint
    http://localhost:5050/api/tracking/track-competitors
    http://localhost:5050/api/tracking/track-competitors-off
@@ -2535,6 +2626,7 @@ firebase emulators:start --only functions,hosting
    http://localhost:5001/system-track-monitor/us-central1/track_competitors_off
    http://localhost:5001/system-track-monitor/us-central1/track_competitor_position
    http://localhost:5001/system-track-monitor/us-central1/create_user
+   http://localhost:5001/system-track-monitor/us-central1/get_vehicles?userId=UUID
    ```
    (Para POST a competitor-position usar el mismo host con body JSON.)
    Sustituye `system-track-monitor` por tu Project ID si es distinto. Todas las funciones HTTP tienen su path en `/api/...` (ver rewrites en [firebase.json](firebase.json)).
@@ -2551,7 +2643,7 @@ Si solo ejecutas `firebase emulators:start --only functions` (sin hosting), solo
 
 3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, excepto `competitor_tracking`, `update_competitor_status` y `change_competitor_status` que retornan JSON con `success: false` en caso de error. Las funciones de tracking retornan objetos JSON con información del error.
 
-4. **Autenticación**: Las funciones `user_profile`, `create_user`, `event_categories`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
+4. **Autenticación**: Las funciones `user_profile`, `create_user`, `get_vehicles`, `event_categories`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
 
 5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
 

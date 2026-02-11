@@ -87,6 +87,16 @@
         "region": "us-central1"
       },
       {
+        "source": "/api/vehicles",
+        "function": "get_vehicles",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/vehicles/**",
+        "function": "get_vehicles",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/competitors/competitor-route/**",
         "function": "competitor_route",
         "region": "us-central1"
