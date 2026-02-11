@@ -737,6 +737,51 @@ curl -X GET \
 - Ruta en Firestore: `users/{userId}/vehicles`.
 - Usa constantes `FirestoreCollections.USERS` y `FirestoreCollections.USER_VEHICLES`.
 
+### 2. Crear vehículo – POST `/api/vehicles` (SPRTMNTRPP-71)
+
+Crea un vehículo para un usuario. Mismo path que GET; método **POST**. Requiere Bearer token, `userId`, `authUserId` y body con `branch`, `year`, `model`, `color`. El usuario debe existir y su campo `authUserId` debe coincidir con el enviado.
+
+**Tipo**: HTTP Request (POST)  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/vehicles?userId={userId}&authUserId={authUserId}`
+
+#### Query Parameters
+
+| Parámetro    | Tipo   | Requerido | Descripción                                      |
+| ------------ | ------ | --------- | ------------------------------------------------ |
+| `userId`     | string | **Sí**    | UUID del usuario (documento en `users`)          |
+| `authUserId` | string | **Sí**    | UUID de autenticación del usuario (debe coincidir con el del documento) |
+
+#### Request Body (JSON)
+
+| Campo   | Tipo   | Requerido | Descripción        |
+| ------- | ------ | --------- | ------------------ |
+| `branch`| string | **Sí**    | Marca              |
+| `year`  | number | **Sí**    | Año (entero 1900-2100) |
+| `model` | string | **Sí**    | Modelo             |
+| `color` | string | **Sí**    | Color              |
+
+#### Ejemplo cURL
+
+```bash
+curl -X POST \
+  'https://system-track-monitor.web.app/api/vehicles?userId=UUID_USUARIO&authUserId=AUTH_UID' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN' \
+  -d '{"branch":"Toyota","year":2024,"model":"Corolla","color":"Blanco"}'
+```
+
+#### Respuestas
+
+**201 Created** – Objeto del vehículo creado: `{id, branch, year, model, color, createdAt, updatedAt}` (sin wrapper).
+
+**400** – Parámetros o body inválidos (userId/authUserId faltantes, body mal formado, year no entero).
+
+**401** – Token inválido o faltante.
+
+**404** – Usuario no encontrado o `authUserId` no coincide con el documento.
+
+**500** – Error interno.
+
 ---
 
 ## 📦 Package: Competitors

@@ -53,26 +53,24 @@ def _build_vehicle_dict(doc) -> Dict[str, Any]:
 @https_fn.on_request()
 def get_vehicles(req: https_fn.Request) -> https_fn.Response:
     """
-    Obtiene todos los vehículos de un usuario desde Firestore.
+    GET: Obtiene todos los vehículos de un usuario.
+    POST: Crea un vehículo (delega a create_vehicle_handler). Mismo path /api/vehicles.
 
     Headers:
     - Authorization: Bearer {Firebase Auth Token} (requerido)
 
-    Query Parameters:
-    - userId: UUID del usuario (ID del documento en users) (requerido)
-
-    Returns:
-    - 200: Array directo de vehículos [{id, branch, year, model, color, createdAt, updatedAt}, ...]
-    - 400: userId faltante o vacío
-    - 401: Token inválido o faltante
-    - 404: Usuario no encontrado
-    - 500: Internal Server Error
+    GET Query: userId (requerido).
+    POST Query: userId, authUserId (requeridos). Body: { branch, year, model, color }.
     """
     validation_response = validate_request(
-        req, ["GET"], "get_vehicles", return_json_error=False
+        req, ["GET", "POST"], "get_vehicles", return_json_error=False
     )
     if validation_response is not None:
         return validation_response
+
+    if req.method == "POST":
+        from vehicles.create_vehicle import create_vehicle_handler
+        return create_vehicle_handler(req)
 
     try:
         if not verify_bearer_token(req, "get_vehicles"):
