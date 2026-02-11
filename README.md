@@ -782,6 +782,46 @@ curl -X POST \
 
 **500** – Error interno.
 
+### 3. Actualizar vehículo – PUT `/api/vehicles/{vehicleId}` (SPRTMNTRPP-72)
+
+Actualiza un vehículo existente. Requiere Bearer token, `userId`, `authUserId` (query) y body con `branch`, `year`, `model`, `color`. No modifica `createdAt`.
+
+**Tipo**: HTTP Request (PUT)  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/vehicles/{vehicleId}?userId={userId}&authUserId={authUserId}`
+
+#### Path y Query
+
+| Dónde   | Parámetro    | Tipo   | Requerido | Descripción                                      |
+| ------- | ------------ | ------ | --------- | ------------------------------------------------ |
+| Path    | `vehicleId`  | string | **Sí**    | UUID del vehículo (documento en `users/{userId}/vehicles`) |
+| Query   | `userId`     | string | **Sí**    | UUID del usuario                                 |
+| Query   | `authUserId` | string | **Sí**    | UUID de autenticación (debe coincidir con el del usuario) |
+
+#### Request Body (JSON)
+
+| Campo   | Tipo   | Requerido | Descripción        |
+| ------- | ------ | --------- | ------------------ |
+| `branch`| string | **Sí**    | Marca              |
+| `year`  | number | **Sí**    | Año (1900-2100)    |
+| `model` | string | **Sí**    | Modelo             |
+| `color` | string | **Sí**    | Color              |
+
+#### Ejemplo cURL
+
+```bash
+curl -X PUT \
+  'https://system-track-monitor.web.app/api/vehicles/VEHICLE_ID?userId=USER_ID&authUserId=AUTH_UID' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN' \
+  -d '{"branch":"Toyota","year":2025,"model":"Corolla","color":"Negro"}'
+```
+
+#### Respuestas
+
+**200 OK** – Vehículo actualizado: `{id, branch, year, model, color, createdAt, updatedAt}` (sin wrapper).
+
+**400** – Parámetros o body inválidos. **401** – Token inválido o faltante. **404** – Usuario no encontrado, authUserId no coincide o vehículo no existe. **500** – Error interno.
+
 ---
 
 ## 📦 Package: Competitors
@@ -2457,6 +2497,7 @@ Las siguientes funciones requieren autenticación Bearer token:
 - `user_profile` - Obtiene perfil de usuario (requiere token para identificar usuario)
 - `create_user` - Crea usuario en colección users (requiere Bearer token)
 - `get_vehicles` - Obtiene vehículos de un usuario (requiere Bearer token)
+- `update_vehicle` - Actualiza vehículo (requiere Bearer token)
 - `day_of_race_active` - Obtiene día de carrera activo (requiere token para autenticación)
 - `checkpoint` - Obtiene checkpoint específico (requiere token para autenticación)
 - `competitor_tracking` - Obtiene tracking de competidores filtrado por checkpoint (requiere token para autenticación)
@@ -2555,6 +2596,9 @@ firebase deploy --only functions:create_user
 
 # Desplegar solo get_vehicles
 firebase deploy --only functions:get_vehicles
+
+# Desplegar solo update_vehicle
+firebase deploy --only functions:update_vehicle
 
 # Desplegar solo day_of_race_active
 firebase deploy --only functions:day_of_race_active
@@ -2688,7 +2732,7 @@ Si solo ejecutas `firebase emulators:start --only functions` (sin hosting), solo
 
 3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, excepto `competitor_tracking`, `update_competitor_status` y `change_competitor_status` que retornan JSON con `success: false` en caso de error. Las funciones de tracking retornan objetos JSON con información del error.
 
-4. **Autenticación**: Las funciones `user_profile`, `create_user`, `get_vehicles`, `event_categories`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
+4. **Autenticación**: Las funciones `user_profile`, `create_user`, `get_vehicles`, `update_vehicle`, `event_categories`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
 
 5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
 

@@ -27,7 +27,7 @@ from tracking.tracking_competitors import track_competitors, track_competitors_o
 from users import user_profile, create_user
 
 # Importar funciones de vehicles
-from vehicles import get_vehicles
+from vehicles import get_vehicles, update_vehicle
 
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
@@ -63,3 +63,4 @@ initialize_app(options=_options if _options else None)
 # - competitor_route: competitors/competitor_route.py
 # - track_competitor_position: tracking/track_competitor_position.py
 # - get_vehicles: vehicles/get_vehicles.py
+# - update_vehicle: vehicles/update_vehicle.py

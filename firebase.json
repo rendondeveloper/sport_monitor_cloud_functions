@@ -93,7 +93,7 @@
       },
       {
         "source": "/api/vehicles/**",
-        "function": "get_vehicles",
+        "function": "update_vehicle",
         "region": "us-central1"
       },
       {
