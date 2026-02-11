@@ -17,13 +17,14 @@ def user_profile(req: https_fn.Request) -> https_fn.Response:
     Headers:
     - Authorization: Bearer {Firebase Auth Token} (requerido)
 
-    Query Parameters:
-    - userId: authUserId del usuario (ID de autenticación de Firebase) (requerido)
-             NOTA: Este parámetro se llama "userId" pero es el authUserId, no el ID del documento
+    Query Parameters (uno de los dos requerido):
+    - userId: authUserId del usuario (ID de autenticación de Firebase)
+    - documentId: ID del documento en la colección users (Firestore)
+             Si se envía documentId, se busca por ID de documento. Si se envía userId, se busca por authUserId.
 
     Returns:
     - 200: Objeto UserProfile completo en formato JSON (mapeando TODOS los campos)
-    - 400: Bad Request (sin respuesta JSON, solo código HTTP) - authUserId faltante
+    - 400: Bad Request (sin respuesta JSON, solo código HTTP) - userId y documentId faltantes o vacíos
     - 401: Unauthorized (sin respuesta JSON, solo código HTTP) - token inválido o faltante
     - 404: Not Found (sin respuesta JSON, solo código HTTP) - usuario no encontrado
     - 500: Internal Server Error (sin respuesta JSON, solo código HTTP)
@@ -47,12 +48,13 @@ def user_profile(req: https_fn.Request) -> https_fn.Response:
                 headers={"Access-Control-Allow-Origin": "*"},
             )
 
-        # Obtener authUserId de query parameters (el parámetro se llama userId pero es el authUserId)
-        auth_user_id = req.args.get("userId")
+        # Obtener userId (authUserId) o documentId de query parameters
+        auth_user_id = (req.args.get("userId") or "").strip()
+        document_id = (req.args.get("documentId") or "").strip()
 
-        # Validar que authUserId esté presente
-        if not auth_user_id or auth_user_id.strip() == "":
-            logging.warning("user_profile: authUserId faltante o vacío")
+        # Validar que al menos uno esté presente
+        if not auth_user_id and not document_id:
+            logging.warning("user_profile: userId o documentId faltante o vacío")
             return https_fn.Response(
                 "",
                 status=400,
@@ -61,33 +63,48 @@ def user_profile(req: https_fn.Request) -> https_fn.Response:
 
         # Inicializar Firestore
         db = firestore.client()
+        users_ref = db.collection(FirestoreCollections.USERS)
 
-        # Buscar usuario por authUserId usando query (no por ID del documento)
-        users_query = (
-            db.collection(FirestoreCollections.USERS)
-            .where("authUserId", "==", auth_user_id)
-            .limit(1)
-        )
-        query_snapshot = users_query.get()
+        user_doc = None
 
-        if not query_snapshot or len(query_snapshot) == 0:
+        # 1) Si se envía documentId, buscar por ID de documento
+        if document_id:
+            doc_ref = users_ref.document(document_id)
+            doc_snapshot = doc_ref.get()
+            if doc_snapshot.exists:
+                user_doc = doc_snapshot
+                logging.info(
+                    "user_profile: Usuario encontrado por documentId: %s", document_id
+                )
+
+        # 2) Si no se encontró por documentId (o no se envió), buscar por authUserId
+        if user_doc is None and auth_user_id:
+            users_query = (
+                users_ref.where("authUserId", "==", auth_user_id).limit(1)
+            )
+            query_snapshot = users_query.get()
+            if query_snapshot and len(query_snapshot) > 0:
+                user_doc = query_snapshot[0]
+                logging.info(
+                    "user_profile: Usuario encontrado por authUserId: %s", auth_user_id
+                )
+
+        if user_doc is None:
             logging.info(
-                "user_profile: Usuario no encontrado con authUserId: %s", auth_user_id
+                "user_profile: Usuario no encontrado (documentId=%s, userId=%s)",
+                document_id or "(no enviado)",
+                auth_user_id or "(no enviado)",
             )
             return https_fn.Response(
                 "",
                 status=404,
                 headers={"Access-Control-Allow-Origin": "*"},
             )
-
-        # Obtener el primer documento del resultado
-        user_doc = query_snapshot[0]
         user_data = user_doc.to_dict()
 
         if user_data is None:
             logging.warning(
-                "user_profile: Datos vacíos para usuario con authUserId %s (docId: %s)",
-                auth_user_id,
+                "user_profile: Datos vacíos para documento (docId: %s)",
                 user_doc.id,
             )
             return https_fn.Response(
