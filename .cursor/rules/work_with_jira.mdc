@@ -1,0 +1,124 @@
+---
+description: "work with jira - Pide ticket, busca por MCP o API, lee descripción y subtareas, define commits (1 por ticket o 1 por subtask)"
+alwaysApply: false
+---
+
+# Rule: Work with Jira
+
+**Activación manual**: El usuario escribe **"work with jira"** (o frase equivalente) para aplicar esta regla.
+
+## 1. Solicitar el ticket de Jira
+
+Al activar la regla:
+
+1. Preguntar al usuario: **"Indica la clave del ticket de Jira (ej: PROJ-123 o SPRTMNTRPP-74)."**
+2. Esperar la respuesta con la clave (issue key). No continuar hasta tenerla.
+3. Validar formato razonable (proyecto-número, ej. `XXX-123`).
+
+## 2. Conectar con Jira
+
+### 2.1 Intentar primero por MCP (Atlassian MCP Server)
+
+1. Comprobar si se puede conectar usando las herramientas MCP de Atlassian:
+   - **Opcional**: `mcp_Atlassian-MCP-Server_getAccessibleAtlassianResources` para verificar recursos.
+   - **Obligatorio**: `mcp_Atlassian-MCP-Server_getJiraIssue` para obtener el issue.
+2. Parámetros típicos:
+   - `cloudId`: `"https://softwarecosta.atlassian.net"` (o el que devuelva getAccessibleAtlassianResources).
+   - `issueIdOrKey`: la clave proporcionada por el usuario (ej. `PROJ-123`).
+
+### 2.2 Si MCP no está disponible o falla
+
+1. Intentar conexión por **Jira REST API**:
+   - Base URL: `https://<tu-sitio>.atlassian.net/rest/api/3/issue/{issueIdOrKey}`
+   - Autenticación: Basic (email + API token) o Bearer, según configuración del proyecto.
+   - El usuario debe tener configurado (o proporcionar) token/credenciales para la API de Jira.
+2. Si no hay forma de conectar (ni MCP ni API), informar al usuario y pedir que configure MCP o variables de entorno para la API (ej. `JIRA_API_TOKEN`, `JIRA_EMAIL`, `JIRA_DOMAIN`).
+
+## 3. Leer todo el contexto del ticket
+
+Una vez obtenido el issue (por MCP o API):
+
+1. **Descripción**: Leer por completo el campo `description` (o equivalente). Incluir en el contexto:
+   - Objetivo, requisitos técnicos, criterios de aceptación, dependencias, notas.
+2. **Título / Summary**: Incluir la clave y el título (summary) del ticket.
+3. **Estado y prioridad**: Incluir si es útil para priorizar (status, priority).
+4. **Comentarios** (si existen y están disponibles): Revisar comentarios recientes para aclaraciones.
+
+Todo este contenido es el **contexto del ticket** para implementar y para los mensajes de commit.
+
+## 4. Validar si hay subtareas (subtasks)
+
+1. En la respuesta del issue, comprobar si existe el campo de **subtasks** (por ejemplo `fields.subtasks` en Jira API o el equivalente en MCP).
+2. Si hay subtareas:
+   - Listar cada subtarea: clave, título (summary), estado.
+   - Para cada una, opcionalmente obtener el detalle con `getJiraIssue` (subtask key) si hace falta más contexto.
+3. Si **no** hay subtareas: el ticket se trata como una sola unidad de trabajo.
+
+## 5. Preguntar cómo trabajar (cuando hay contexto y subtareas)
+
+- **Si el ticket NO tiene subtareas**:
+  - No hace falta preguntar: se trabaja en un solo flujo y **un solo commit** (ver sección 6).
+
+- **Si el ticket SÍ tiene subtareas**:
+  - Mostrar al usuario:
+    - Resumen del ticket (clave, título, descripción breve).
+    - Lista de subtareas (clave y título de cada una).
+  - Preguntar explícitamente:
+    - *"Hay N subtareas. ¿Cómo quieres trabajar?"*
+    - Opciones:
+      - **Por subtarea**: un commit por cada subtarea (recomendado para trazabilidad).
+      - **Todo junto**: un solo commit para el ticket (agrupando el trabajo de todas las subtareas).
+  - Esperar la decisión del usuario antes de definir la estrategia de commits.
+
+## 6. Estrategia de commits según la especificación
+
+### 6.1 Ticket SIN subtareas
+
+- **Un solo commit** para todo el trabajo del ticket.
+- El mensaje del commit debe:
+  - Incluir la clave del ticket (ej. al inicio o entre corchetes).
+  - Reflejar el contexto del ticket: objetivo/cambio principal.
+- Formato sugerido: `{CLAVE}: descripción breve del cambio` o `[{CLAVE}] descripción breve`.
+
+Ejemplo:  
+`SPRTMNTRPP-74: Add competitor route Cloud Function and Firestore query`
+
+### 6.2 Ticket CON subtareas (y usuario eligió “por subtarea”)
+
+- **Un commit por cada subtarea**.
+- Para cada subtarea:
+  1. Trabajar solo en lo que corresponde a esa subtarea (descripción/criterios de esa subtarea).
+  2. Al terminar esa parte, hacer **un commit** con:
+     - Clave de la **subtarea** (no solo la del padre).
+     - Descripción breve basada en el título/contexto de esa subtarea.
+- Formato sugerido por commit: `{SUBTASK_KEY}: descripción de la subtarea`.
+
+Ejemplo con subtareas PROJ-100, PROJ-101, PROJ-102:
+- Commit 1: `PROJ-100: Backend - Create get vehicles endpoint`
+- Commit 2: `PROJ-101: Backend - Add vehicle validation`
+- Commit 3: `PROJ-102: Update README with vehicle API docs`
+
+### 6.3 Ticket CON subtareas (y usuario eligió “todo junto”)
+
+- **Un solo commit** para todo el trabajo del ticket (padre).
+- Incluir en el mensaje la clave del **ticket padre** y una descripción que resuma el conjunto.
+- Formato sugerido: `{PARENT_KEY}: descripción que resume todas las subtareas`.
+
+## 7. Resumen de flujo
+
+1. Usuario escribe **"work with jira"**.
+2. Se pide la **clave del ticket** y se valida.
+3. Se intenta conexión por **MCP**; si falla, por **Jira API**.
+4. Se **lee todo el contexto** (descripción, título, comentarios si aplica).
+5. Se **comprueba si hay subtareas** y se listan.
+6. Si hay subtareas, se **pregunta** si trabajar por subtarea (1 commit por subtarea) o todo junto (1 commit).
+7. Se implementa y se hacen **commits** según lo elegido:
+   - Sin subtareas → 1 commit con clave y contexto del ticket.
+   - Con subtareas y “por subtarea” → 1 commit por cada subtarea con su clave y contexto.
+   - Con subtareas y “todo junto” → 1 commit del ticket padre.
+
+## 8. Notas técnicas
+
+- **Cloud ID**: Si se usa MCP y el cloudId es distinto en tu instancia, usar el que devuelva `getAccessibleAtlassianResources` o el configurado en el proyecto.
+- **Jira API**: Si se usa API, respetar rate limits y usar los campos estándar de Jira 3 (issue key, summary, description, subtasks).
+- Los mensajes de commit deben ser claros y permitir relacionar cada commit con un issue o subtask en Jira.

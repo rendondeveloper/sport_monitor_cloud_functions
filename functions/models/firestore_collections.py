@@ -11,6 +11,9 @@ class FirestoreCollections:
     USERS = "users"
     EVENT_TRACKING = "events_tracking"
 
+    # Colecciones de usuarios relacionados (subcolecciones bajo users)
+    USER_VEHICLES = "vehicles"
+
     # Colecciones de eventos relacionados
     EVENT_CHECKPOINTS = "checkpoints"
     DAY_OF_RACES = "day_of_races"
