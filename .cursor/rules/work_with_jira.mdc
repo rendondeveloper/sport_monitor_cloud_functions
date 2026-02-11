@@ -1,8 +1,7 @@
 ---
-description: "work with jira - Pide ticket, busca por MCP o API, lee descripción y subtareas, define commits (1 por ticket o 1 por subtask)"
+description: Work with jira
 alwaysApply: false
 ---
-
 # Rule: Work with Jira
 
 **Activación manual**: El usuario escribe **"work with jira"** (o frase equivalente) para aplicar esta regla.
@@ -70,7 +69,20 @@ Todo este contenido es el **contexto del ticket** para implementar y para los me
       - **Todo junto**: un solo commit para el ticket (agrupando el trabajo de todas las subtareas).
   - Esperar la decisión del usuario antes de definir la estrategia de commits.
 
+## 5.1 Mover la tarjeta a "En curso" al comenzar a trabajar
+
+**Antes de implementar** (o en cuanto se vaya a empezar a codificar):
+
+1. Mover el estado del ticket en Jira a **En curso** (In Progress).
+2. Si se usa **MCP**:
+   - Obtener las transiciones disponibles: `mcp_Atlassian-MCP-Server_getTransitionsForJiraIssue` (cloudId, issueIdOrKey).
+   - Identificar el `id` de la transición que lleva a "En curso" / "In Progress".
+   - Ejecutar: `mcp_Atlassian-MCP-Server_transitionJiraIssue` con `transition: {"id": "<id_de_en_curso>"}`.
+3. Si el ticket tiene **subtasks** y se trabaja por subtarea: al empezar cada subtarea, mover también esa subtarea a "En curso" con la misma lógica (getTransitionsForJiraIssue → transitionJiraIssue para la clave de la subtarea).
+
 ## 6. Estrategia de commits según la especificación
+
+**Importante**: Los commits **no se ejecutan en automático**. El agente prepara los cambios y sugiere el mensaje de commit; el usuario **revisa el código de forma manual** y hace el commit cuando lo considere correcto. No usar `git commit` automático.
 
 ### 6.1 Ticket SIN subtareas
 
@@ -112,13 +124,15 @@ Ejemplo con subtareas PROJ-100, PROJ-101, PROJ-102:
 4. Se **lee todo el contexto** (descripción, título, comentarios si aplica).
 5. Se **comprueba si hay subtareas** y se listan.
 6. Si hay subtareas, se **pregunta** si trabajar por subtarea (1 commit por subtarea) o todo junto (1 commit).
-7. Se implementa y se hacen **commits** según lo elegido:
-   - Sin subtareas → 1 commit con clave y contexto del ticket.
-   - Con subtareas y “por subtarea” → 1 commit por cada subtarea con su clave y contexto.
-   - Con subtareas y “todo junto” → 1 commit del ticket padre.
+7. **Al comenzar a trabajar**: mover la tarjeta (y cada subtarea si aplica) a **En curso** en Jira (getTransitionsForJiraIssue → transitionJiraIssue).
+8. Se implementa; los **commits no se hacen en automático**: el agente deja los cambios listos y propone el mensaje de commit; el usuario **revisa el código manualmente** y ejecuta el commit cuando quiera. Según lo elegido:
+   - Sin subtareas → proponer 1 mensaje de commit con clave y contexto del ticket.
+   - Con subtareas y “por subtarea” → proponer 1 mensaje por cada subtarea.
+   - Con subtareas y “todo junto” → proponer 1 mensaje del ticket padre.
 
 ## 8. Notas técnicas
 
 - **Cloud ID**: Si se usa MCP y el cloudId es distinto en tu instancia, usar el que devuelva `getAccessibleAtlassianResources` o el configurado en el proyecto.
 - **Jira API**: Si se usa API, respetar rate limits y usar los campos estándar de Jira 3 (issue key, summary, description, subtasks).
 - Los mensajes de commit deben ser claros y permitir relacionar cada commit con un issue o subtask en Jira.
+- **Revisión manual**: No ejecutar `git commit` ni `git push` de forma automática; el usuario revisa el código y hace commit/push manualmente.
