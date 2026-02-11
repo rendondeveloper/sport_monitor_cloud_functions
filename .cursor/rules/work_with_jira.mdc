@@ -27,11 +27,16 @@ Al activar la regla:
 
 ### 2.2 Si MCP no está disponible o falla
 
-1. Intentar conexión por **Jira REST API**:
-   - Base URL: `https://<tu-sitio>.atlassian.net/rest/api/3/issue/{issueIdOrKey}`
-   - Autenticación: Basic (email + API token) o Bearer, según configuración del proyecto.
-   - El usuario debe tener configurado (o proporcionar) token/credenciales para la API de Jira.
-2. Si no hay forma de conectar (ni MCP ni API), informar al usuario y pedir que configure MCP o variables de entorno para la API (ej. `JIRA_API_TOKEN`, `JIRA_EMAIL`, `JIRA_DOMAIN`).
+1. Usar **configuración local** (si existe): leer el archivo **`.jira_api_config.json`** en la raíz del proyecto (está en `.gitignore`, no se sube al repo). Contiene:
+   - `base_url`: sitio Jira (ej. `https://softwarecosta.atlassian.net`)
+   - `email`: email de Atlassian
+   - `api_token`: API token de Atlassian
+   - `cloud_id`, `default_project_key`: opcionales
+2. Conectar por **Jira REST API** usando esa config:
+   - **GET issue**: `GET {base_url}/rest/api/3/issue/{issueIdOrKey}`
+   - **Autenticación**: Basic con `email` + `api_token` (codificar en Base64: `base64.b64encode(f"{email}:{api_token}".encode()).decode()`).
+   - Header: `Authorization: Basic <base64>` y `Accept: application/json`.
+3. Si no existe `.jira_api_config.json`, copiar `.jira_api_config.json.example`, renombrar a `.jira_api_config.json` y rellenar con las credenciales. Si tampoco hay forma de conectar por API, informar al usuario.
 
 ## 3. Leer todo el contexto del ticket
 

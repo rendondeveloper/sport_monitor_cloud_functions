@@ -65,5 +65,8 @@ node_modules/
 # dotenv environment variables file
 .env
 
+# Jira API config (credenciales locales, no commitear)
+.jira_api_config.json
+
 # dataconnect generated files
 .dataconnect
