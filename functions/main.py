@@ -42,6 +42,9 @@ from users import user_profile, create_user
 # Importar funciones de vehicles
 from vehicles import delete_vehicle, get_vehicles, update_vehicle
 
+# Importar funciones de catalogs
+from catalogs import catalog_vehicle, catalog_year, catalog_color
+
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
 # traffic spikes by instead downgrading performance. This limit is a per-function
@@ -78,3 +81,6 @@ initialize_app(options=_options if _options else None)
 # - get_vehicles: vehicles/get_vehicles.py
 # - update_vehicle: vehicles/update_vehicle.py
 # - delete_vehicle: vehicles/delete_vehicle.py
+# - catalog_vehicle: catalogs/catalog_vehicle.py
+# - catalog_year: catalogs/catalog_year.py
+# - catalog_color: catalogs/catalog_color.py

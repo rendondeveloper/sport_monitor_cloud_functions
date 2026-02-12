@@ -28,6 +28,25 @@ functions/
 │   ├── get_vehicles.py            # get_vehicles
 │   ├── update_vehicle.py          # update_vehicle (PUT /api/vehicles/{id})
 │   └── delete_vehicle.py          # delete_vehicle (DELETE /api/vehicles/{id})
+├── catalogs/            # Package: Catálogos (vehicles, years, colors) SPRTMNTRPP-82
+│   ├── color/                     # Catálogo colores
+│   │   ├── _common.py
+│   │   ├── list_color.py
+│   │   ├── create_color.py
+│   │   ├── update_color.py
+│   │   └── delete_color.py
+│   ├── vehicle/                   # Catálogo marcas de motos
+│   │   ├── _common.py
+│   │   ├── list_vehicle.py
+│   │   ├── create_vehicle.py
+│   │   ├── update_vehicle.py
+│   │   └── delete_vehicle.py
+│   └── year/                      # Catálogo años
+│       ├── _common.py
+│       ├── list_year.py
+│       ├── create_year.py
+│       ├── update_year.py
+│       └── delete_year.py
 ├── competitors/         # Package: Competidores y rutas
 │   └── competitor_route.py        # competitor_route
 ├── checkpoints/         # Package: Gestión de Checkpoints
@@ -852,6 +871,47 @@ curl -X DELETE \
 **204 No Content** – Vehículo eliminado (sin cuerpo).
 
 **400** – Parámetros faltantes o inválidos. **401** – Token inválido o faltante. **404** – Usuario no encontrado, authUserId no coincide o vehículo no existe. **500** – Error interno.
+
+---
+
+## 📦 Package: Catalogs (SPRTMNTRPP-82)
+
+CRUD de catálogos en Firestore: **vehicles** (marcas y modelos de motos), **years** (años), **colors** (nombre + hex). Operaciones **masivas** (crear/actualizar/eliminar por lista). Ruta en Firestore: `catalogs/default/vehicles`, `catalogs/default/years`, `catalogs/default/colors`. Todas requieren Bearer token.
+
+### 1. Catálogo Vehicles – `/api/catalogs/vehicle`
+
+| Método | Descripción | Body |
+|--------|-------------|------|
+| GET    | Lista de marcas `[{id, name, models, logoUrl?}]` | — |
+| POST   | Creación masiva; retorna array de ids (201) | Lista directa: `[{"name": "...", "models": ["..."], "logoUrl?": "..."}]` |
+| PUT    | Actualización masiva (200) | Lista directa: `[{"id": "...", "name": "...", "models": [...], "logoUrl?": "..."}]` |
+| DELETE | Eliminación masiva (204) | Lista directa de ids: `["id1", "id2"]` |
+
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/catalogs/vehicle`
+
+### 2. Catálogo Years – `/api/catalogs/year`
+
+| Método | Descripción | Body |
+|--------|-------------|------|
+| GET    | Lista `[{id, year}]` | — |
+| POST   | Creación masiva; retorna ids (201) | Lista directa: `[{"year": 2024}]` |
+| PUT    | Actualización masiva (200) | Lista directa: `[{"id": "...", "year": 2024}]` |
+| DELETE | Eliminación masiva (204) | Lista directa de ids: `["id1", "id2"]` |
+
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/catalogs/year`
+
+### 3. Catálogo Colors – `/api/catalogs/color`
+
+| Método | Descripción | Body |
+|--------|-------------|------|
+| GET    | Lista `[{id, name, hex}]` | — |
+| POST   | Creación masiva; retorna ids (201) | Lista directa: `[{"name": "...", "hex": "#000000"}]` |
+| PUT    | Actualización masiva (200) | Lista directa: `[{"id": "...", "name": "...", "hex": "..."}]` |
+| DELETE | Eliminación masiva (204) | Lista directa de ids: `["id1", "id2"]` |
+
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/catalogs/color`
+
+Errores: 400 (body/items inválido), 401 (token), 404 (documento no encontrado en PUT), 500 (interno). Sin JSON en cuerpos de error.
 
 ---
 
@@ -2516,8 +2576,6 @@ curl -X POST \
 
 Las siguientes funciones pueden ser públicas y no requieren autenticación:
 
-- `events` - Solo lectura de datos públicos
-- `event_detail` - Solo lectura de datos públicos
 - `competitor_route` - Obtiene competidor y ruta asignada
 - `track_competitor_position` - Registra posición y datos del competidor en tiempo real
 
@@ -2525,11 +2583,17 @@ Las siguientes funciones pueden ser públicas y no requieren autenticación:
 
 Las siguientes funciones requieren autenticación Bearer token:
 
+- `events` - Lista de eventos con paginación (requiere Bearer token)
+- `event_detail` - Detalle de un evento (requiere Bearer token)
+- `event_categories` - Categorías de un evento (requiere Bearer token)
 - `user_profile` - Obtiene perfil de usuario (requiere token para identificar usuario)
 - `create_user` - Crea usuario en colección users (requiere Bearer token)
 - `get_vehicles` - Obtiene vehículos de un usuario (requiere Bearer token)
 - `update_vehicle` - Actualiza vehículo (requiere Bearer token)
 - `delete_vehicle` - Elimina vehículo (requiere Bearer token)
+- `catalog_vehicle` - CRUD catálogo marcas de motos (requiere Bearer token)
+- `catalog_year` - CRUD catálogo años (requiere Bearer token)
+- `catalog_color` - CRUD catálogo colores (requiere Bearer token)
 - `day_of_race_active` - Obtiene día de carrera activo (requiere token para autenticación)
 - `checkpoint` - Obtiene checkpoint específico (requiere token para autenticación)
 - `competitor_tracking` - Obtiene tracking de competidores filtrado por checkpoint (requiere token para autenticación)
@@ -2634,6 +2698,9 @@ firebase deploy --only functions:update_vehicle
 
 # Desplegar solo delete_vehicle
 firebase deploy --only functions:delete_vehicle
+
+# Desplegar catálogos (SPRTMNTRPP-82)
+firebase deploy --only functions:catalog_vehicle,functions:catalog_year,functions:catalog_color
 
 # Desplegar solo day_of_race_active
 firebase deploy --only functions:day_of_race_active
@@ -2767,7 +2834,7 @@ Si solo ejecutas `firebase emulators:start --only functions` (sin hosting), solo
 
 3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, excepto `competitor_tracking`, `update_competitor_status` y `change_competitor_status` que retornan JSON con `success: false` en caso de error. Las funciones de tracking retornan objetos JSON con información del error.
 
-4. **Autenticación**: Las funciones `user_profile`, `create_user`, `get_vehicles`, `update_vehicle`, `delete_vehicle`, `event_categories`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
+4. **Autenticación**: Las funciones `events`, `event_detail`, `event_categories`, `user_profile`, `create_user`, `get_vehicles`, `update_vehicle`, `delete_vehicle`, `catalog_vehicle`, `catalog_year`, `catalog_color`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
 
 5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
 

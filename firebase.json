@@ -97,6 +97,21 @@
         "region": "us-central1"
       },
       {
+        "source": "/api/catalogs/vehicle",
+        "function": "catalog_vehicle",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/catalogs/year",
+        "function": "catalog_year",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/catalogs/color",
+        "function": "catalog_color",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/competitors/competitor-route/**",
         "function": "competitor_route",
         "region": "us-central1"

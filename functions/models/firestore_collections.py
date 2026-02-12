@@ -11,6 +11,13 @@ class FirestoreCollections:
     USERS = "users"
     EVENT_TRACKING = "events_tracking"
 
+    # Catálogos (documento fijo "default", subcolecciones)
+    CATALOGS = "catalogs"
+    CATALOGS_DEFAULT_DOC_ID = "default"
+    CATALOGS_VEHICLES = "vehicles"
+    CATALOGS_YEARS = "years"
+    CATALOGS_COLORS = "colors"
+
     # Colecciones de usuarios relacionados (subcolecciones bajo users)
     USER_VEHICLES = "vehicles"
 
