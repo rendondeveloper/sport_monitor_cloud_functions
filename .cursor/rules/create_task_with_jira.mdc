@@ -1,0 +1,132 @@
+---
+description: Create task 
+alwaysApply: false
+---
+# Rule: Create Task with Jira
+
+**Activación manual**: El usuario escribe **"create task with jira"** (o frase equivalente) para aplicar esta regla.
+
+Objetivo: Conectarse al tablero/proyecto de Jira (por defecto el del proyecto, ej. board/project asociado) y crear tareas bien especificadas que Cursor pueda interpretar y ejecutar sin dudas. Las tareas deben incluir **descripción**, **dónde se hacen los cambios** y **criterios de aceptación**. Si la tarea es muy grande, **por defecto debe dividirse en subtareas** para separar responsabilidades.
+
+---
+
+## 1. Conexión a Jira
+
+### 1.1 Intentar primero por MCP (Atlassian MCP Server)
+
+1. Comprobar si se puede conectar usando las herramientas MCP de Atlassian:
+   - **Opcional**: `mcp_Atlassian-MCP-Server_getAccessibleAtlassianResources` para verificar recursos y obtener `cloudId`.
+   - **Para crear/consultar**: `mcp_Atlassian-MCP-Server_getVisibleJiraProjects`, `mcp_Atlassian-MCP-Server_createJiraIssue`, etc., usando el `cloudId` del proyecto (ej. del sitio configurado o el que devuelva getAccessibleAtlassianResources).
+2. Parámetros típicos:
+   - `cloudId`: `"https://softwarecosta.atlassian.net"` o el que devuelva getAccessibleAtlassianResources (o el configurado para el tablero 73 / proyecto del repo).
+   - `projectIdOrKey`: clave del proyecto de Jira donde se creará la tarea (ej. `SPRTMNTRPP`).
+
+### 1.2 Si MCP no está disponible o falla
+
+1. Usar **configuración local**: leer **`.jira_api_config.json`** en la raíz del proyecto (está en `.gitignore`). Debe contener:
+   - `base_url`, `email`, `api_token`, y opcionalmente `cloud_id`, `default_project_key`.
+2. Conectar por **Jira REST API**:
+   - **Crear issue**: `POST {base_url}/rest/api/3/issue`
+   - **Autenticación**: Basic con `email` + `api_token` (Base64).
+   - Headers: `Authorization: Basic <base64>`, `Accept: application/json`, `Content-Type: application/json`.
+3. Si no existe `.jira_api_config.json`, indicar al usuario que copie `.jira_api_config.json.example`, lo renombre y rellene credenciales. Sin conexión (MCP o API), no se puede crear la tarea en Jira; se puede igualmente **redactar la especificación** en un archivo (ej. `jira_tasks/XX_descripcion.md`) para pegarla después en Jira.
+
+---
+
+## 2. Preguntas necesarias para una buena tarea
+
+Antes de crear (o redactar) la tarea en Jira, el agente debe hacer las preguntas necesarias para que la especificación sea **interpretable por Cursor sin ambigüedades**. No asumir datos que puedan variar.
+
+### 2.1 Descripción y contexto
+
+- **¿Qué se debe hacer?** (objetivo claro, una o dos frases.)
+- **¿Por qué o en qué contexto?** (si ayuda a acotar alcance.)
+- **¿Hay dependencias de otros tickets o funcionalidades?** (ej. “después de SPRTMNTRPP-70”.)
+
+### 2.2 Dónde se hacen los cambios
+
+- **Package**: ¿En qué package de Cloud Functions va? (ej. `vehicles`, `events`, `users`, `checkpoints`, `tracking`, `competitors`.) Regla: **todo el código de esa función/CRUD en `functions/<package>/`**, nunca en la raíz.
+- **Archivos afectados**: ¿Se crean nuevos archivos (ej. `functions/vehicles/nombre_funcion.py`) o se modifican existentes? ¿Se toca `firebase.json`, `main.py`, `README.md`, `FirestoreCollections`?
+- **Endpoint HTTP**: Path exacto y método (GET/POST/PUT/DELETE). Debe existir **una sola forma** de invocar la función (ver sección 3.2).
+
+### 2.3 Criterios de aceptación
+
+- **Comportamiento esperado**: ¿Qué debe devolver la API en éxito (ej. 200 con JSON directo, 204 sin cuerpo)?
+- **Errores**: ¿Qué códigos HTTP y en qué casos (400, 401, 404, 500)?
+- **Validaciones**: ¿Qué parámetros son obligatorios (query, path, body)? ¿Tipos (string, número, etc.)?
+- **Firestore**: ¿Qué colecciones/documentos se leen o escriben? Usar **solo constantes de `FirestoreCollections`** (nunca strings hardcodeados).
+- **Checklist de implementación**: La tarea debe poder comprobarse con: función creada y desplegada, endpoint en `firebase.json`, uso de `validate_request()` y `verify_bearer_token()`, respuestas sin wrappers, errores solo código HTTP, Early Return, lógica en funciones auxiliares, función registrada en `functions/<package>/__init__.py`, importada en `main.py`, documentación en README, pruebas unitarias con cobertura ≥90%.
+
+### 2.4 Subtareas (por defecto si la tarea es grande)
+
+- Si la tarea implica **varios pasos independientes** (ej. “añadir constante en Firestore”, “crear endpoint”, “documentar en README”, “tests”), **por defecto se debe proponer dividir en subtareas**.
+- Preguntar al usuario: *“La tarea se puede dividir en N subtareas: [listar]. ¿Crear una tarea padre + estas subtareas, o una sola tarea que las agrupe?”*
+- Cada subtarea debe tener su propia **descripción breve**, **dónde se hacen los cambios** y **criterios de aceptación** mínimos.
+
+### 2.5 Dónde crear la tarea: Backlog o Sprint actual
+
+- **Preguntar o aceptar** si las tareas deben crearse en el **Backlog** o en el **sprint que está corriendo** (sprint activo).
+- Si el usuario no lo indica al activar la regla, **preguntar explícitamente**: *“¿Crear la tarea (y subtareas si aplica) en el Backlog o en el sprint actual?”*
+- Si el usuario lo indica en el mensaje (ej. “create task in current sprint” o “en el backlog”), usar esa preferencia sin preguntar de nuevo.
+- Al crear el issue por **API**: en Backlog no se asigna sprint; en sprint actual se usa el endpoint/parámetro correspondiente para añadir el issue al sprint activo (según Jira Agile/Scrum, ej. `POST .../sprint/{sprintId}/issue` o el campo que exponga la API del proyecto).
+- Al **redactar** la especificación en markdown (sin crear en Jira), indicar en el archivo la preferencia del usuario: *“Crear en: Backlog”* o *“Crear en: Sprint actual”* para que quien cree el issue manualmente lo sepa.
+
+---
+
+## 3. Reglas de Cloud Functions (resumen para incluir en la tarea)
+
+La tarea creada en Jira debe referenciar o incorporar estas reglas para que quien implemente (Cursor o humano) no tenga dudas. Ver **cloud_functions_rules.mdc** para el detalle completo.
+
+### 3.1 Nombres de funciones: sin verbos en el nombre
+
+- El **nombre de la función** no debe llevar verbo (GET/POST/PUT/DELETE se expresan por el método HTTP).
+- **Correcto**: `competitor_route`, `vehicles`, `vehicle` (para CRUD por método), `event_categories`.
+- **Incorrecto**: `get_competitor_route`, `get_vehicles`, `create_vehicle` como nombre de función (el verbo lo define el método HTTP en el endpoint).
+
+### 3.2 Una sola forma de llamar al endpoint
+
+- Debe existir **una única forma** de invocar la función (path + método).
+- **Correcto**: Un único path con parámetros por query o body, ej. `GET /api/vehicles?userId=...` o `PUT /api/vehicles/{vehicleId}?userId=...&authUserId=...`.
+- **Incorrecto**: Dos variantes equivalentes para lo mismo, ej. `GET /api/algo/key` y `GET /api/algo/key?key=...`, o `GET /api/algo` y `GET /api/algo/{userId}` para la misma operación. Elegir **una** convención (solo path, o path + query, o path + body) y documentarla.
+
+### 3.3 Firestore y package
+
+- Usar **constantes de `FirestoreCollections`** en lugar de strings hardcodeados. Si hace falta una colección nueva, agregarla primero en `functions/models/firestore_collections.py`.
+- **Package obligatorio**: Todo el código de la función (o CRUD) en `functions/<package>/` (ej. `functions/vehicles/`), no en la raíz.
+
+### 3.4 Checklist obligatorio en la descripción de la tarea
+
+Incluir en la tarea (o en subtareas) que se debe cumplir:
+
+- [ ] Cloud Function creada y desplegada en Firebase.
+- [ ] Endpoint HTTP configurado en `firebase.json` con el path acordado (ej. `/api/vehicles` o `/api/vehicles/**` según corresponda).
+- [ ] Función usa `validate_request()` y `verify_bearer_token()` correctamente (salvo que la función sea pública y se documente).
+- [ ] Respuesta exitosa: JSON directo (sin wrappers `success`/`data`/`message`) o 204 sin cuerpo según contrato.
+- [ ] Errores: solo código HTTP (sin JSON en el cuerpo).
+- [ ] Patrón Early Return para validaciones.
+- [ ] Lógica separada en funciones auxiliares.
+- [ ] Función registrada en `functions/<package>/__init__.py` (package nuevo o existente).
+- [ ] Función importada en `functions/main.py`.
+- [ ] Documentación en `README.md` (endpoint, parámetros, cURL, respuestas).
+- [ ] Pruebas unitarias con cobertura mínima 90% y casos: happy path, parámetros faltantes, tipo/valor incorrecto, consultas con data, escrituras que validen éxito, múltiples llamadas.
+
+---
+
+## 4. Flujo resumido
+
+1. Usuario activa: **"create task with jira"** (puede indicar ya si Backlog o sprint actual).
+2. **Conectar** a Jira por MCP o API (tablero/proyecto, ej. project key del repo o “tablero 73” si el usuario lo especifica).
+3. **Preguntar** siguiendo la sección 2: qué hacer, dónde, criterios de aceptación, si dividir en subtareas, y **dónde crear la tarea (Backlog o sprint actual)** si no se indicó.
+4. **Redactar** la tarea con:
+   - **Título** (summary) claro.
+   - **Descripción** con: contexto, objetivo, requisitos técnicos (path, método, parámetros, Firestore, package), criterios de aceptación y checklist de la sección 3.4.
+   - Si aplica: **subtareas** con descripción y criterios por cada una.
+5. **Crear** el issue (y subtasks) en Jira vía MCP o API, aplicando la decisión **Backlog vs sprint actual** (no asignar sprint = Backlog; asignar al sprint activo = sprint actual), o **entregar** el texto en un archivo markdown indicando “Crear en: Backlog” o “Crear en: Sprint actual”.
+6. Si se creó en Jira, indicar la clave del issue (y de las subtareas) y si quedó en Backlog o en el sprint actual.
+
+---
+
+## 5. Referencias
+
+- **work_with_jira.mdc**: conexión MCP/API, lectura de issues, transiciones, estrategia de commits.
+- **cloud_functions_rules.mdc**: reglas completas de Cloud Functions (validación, respuestas, FirestoreCollections, pruebas, documentación, checklist).
