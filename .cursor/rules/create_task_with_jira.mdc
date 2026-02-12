@@ -31,6 +31,25 @@ Objetivo: Conectarse al tablero/proyecto de Jira (por defecto el del proyecto, e
    - Headers: `Authorization: Basic <base64>`, `Accept: application/json`, `Content-Type: application/json`.
 3. Si no existe `.jira_api_config.json`, indicar al usuario que copie `.jira_api_config.json.example`, lo renombre y rellene credenciales. Sin conexión (MCP o API), no se puede crear la tarea en Jira; se puede igualmente **redactar la especificación** en un archivo (ej. `jira_tasks/XX_descripcion.md`) para pegarla después en Jira.
 
+### 1.3 Qué necesitas para conectar por API (cuando MCP no está disponible)
+
+Para que el agente (o un script) pueda crear tareas en Jira por API, hace falta lo siguiente:
+
+| Requisito | Dónde / Cómo |
+|-----------|----------------|
+| **Archivo de configuración** | En la raíz del proyecto: **`.jira_api_config.json`** (está en `.gitignore`, no se sube al repo). Si no existe, copiar **`.jira_api_config.json.example`** y renombrar a `.jira_api_config.json`. |
+| **base_url** | URL de tu sitio Jira, ej. `https://softwarecosta.atlassian.net`. Sin `https://` al final o con `/` según documentación de tu Jira. |
+| **email** | Email de la cuenta de Atlassian (el que usas para entrar a Jira). |
+| **api_token** | Token de API de Atlassian. Se genera en: [Atlassian Account → Security → API tokens](https://id.atlassian.com/manage-profile/security/api-tokens). Crear token y pegarlo en el config (no compartir ni subir a git). |
+| **default_project_key** (opcional) | Clave del proyecto donde se crean las tareas, ej. `SPRTMNTRPP`. |
+| **cloud_id** (opcional) | Solo si usas endpoints que lo requieran (ej. algunos de Agile). Se puede obtener desde la URL de tu Jira o desde la API. |
+
+**Uso por el agente**: Si existe `.jira_api_config.json`, el agente puede **ejecutar el script** `scripts/jira_create_issue.py` desde la raíz del proyecto, por ejemplo:
+`python scripts/jira_create_issue.py --title "Título del issue" --description-file jira_tasks/07_xxx.md`
+(o `--description "Texto aquí"`). El script usa el config para Basic Auth y crea el issue vía `POST /rest/api/3/issue`. Si el entorno no permite red, el agente entrega la especificación en markdown y el usuario puede crear el issue manualmente o ejecutar ese comando en su máquina.
+
+**Resumen**: Archivo `.jira_api_config.json` en la raíz con `base_url`, `email`, `api_token` y opcionalmente `default_project_key`. Sin ese archivo y credenciales válidas, no hay conexión por API cuando MCP no está disponible.
+
 ---
 
 ## 2. Preguntas necesarias para una buena tarea
@@ -55,7 +74,7 @@ Antes de crear (o redactar) la tarea en Jira, el agente debe hacer las preguntas
 - **Errores**: ¿Qué códigos HTTP y en qué casos (400, 401, 404, 500)?
 - **Validaciones**: ¿Qué parámetros son obligatorios (query, path, body)? ¿Tipos (string, número, etc.)?
 - **Firestore**: ¿Qué colecciones/documentos se leen o escriben? Usar **solo constantes de `FirestoreCollections`** (nunca strings hardcodeados).
-- **Checklist de implementación**: La tarea debe poder comprobarse con: función creada y desplegada, endpoint en `firebase.json`, uso de `validate_request()` y `verify_bearer_token()`, respuestas sin wrappers, errores solo código HTTP, Early Return, lógica en funciones auxiliares, función registrada en `functions/<package>/__init__.py`, importada en `main.py`, documentación en README, pruebas unitarias con cobertura ≥90%.
+- **Checklist de implementación**: Es **obligatorio** seguir **cloud_functions_rules.mdc**. La tarea debe poder comprobarse con: función creada y desplegada, endpoint en `firebase.json`, uso de `validate_request()` y `verify_bearer_token()`, respuestas sin wrappers, errores solo código HTTP, Early Return, lógica en funciones auxiliares, función registrada en `functions/<package>/__init__.py`, importada en `main.py`, documentación en README, pruebas unitarias con cobertura ≥90%.
 
 ### 2.4 Subtareas (por defecto si la tarea es grande)
 
@@ -73,9 +92,9 @@ Antes de crear (o redactar) la tarea en Jira, el agente debe hacer las preguntas
 
 ---
 
-## 3. Reglas de Cloud Functions (resumen para incluir en la tarea)
+## 3. Reglas de Cloud Functions (obligatorias al crear un API)
 
-La tarea creada en Jira debe referenciar o incorporar estas reglas para que quien implemente (Cursor o humano) no tenga dudas. Ver **cloud_functions_rules.mdc** para el detalle completo.
+**Es obligatorio** seguir las reglas de **cloud_functions_rules.mdc** al diseñar e implementar cualquier Cloud Function / API en este proyecto. La tarea creada en Jira debe referenciar explícitamente ese archivo e incorporar el checklist de la sección 3.4. Quien implemente (Cursor o humano) **debe** aplicar esas reglas sin excepción. Ver **cloud_functions_rules.mdc** para el detalle completo.
 
 ### 3.1 Nombres de funciones: sin verbos en el nombre
 
@@ -96,7 +115,7 @@ La tarea creada en Jira debe referenciar o incorporar estas reglas para que quie
 
 ### 3.4 Checklist obligatorio en la descripción de la tarea
 
-Incluir en la tarea (o en subtareas) que se debe cumplir:
+La implementación de cualquier API **debe** cumplir las reglas de **cloud_functions_rules.mdc**. Incluir en la tarea (o en subtareas) que se **debe** cumplir:
 
 - [ ] Cloud Function creada y desplegada en Firebase.
 - [ ] Endpoint HTTP configurado en `firebase.json` con el path acordado (ej. `/api/vehicles` o `/api/vehicles/**` según corresponda).
@@ -119,7 +138,7 @@ Incluir en la tarea (o en subtareas) que se debe cumplir:
 3. **Preguntar** siguiendo la sección 2: qué hacer, dónde, criterios de aceptación, si dividir en subtareas, y **dónde crear la tarea (Backlog o sprint actual)** si no se indicó.
 4. **Redactar** la tarea con:
    - **Título** (summary) claro.
-   - **Descripción** con: contexto, objetivo, requisitos técnicos (path, método, parámetros, Firestore, package), criterios de aceptación y checklist de la sección 3.4.
+   - **Descripción** con: contexto, objetivo, requisitos técnicos (path, método, parámetros, Firestore, package), criterios de aceptación y checklist de la sección 3.4. Incluir explícitamente que **es obligatorio seguir cloud_functions_rules.mdc** al implementar la API.
    - Si aplica: **subtareas** con descripción y criterios por cada una.
 5. **Crear** el issue (y subtasks) en Jira vía MCP o API, aplicando la decisión **Backlog vs sprint actual** (no asignar sprint = Backlog; asignar al sprint activo = sprint actual), o **entregar** el texto en un archivo markdown indicando “Crear en: Backlog” o “Crear en: Sprint actual”.
 6. Si se creó en Jira, indicar la clave del issue (y de las subtareas) y si quedó en Backlog o en el sprint actual.
@@ -129,4 +148,4 @@ Incluir en la tarea (o en subtareas) que se debe cumplir:
 ## 5. Referencias
 
 - **work_with_jira.mdc**: conexión MCP/API, lectura de issues, transiciones, estrategia de commits.
-- **cloud_functions_rules.mdc**: reglas completas de Cloud Functions (validación, respuestas, FirestoreCollections, pruebas, documentación, checklist).
+- **cloud_functions_rules.mdc**: reglas **obligatorias** de Cloud Functions (validación, respuestas, FirestoreCollections, pruebas, documentación, checklist). **Debe** seguirse al crear o modificar cualquier API.
