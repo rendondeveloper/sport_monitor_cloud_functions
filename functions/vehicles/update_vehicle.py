@@ -17,6 +17,8 @@ from utils.helper_http import verify_bearer_token
 from utils.helper_http_verb import validate_request
 from utils.helpers import convert_firestore_value
 
+from vehicles.delete_vehicle import delete_vehicle as delete_vehicle_handler
+
 LOG = logging.getLogger(__name__)
 LOG_PREFIX = "[update_vehicle]"
 
@@ -72,10 +74,13 @@ def update_vehicle(req: https_fn.Request) -> https_fn.Response:
     Body: { branch, year, model, color }. No modifica createdAt.
     """
     validation_response = validate_request(
-        req, ["PUT"], "update_vehicle", return_json_error=False
+        req, ["PUT", "DELETE"], "update_vehicle", return_json_error=False
     )
     if validation_response is not None:
         return validation_response
+
+    if req.method == "DELETE":
+        return delete_vehicle_handler(req)
 
     try:
         if not verify_bearer_token(req, "update_vehicle"):
@@ -207,7 +212,7 @@ def update_vehicle(req: https_fn.Request) -> https_fn.Response:
             headers={
                 "Content-Type": "application/json; charset=utf-8",
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
                 "Access-Control-Allow-Headers": "Content-Type, Authorization",
             },
         )

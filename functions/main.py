@@ -1,3 +1,16 @@
+# Configurar logging para que se vea en consola (emulador y local).
+# Sin esto, logging.warning/info/error puede no aparecer en el terminal del emulador.
+import logging
+import sys
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    stream=sys.stderr,
+    force=True,
+)
+
 # Importar funciones de competitors
 from competitors import competitor_route
 
@@ -27,7 +40,7 @@ from tracking.tracking_competitors import track_competitors, track_competitors_o
 from users import user_profile, create_user
 
 # Importar funciones de vehicles
-from vehicles import get_vehicles, update_vehicle
+from vehicles import delete_vehicle, get_vehicles, update_vehicle
 
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
@@ -64,3 +77,4 @@ initialize_app(options=_options if _options else None)
 # - track_competitor_position: tracking/track_competitor_position.py
 # - get_vehicles: vehicles/get_vehicles.py
 # - update_vehicle: vehicles/update_vehicle.py
+# - delete_vehicle: vehicles/delete_vehicle.py
