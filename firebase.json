@@ -92,6 +92,11 @@
         "region": "us-central1"
       },
       {
+        "source": "/api/vehicles/search",
+        "function": "search_vehicle",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/vehicles/**",
         "function": "update_vehicle",
         "region": "us-central1"
@@ -114,6 +119,36 @@
       {
         "source": "/api/competitors/competitor-route/**",
         "function": "competitor_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/competitors/create-user",
+        "function": "create_competitor_user",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/competitors/delete-user",
+        "function": "delete_competitor_user",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/competitors/get-competitor-by-id",
+        "function": "get_competitor_by_id",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/competitors/get-competitor-by-id/**",
+        "function": "get_competitor_by_id",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/competitors/get-competitors-by-event",
+        "function": "get_competitors_by_event",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/competitors/get-competitors-by-event/**",
+        "function": "get_competitors_by_event",
         "region": "us-central1"
       },
       {

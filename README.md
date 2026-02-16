@@ -6,6 +6,8 @@ Este proyecto contiene las **Cloud Functions de Firebase** desarrolladas en Pyth
 
 - **Gestión de Eventos**: Obtención de listados y detalles de eventos deportivos
 - **Gestión de Usuarios**: Obtención de perfiles de usuario con eventos asignados
+- **Gestión de Competidores**: Creación de competidores, usuarios competidores y consultas por evento
+- **Gestión de Staff**: Creación de usuarios staff con roles (organizador, staff, checkpoint)
 - **Tracking de Competidores**: Seguimiento en tiempo real de competidores durante eventos
 - **Gestión de Checkpoints**: Control de puntos de control en eventos deportivos
 
@@ -25,7 +27,9 @@ functions/
 │   ├── user_create.py               # create_user
 │   └── user_profile.py              # user_profile
 ├── vehicles/            # Package: Vehículos de usuarios/competidores
-│   ├── get_vehicles.py            # get_vehicles
+│   ├── get_vehicles.py            # get_vehicles (GET /api/vehicles + POST delega a create_vehicle)
+│   ├── create_vehicle.py          # create_vehicle_handler (POST, invocado desde get_vehicles)
+│   ├── search_vehicle.py          # search_vehicle (GET busca por branch, model, year)
 │   ├── update_vehicle.py          # update_vehicle (PUT /api/vehicles/{id})
 │   └── delete_vehicle.py          # delete_vehicle (DELETE /api/vehicles/{id})
 ├── catalogs/            # Package: Catálogos (vehicles, years, colors) SPRTMNTRPP-82
@@ -48,7 +52,14 @@ functions/
 │       ├── update_year.py
 │       └── delete_year.py
 ├── competitors/         # Package: Competidores y rutas
-│   └── competitor_route.py        # competitor_route
+│   ├── competitor_route.py        # competitor_route
+│   ├── create_competitor.py       # create_competitor (POST)
+│   ├── create_competitor_user.py  # create_competitor_user (POST)
+│   ├── delete_competitor_user.py  # delete_competitor_user (DELETE)
+│   ├── get_competitor_by_id.py    # get_competitor_by_id (GET)
+│   └── get_competitors_by_event.py # get_competitors_by_event (GET)
+├── staff/               # Package: Gestión de Staff
+│   └── create_staff_user.py       # create_staff_user (POST)
 ├── checkpoints/         # Package: Gestión de Checkpoints
 │   ├── day_of_race_active.py       # day_of_race_active
 │   ├── checkpoint.py               # checkpoint
@@ -268,9 +279,9 @@ Obtiene todas las categorías de un evento específico desde Firestore. Retorna 
 
 #### Parámetros (Path o Query Parameters)
 
-| Parámetro | Tipo   | Requerido | Descripción                                    |
-| --------- | ------ | --------- | ---------------------------------------------- |
-| `eventId` | string | **Sí**    | ID del evento (puede venir en path o query)   |
+| Parámetro | Tipo   | Requerido | Descripción                                 |
+| --------- | ------ | --------- | ------------------------------------------- |
+| `eventId` | string | **Sí**    | ID del evento (puede venir en path o query) |
 
 **Nota**: El parámetro puede venir en el path de la URL (`/api/event/event-categories/{eventId}`) o como query parameter (`?eventId=xxx`).
 
@@ -608,21 +619,21 @@ Crea un nuevo documento de usuario en la colección `users`. Recibe un cuerpo JS
 | Header          | Tipo   | Requerido | Descripción                                             |
 | --------------- | ------ | --------- | ------------------------------------------------------- |
 | `Authorization` | string | **Sí**    | Bearer token de Firebase Auth (solo para autenticación) |
-| `Content-Type`  | string | **Sí**    | `application/json`                                     |
+| `Content-Type`  | string | **Sí**    | `application/json`                                      |
 
 #### Request Body (JSON, UserDocument, todos los campos opcionales)
 
-| Campo                 | Tipo    | Descripción                                                                 |
-| --------------------- | ------- | --------------------------------------------------------------------------- |
-| `personalData`        | object  | `{ fullName, email, phone }` (UserPersonalData)                             |
-| `emergencyContact`    | object  | `{ fullName, phone }` (UserEmergencyContact)                               |
-| `userData`            | object  | `{ username }` (UserData)                                                   |
-| `eventStaffRelations` | array   | Relaciones usuario-evento (ver estructura abajo)                             |
-| `authUserId`          | string  | ID de autenticación Firebase                                                |
-| `avatarUrl`           | string \| null | URL del avatar del usuario                                           |
-| `createdAt`           | string  | Fecha de creación (ISO 8601)                                                 |
-| `updatedAt`           | string  | Fecha de última actualización (ISO 8601)                                     |
-| `isActive`            | boolean | Indica si el usuario está activo                                             |
+| Campo                 | Tipo           | Descripción                                      |
+| --------------------- | -------------- | ------------------------------------------------ |
+| `personalData`        | object         | `{ fullName, email, phone }` (UserPersonalData)  |
+| `emergencyContact`    | object         | `{ fullName, phone }` (UserEmergencyContact)     |
+| `userData`            | object         | `{ username }` (UserData)                        |
+| `eventStaffRelations` | array          | Relaciones usuario-evento (ver estructura abajo) |
+| `authUserId`          | string         | ID de autenticación Firebase                     |
+| `avatarUrl`           | string \| null | URL del avatar del usuario                       |
+| `createdAt`           | string         | Fecha de creación (ISO 8601)                     |
+| `updatedAt`           | string         | Fecha de última actualización (ISO 8601)         |
+| `isActive`            | boolean        | Indica si el usuario está activo                 |
 
 **Estructura de `eventStaffRelations` (cada elemento, UserEventStaffRelation):**  
 `eventId`, `role` (organizador | staff), `assignedAt` (ISO 8601), `checkpointIds` (array de strings).
@@ -692,27 +703,27 @@ Obtiene todos los vehículos de un usuario desde Firestore. Retorna un array dir
 
 #### Headers Requeridos
 
-| Header          | Tipo   | Requerido | Descripción                             |
-| --------------- | ------ | --------- | --------------------------------------- |
-| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth           |
+| Header          | Tipo   | Requerido | Descripción                   |
+| --------------- | ------ | --------- | ----------------------------- |
+| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth |
 
 #### Parámetros (Query Parameters)
 
-| Parámetro | Tipo   | Requerido | Descripción                                        |
-| --------- | ------ | --------- | -------------------------------------------------- |
-| `userId`  | string | **Sí**    | UUID del usuario (ID del documento en `users`)     |
+| Parámetro | Tipo   | Requerido | Descripción                                    |
+| --------- | ------ | --------- | ---------------------------------------------- |
+| `userId`  | string | **Sí**    | UUID del usuario (ID del documento en `users`) |
 
 #### Campos retornados (cada elemento del array)
 
-| Campo      | Tipo   | Descripción                    |
-| ---------- | ------ | ------------------------------ |
-| `id`       | string | ID del documento del vehículo |
-| `branch`   | string | Marca                          |
-| `year`     | number | Año                            |
-| `model`    | string | Modelo                         |
-| `color`    | string | Color                          |
-| `createdAt`| string | Fecha de creación (ISO 8601)   |
-| `updatedAt`| string | Fecha de actualización (ISO 8601) |
+| Campo       | Tipo   | Descripción                       |
+| ----------- | ------ | --------------------------------- |
+| `id`        | string | ID del documento del vehículo     |
+| `branch`    | string | Marca                             |
+| `year`      | number | Año                               |
+| `model`     | string | Modelo                            |
+| `color`     | string | Color                             |
+| `createdAt` | string | Fecha de creación (ISO 8601)      |
+| `updatedAt` | string | Fecha de actualización (ISO 8601) |
 
 #### Comandos cURL
 
@@ -767,19 +778,19 @@ Crea un vehículo para un usuario. Mismo path que GET; método **POST**. Requier
 
 #### Query Parameters
 
-| Parámetro    | Tipo   | Requerido | Descripción                                      |
-| ------------ | ------ | --------- | ------------------------------------------------ |
-| `userId`     | string | **Sí**    | UUID del usuario (documento en `users`)          |
+| Parámetro    | Tipo   | Requerido | Descripción                                                             |
+| ------------ | ------ | --------- | ----------------------------------------------------------------------- |
+| `userId`     | string | **Sí**    | UUID del usuario (documento en `users`)                                 |
 | `authUserId` | string | **Sí**    | UUID de autenticación del usuario (debe coincidir con el del documento) |
 
 #### Request Body (JSON)
 
-| Campo   | Tipo   | Requerido | Descripción        |
-| ------- | ------ | --------- | ------------------ |
-| `branch`| string | **Sí**    | Marca              |
-| `year`  | number | **Sí**    | Año (entero 1900-2100) |
-| `model` | string | **Sí**    | Modelo             |
-| `color` | string | **Sí**    | Color              |
+| Campo    | Tipo   | Requerido | Descripción            |
+| -------- | ------ | --------- | ---------------------- |
+| `branch` | string | **Sí**    | Marca                  |
+| `year`   | number | **Sí**    | Año (entero 1900-2100) |
+| `model`  | string | **Sí**    | Modelo                 |
+| `color`  | string | **Sí**    | Color                  |
 
 #### Ejemplo cURL
 
@@ -812,20 +823,20 @@ Actualiza un vehículo existente. Requiere Bearer token, `userId`, `authUserId` 
 
 #### Path y Query
 
-| Dónde   | Parámetro    | Tipo   | Requerido | Descripción                                      |
-| ------- | ------------ | ------ | --------- | ------------------------------------------------ |
-| Path    | `vehicleId`  | string | **Sí**    | UUID del vehículo (documento en `users/{userId}/vehicles`) |
-| Query   | `userId`     | string | **Sí**    | UUID del usuario                                 |
-| Query   | `authUserId` | string | **Sí**    | UUID de autenticación (debe coincidir con el del usuario) |
+| Dónde | Parámetro    | Tipo   | Requerido | Descripción                                                |
+| ----- | ------------ | ------ | --------- | ---------------------------------------------------------- |
+| Path  | `vehicleId`  | string | **Sí**    | UUID del vehículo (documento en `users/{userId}/vehicles`) |
+| Query | `userId`     | string | **Sí**    | UUID del usuario                                           |
+| Query | `authUserId` | string | **Sí**    | UUID de autenticación (debe coincidir con el del usuario)  |
 
 #### Request Body (JSON)
 
-| Campo   | Tipo   | Requerido | Descripción        |
-| ------- | ------ | --------- | ------------------ |
-| `branch`| string | **Sí**    | Marca              |
-| `year`  | number | **Sí**    | Año (1900-2100)    |
-| `model` | string | **Sí**    | Modelo             |
-| `color` | string | **Sí**    | Color              |
+| Campo    | Tipo   | Requerido | Descripción     |
+| -------- | ------ | --------- | --------------- |
+| `branch` | string | **Sí**    | Marca           |
+| `year`   | number | **Sí**    | Año (1900-2100) |
+| `model`  | string | **Sí**    | Modelo          |
+| `color`  | string | **Sí**    | Color           |
 
 #### Ejemplo cURL
 
@@ -852,11 +863,11 @@ Elimina un vehículo de un usuario. Requiere Bearer token, `userId` y `authUserI
 
 #### Path y Query
 
-| Dónde  | Parámetro    | Tipo   | Requerido | Descripción                                      |
-| ------ | ------------ | ------ | --------- | ------------------------------------------------ |
-| Path   | `vehicleId`  | string | **Sí**    | UUID del vehículo                                |
-| Query  | `userId`     | string | **Sí**    | UUID del usuario                                 |
-| Query  | `authUserId` | string | **Sí**    | UUID de autenticación (debe coincidir con el del usuario) |
+| Dónde | Parámetro    | Tipo   | Requerido | Descripción                                               |
+| ----- | ------------ | ------ | --------- | --------------------------------------------------------- |
+| Path  | `vehicleId`  | string | **Sí**    | UUID del vehículo                                         |
+| Query | `userId`     | string | **Sí**    | UUID del usuario                                          |
+| Query | `authUserId` | string | **Sí**    | UUID de autenticación (debe coincidir con el del usuario) |
 
 #### Ejemplo cURL
 
@@ -872,6 +883,88 @@ curl -X DELETE \
 
 **400** – Parámetros faltantes o inválidos. **401** – Token inválido o faltante. **404** – Usuario no encontrado, authUserId no coincide o vehículo no existe. **500** – Error interno.
 
+### 5. Buscar vehículo – GET `search_vehicle`
+
+Busca un vehículo de un usuario por coincidencia exacta de `branch`, `model` y `year`. Si encuentra coincidencia retorna 200 con los datos del vehículo; si no, retorna 404.
+
+**Tipo**: HTTP Request (GET)  
+**Endpoint**: `https://search-vehicle-....run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/vehicles/search?userId={userId}&branch={branch}&model={model}&year={year}`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Tipo   | Requerido | Descripción                   |
+| --------------- | ------ | --------- | ----------------------------- |
+| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth |
+
+#### Parámetros (Query Parameters)
+
+| Parámetro | Tipo   | Requerido | Descripción                                    |
+| --------- | ------ | --------- | ---------------------------------------------- |
+| `userId`  | string | **Sí**    | UUID del usuario (ID del documento en `users`) |
+| `branch`  | string | **Sí**    | Marca del vehículo                             |
+| `model`   | string | **Sí**    | Modelo del vehículo                            |
+| `year`    | number | **Sí**    | Año del vehículo (entero, 1900-2100)           |
+
+#### Campos retornados
+
+| Campo       | Tipo   | Descripción                       |
+| ----------- | ------ | --------------------------------- |
+| `id`        | string | ID del documento del vehículo     |
+| `branch`    | string | Marca                             |
+| `year`      | number | Año                               |
+| `model`     | string | Modelo                            |
+| `color`     | string | Color                             |
+| `createdAt` | string | Fecha de creación (ISO 8601)      |
+| `updatedAt` | string | Fecha de actualización (ISO 8601) |
+
+#### Comandos cURL
+
+**Buscar vehículo por branch, model y year:**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/vehicles/search?userId=UUID_DEL_USUARIO&branch=Honda&model=CRF450R&year=2024' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Probar error 400 (parámetro faltante):**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/vehicles/search?userId=UUID' \
+  -H 'Authorization: Bearer TU_TOKEN' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+**Probar error 401 (sin token):**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/vehicles/search?userId=UUID&branch=Honda&model=CRF450R&year=2024' \
+  -w "\nHTTP Status: %{http_code}\n"
+```
+
+#### Respuestas
+
+**200 OK** – Vehículo encontrado: `{id, branch, year, model, color, createdAt, updatedAt}` (sin wrapper).
+
+**400 Bad Request** – Sin cuerpo. Parámetros faltantes, vacíos o `year` inválido (no numérico o fuera de rango).
+
+**401 Unauthorized** – Sin cuerpo. Token inválido o faltante.
+
+**404 Not Found** – Sin cuerpo. Usuario no encontrado o no existe vehículo que coincida en `branch`, `model` y `year`.
+
+**500 Internal Server Error** – Sin cuerpo. Error del servidor.
+
+#### Notas
+
+- Ruta en Firestore: `users/{userId}/vehicles`.
+- Usa query con filtros `==` sobre `branch`, `model` y `year` (los tres deben coincidir).
+- Usa `FirestoreHelper.query_documents()` y constantes `FirestoreCollections.USERS` / `FirestoreCollections.USER_VEHICLES`.
+
 ---
 
 ## 📦 Package: Catalogs (SPRTMNTRPP-82)
@@ -880,34 +973,34 @@ CRUD de catálogos en Firestore: **vehicles** (marcas y modelos de motos), **yea
 
 ### 1. Catálogo Vehicles – `/api/catalogs/vehicle`
 
-| Método | Descripción | Body |
-|--------|-------------|------|
-| GET    | Lista de marcas `[{id, name, models, logoUrl?}]` | — |
-| POST   | Creación masiva; retorna array de ids (201) | Lista directa: `[{"name": "...", "models": ["..."], "logoUrl?": "..."}]` |
-| PUT    | Actualización masiva (200) | Lista directa: `[{"id": "...", "name": "...", "models": [...], "logoUrl?": "..."}]` |
-| DELETE | Eliminación masiva (204) | Lista directa de ids: `["id1", "id2"]` |
+| Método | Descripción                                      | Body                                                                                |
+| ------ | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| GET    | Lista de marcas `[{id, name, models, logoUrl?}]` | —                                                                                   |
+| POST   | Creación masiva; retorna array de ids (201)      | Lista directa: `[{"name": "...", "models": ["..."], "logoUrl?": "..."}]`            |
+| PUT    | Actualización masiva (200)                       | Lista directa: `[{"id": "...", "name": "...", "models": [...], "logoUrl?": "..."}]` |
+| DELETE | Eliminación masiva (204)                         | Lista directa de ids: `["id1", "id2"]`                                              |
 
 **Endpoint con Hosting**: `https://system-track-monitor.web.app/api/catalogs/vehicle`
 
 ### 2. Catálogo Years – `/api/catalogs/year`
 
-| Método | Descripción | Body |
-|--------|-------------|------|
-| GET    | Lista `[{id, year}]` | — |
-| POST   | Creación masiva; retorna ids (201) | Lista directa: `[{"year": 2024}]` |
-| PUT    | Actualización masiva (200) | Lista directa: `[{"id": "...", "year": 2024}]` |
-| DELETE | Eliminación masiva (204) | Lista directa de ids: `["id1", "id2"]` |
+| Método | Descripción                        | Body                                           |
+| ------ | ---------------------------------- | ---------------------------------------------- |
+| GET    | Lista `[{id, year}]`               | —                                              |
+| POST   | Creación masiva; retorna ids (201) | Lista directa: `[{"year": 2024}]`              |
+| PUT    | Actualización masiva (200)         | Lista directa: `[{"id": "...", "year": 2024}]` |
+| DELETE | Eliminación masiva (204)           | Lista directa de ids: `["id1", "id2"]`         |
 
 **Endpoint con Hosting**: `https://system-track-monitor.web.app/api/catalogs/year`
 
 ### 3. Catálogo Colors – `/api/catalogs/color`
 
-| Método | Descripción | Body |
-|--------|-------------|------|
-| GET    | Lista `[{id, name, hex}]` | — |
-| POST   | Creación masiva; retorna ids (201) | Lista directa: `[{"name": "...", "hex": "#000000"}]` |
-| PUT    | Actualización masiva (200) | Lista directa: `[{"id": "...", "name": "...", "hex": "..."}]` |
-| DELETE | Eliminación masiva (204) | Lista directa de ids: `["id1", "id2"]` |
+| Método | Descripción                        | Body                                                          |
+| ------ | ---------------------------------- | ------------------------------------------------------------- |
+| GET    | Lista `[{id, name, hex}]`          | —                                                             |
+| POST   | Creación masiva; retorna ids (201) | Lista directa: `[{"name": "...", "hex": "#000000"}]`          |
+| PUT    | Actualización masiva (200)         | Lista directa: `[{"id": "...", "name": "...", "hex": "..."}]` |
+| DELETE | Eliminación masiva (204)           | Lista directa de ids: `["id1", "id2"]`                        |
 
 **Endpoint con Hosting**: `https://system-track-monitor.web.app/api/catalogs/color`
 
@@ -931,11 +1024,11 @@ Obtiene la información del competidor y su ruta para un evento y día de carrer
 
 #### Parámetros (Path o Query Parameters)
 
-| Parámetro     | Tipo   | Requerido | Descripción                                                                 |
-| ------------- | ------ | --------- | --------------------------------------------------------------------------- |
-| `eventId`     | string | **Sí**    | ID del evento                                                               |
-| `dayId`       | string | **Sí**    | ID del día de carrera                                                       |
-| `competitorId`| string | **Sí**    | ID del competidor (documento en `events/{eventId}/participants/{competitorId}`) |
+| Parámetro      | Tipo   | Requerido | Descripción                                                                     |
+| -------------- | ------ | --------- | ------------------------------------------------------------------------------- |
+| `eventId`      | string | **Sí**    | ID del evento                                                                   |
+| `dayId`        | string | **Sí**    | ID del día de carrera                                                           |
+| `competitorId` | string | **Sí**    | ID del competidor (documento en `events/{eventId}/participants/{competitorId}`) |
 
 Los parámetros pueden ir en el path (`/api/competitors/competitor-route/{eventId}/{dayId}/{competitorId}`) o en query (`?eventId=xxx&dayId=yyy&competitorId=zzz`).
 
@@ -1001,6 +1094,636 @@ curl -X GET \
 }
 ```
 
+### 2. `create_competitor`
+
+Crea un nuevo competidor básico en un evento. Solo guarda datos de competición (categoría, equipo, score). Los datos personales completos están en la colección `users`.
+
+**Tipo**: HTTP Request (POST)  
+**Endpoint**: `https://create-competitor-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/create`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Valor                              | Descripción          |
+| --------------- | ---------------------------------- | -------------------- |
+| `Authorization` | `Bearer {Firebase Auth Token}`     | Token de autenticación |
+| `Content-Type`  | `application/json`                 | Tipo de contenido    |
+
+#### Request Body (JSON)
+
+| Campo                  | Tipo   | Requerido | Descripción                  |
+| ---------------------- | ------ | --------- | ---------------------------- |
+| `eventId`              | string | **Sí**    | ID del evento                |
+| `competitionCategory`  | object | No        | Categoría de competición     |
+| `competitionCategory.pilotNumber` | string | No | Número de piloto       |
+| `competitionCategory.registrationCategory` | string | No | Categoría de registro |
+| `registrationDate`     | string | No        | Fecha ISO 8601               |
+| `team`                 | string | No        | Nombre del equipo            |
+
+#### Campos Retornados (201)
+
+| Campo | Tipo   | Descripción               |
+| ----- | ------ | ------------------------- |
+| `id`  | string | ID del competidor creado  |
+
+#### Comandos cURL
+
+```bash
+curl -X POST \
+  'https://system-track-monitor.web.app/api/competitors/create' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN' \
+  -d '{
+    "eventId": "EVENT_ID",
+    "competitionCategory": {
+      "pilotNumber": "42",
+      "registrationCategory": "Pro"
+    },
+    "registrationDate": "2026-02-15T10:00:00",
+    "team": "Team Red Bull"
+  }'
+```
+
+#### Respuestas
+
+- **201 Created**: `{"id": "GENERATED_COMPETITOR_ID"}`
+- **400 Bad Request**: Body inválido o campos faltantes (sin cuerpo).
+- **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
+- **404 Not Found**: Evento no encontrado (sin cuerpo).
+- **409 Conflict**: Número de piloto duplicado en el evento (sin cuerpo).
+- **500 Internal Server Error**: Error interno (sin cuerpo).
+
+#### Notas
+
+- El ID del competidor se genera automáticamente por Firestore.
+- Se guarda en `events/{eventId}/participants/{competitorId}`.
+- Campos automáticos: `score: 0`, `timesToStart: []`, `createdAt`, `updatedAt`.
+- Si `pilotNumber` no está vacío, se verifica que no exista duplicado en el mismo evento.
+
+---
+
+### 3. `create_competitor_user`
+
+Crea en una sola llamada: template de usuario (sin Firebase Auth), subcolecciones de datos (personalData, healthData, emergencyContact, vehicles), membership y participante en el evento. Flujo: (1) documento en `users` (campos raíz: **email**, **username**, isActive, etc.; sin userData), (2.1) `users/{userId}/personalData` (un documento con **id autogenerado**), (2.2) `users/{userId}/healthData` (un documento con **id autogenerado**), (2.3) `users/{userId}/emergencyContact` (**map**: un documento por contacto, **id autogenerado**), (2.4) si hay vehicleData: `users/{userId}/vehicles` (id autogenerado), (3) `users/{userId}/membership/{eventId}`, (4) participante en `events/{eventId}/participants` con el **mismo id** que en users. Rollback automático si falla cualquier paso (incluye borrado de subcolecciones).
+
+**Tipo**: HTTP Request (POST)  
+**Endpoint**: `https://create-competitor-user-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/create-user`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Valor                              | Descripción          |
+| --------------- | ---------------------------------- | -------------------- |
+| `Authorization` | `Bearer {Firebase Auth Token}`     | Token de autenticación |
+| `Content-Type`  | `application/json`                 | Tipo de contenido    |
+
+#### Request Body (JSON)
+
+| Campo                  | Tipo   | Requerido | Descripción                         |
+| ---------------------- | ------ | --------- | ----------------------------------- |
+| `personalData`         | object | **Sí**    | Datos personales (sin email; email va a nivel raíz) |
+| `personalData.fullName` | string | **Sí**   | Nombre completo                     |
+| `personalData.phone`   | string | **Sí**    | Teléfono (+52..., 10-15 dígitos)    |
+| `personalData.dateOfBirth` | string | No     | Fecha nacimiento ISO 8601           |
+| `personalData.address` | string | No        | Dirección                           |
+| `personalData.city`    | string | No        | Ciudad                              |
+| `personalData.state`   | string | No        | Estado                              |
+| `personalData.country` | string | No        | País                                |
+| `personalData.postalCode` | string | No     | Código postal                       |
+| `email`                | string | **Sí**    | Email (formato válido; misma altura que username) |
+| `username`             | string | **Sí**    | Username (mínimo 4 caracteres)      |
+| `healthData`           | object | No        | Datos de salud                      |
+| `healthData.bloodType` | string | No        | Tipo de sangre                      |
+| `healthData.allergies` | string | No        | Alergias                            |
+| `healthData.medications` | string | No      | Medicamentos                        |
+| `healthData.medicalConditions` | string | No | Condiciones médicas              |
+| `healthData.insuranceProvider` | string | No | Proveedor de seguro              |
+| `healthData.insuranceNumber` | string | No   | Número de póliza                   |
+| `emergencyContacts`    | array  | **Sí**    | Lista de contactos de emergencia (al menos uno) |
+| `emergencyContacts[].fullName` | string | **Sí** | Nombre del contacto             |
+| `emergencyContacts[].relationship` | string | No | Relación con el usuario        |
+| `emergencyContacts[].phone` | string | **Sí** | Teléfono del contacto              |
+| `vehicleData`          | object | No        | Si se envía, se crea un documento en `users/{userId}/vehicles` (id autogenerado) |
+| `vehicleData.branch`   | string | No        | Marca del vehículo (también se acepta `brand`)                                   |
+| `vehicleData.model`    | string | No        | Modelo                                                                           |
+| `vehicleData.year`     | int    | No        | Año                                                                              |
+| `vehicleData.color`    | string | No        | Color                                                                            |
+| `competition`          | object | **Sí**    | Datos de competición (eventId, pilotNumber, registrationCategory, team)         |
+| `competition.eventId`  | string | **Sí**    | ID del evento                                                                   |
+| `competition.pilotNumber` | string | No     | Número de piloto                                                                |
+| `competition.registrationCategory` | string | No | Categoría de registro                                              |
+| `competition.team`     | string | No        | Nombre del equipo                                                               |
+| `registrationDate`     | string | No        | Fecha ISO 8601 (opcional)                                                        |
+
+#### Campos Retornados (201)
+
+| Campo          | Tipo   | Descripción                    |
+| -------------- | ------ | ------------------------------ |
+| `id`           | string | ID del usuario (mismo id en `users` y en `participants`) |
+| `membershipId` | string | ID del evento (= eventId)      |
+
+#### Comandos cURL
+
+```bash
+curl -X POST \
+  'https://system-track-monitor.web.app/api/competitors/create-user' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN' \
+  -d '{
+    "personalData": {
+      "fullName": "Juan Pérez",
+      "phone": "+521234567890",
+      "dateOfBirth": "1990-05-15T00:00:00",
+      "address": "Calle Principal 123",
+      "city": "CDMX",
+      "state": "CDMX",
+      "country": "México",
+      "postalCode": "01000"
+    },
+    "email": "juan@example.com",
+    "healthData": {
+      "bloodType": "O+",
+      "allergies": "Ninguna",
+      "medications": "Ninguno",
+      "medicalConditions": "Ninguna",
+      "insuranceProvider": "Seguro XYZ",
+      "insuranceNumber": "ABC123456"
+    },
+    "emergencyContacts": [
+      {
+        "fullName": "María Pérez",
+        "relationship": "Esposa",
+        "phone": "+529876543210"
+      },
+      {
+        "fullName": "Carlos Pérez",
+        "relationship": "Hermano",
+        "phone": "+525555555555"
+      }
+    ],
+    "vehicleData": {
+      "branch": "Toyota",
+      "model": "Hilux",
+      "year": 2025,
+      "color": "Gris"
+    },
+    "username": "juanperez",
+    "competition": {
+      "eventId": "EVENT_ID",
+      "pilotNumber": "42",
+      "registrationCategory": "Pro",
+      "team": "Team Red Bull"
+    },
+    "registrationDate": "2026-02-15T10:00:00"
+  }'
+```
+
+#### Respuestas
+
+- **201 Created**: `{"id": "USER_ID", "membershipId": "EVENT_ID"}`
+- **400 Bad Request**: Body inválido o campos faltantes (sin cuerpo).
+- **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
+- **404 Not Found**: Evento no encontrado (sin cuerpo).
+- **409 Conflict**: Email o username ya registrado, o número de piloto duplicado en el evento (sin cuerpo).
+- **500 Internal Server Error**: Error interno (sin cuerpo).
+
+#### Notas
+
+- No se crea usuario en Firebase Auth. El documento en `users` tiene `isActive: false` y `authUserId: null`.
+- Estructura Firestore creada:
+  - `users/{userId}` - Documento raíz (**email**, **username** a la misma altura, isActive: false, etc.; sin userData)
+  - `users/{userId}/personalData/{id}` - Un documento; **id autogenerado** (map)
+  - `users/{userId}/healthData/{id}` - Un documento; **id autogenerado** (map)
+  - `users/{userId}/emergencyContact/{id}` - Un documento por contacto; **ids autogenerados** (map)
+  - `users/{userId}/vehicles/{vehicleId}` - Vehículo (si se envió vehicleData); id autogenerado
+  - `users/{userId}/membership/{eventId}` - Relación con evento
+  - `events/{eventId}/participants/{userId}` - Participante en el evento (mismo id que en users)
+- Si cualquier paso falla, se hace rollback automático (subcolecciones y documento users).
+
+---
+
+### 4. `get_competitor_by_id`
+
+Obtiene un competidor específico por su ID desde la subcolección `participants` de un evento.
+
+**Tipo**: HTTP Request (GET)  
+**Endpoint**: `https://get-competitor-by-id-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/get-competitor-by-id`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Valor                              | Descripción          |
+| --------------- | ---------------------------------- | -------------------- |
+| `Authorization` | `Bearer {Firebase Auth Token}`     | Token de autenticación |
+
+#### Parámetros (Query o Path Parameters)
+
+| Parámetro       | Tipo   | Requerido | Descripción          |
+| --------------- | ------ | --------- | -------------------- |
+| `eventId`       | string | **Sí**    | ID del evento        |
+| `competitorId`  | string | **Sí**    | ID del competidor    |
+
+Los parámetros pueden ir en query (`?eventId=xxx&competitorId=yyy`) o en path (`/get-competitor-by-id/{eventId}/{competitorId}`).
+
+#### Campos Retornados (200)
+
+| Campo                            | Tipo   | Descripción               |
+| -------------------------------- | ------ | ------------------------- |
+| `id`                             | string | ID del competidor         |
+| `eventId`                        | string | ID del evento             |
+| `competitionCategory.pilotNumber` | string | Número de piloto         |
+| `competitionCategory.registrationCategory` | string | Categoría       |
+| `registrationDate`               | string | Fecha de registro         |
+| `team`                           | string | Nombre del equipo         |
+| `score`                          | int    | Puntaje                   |
+| `timesToStart`                   | array  | Tiempos de salida         |
+| `createdAt`                      | string | Fecha de creación         |
+| `updatedAt`                      | string | Fecha de actualización    |
+
+#### Comandos cURL
+
+**Con query parameters:**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/competitors/get-competitor-by-id?eventId=EVENT_ID&competitorId=COMPETITOR_ID' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN'
+```
+
+**Con path:**
+
+```bash
+curl -X GET \
+  'https://get-competitor-by-id-xa26lpxdea-uc.a.run.app/get-competitor-by-id/EVENT_ID/COMPETITOR_ID' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN'
+```
+
+#### Respuestas
+
+- **200 OK**: Objeto JSON directo con los datos del competidor.
+- **400 Bad Request**: Parámetros faltantes (sin cuerpo).
+- **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
+- **404 Not Found**: Competidor no encontrado (sin cuerpo).
+- **500 Internal Server Error**: Error interno (sin cuerpo).
+
+#### Ejemplo de respuesta exitosa
+
+```json
+{
+  "id": "COMPETITOR_ID",
+  "eventId": "EVENT_ID",
+  "competitionCategory": {
+    "pilotNumber": "42",
+    "registrationCategory": "Pro"
+  },
+  "registrationDate": "2026-02-15T10:00:00",
+  "team": "Team Red Bull",
+  "score": 10,
+  "timesToStart": [],
+  "createdAt": "2026-02-15T08:00:00+00:00",
+  "updatedAt": "2026-02-15T09:00:00+00:00"
+}
+```
+
+---
+
+### 5. `get_competitors_by_event`
+
+Obtiene todos los competidores de un evento, ordenados por fecha de registro descendente. Soporta filtros opcionales por categoría y equipo.
+
+**Tipo**: HTTP Request (GET)  
+**Endpoint**: `https://get-competitors-by-event-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/get-competitors-by-event`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Valor                              | Descripción          |
+| --------------- | ---------------------------------- | -------------------- |
+| `Authorization` | `Bearer {Firebase Auth Token}`     | Token de autenticación |
+
+#### Parámetros (Query Parameters)
+
+| Parámetro   | Tipo   | Requerido | Descripción                       |
+| ----------- | ------ | --------- | --------------------------------- |
+| `eventId`   | string | **Sí**    | ID del evento                     |
+| `category`  | string | No        | Filtrar por categoría de registro |
+| `team`      | string | No        | Filtrar por equipo                |
+
+#### Campos Retornados (200) - Array de competidores
+
+| Campo                            | Tipo   | Descripción               |
+| -------------------------------- | ------ | ------------------------- |
+| `id`                             | string | ID del competidor         |
+| `eventId`                        | string | ID del evento             |
+| `competitionCategory.pilotNumber` | string | Número de piloto         |
+| `competitionCategory.registrationCategory` | string | Categoría       |
+| `registrationDate`               | string | Fecha de registro         |
+| `team`                           | string | Nombre del equipo         |
+| `score`                          | int    | Puntaje                   |
+| `timesToStart`                   | array  | Tiempos de salida         |
+| `createdAt`                      | string | Fecha de creación         |
+| `updatedAt`                      | string | Fecha de actualización    |
+
+#### Comandos cURL
+
+**Todos los competidores del evento:**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/competitors/get-competitors-by-event?eventId=EVENT_ID' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN'
+```
+
+**Filtrar por categoría:**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/competitors/get-competitors-by-event?eventId=EVENT_ID&category=Pro' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN'
+```
+
+**Filtrar por equipo:**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/competitors/get-competitors-by-event?eventId=EVENT_ID&team=Team%20Red%20Bull' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN'
+```
+
+**Filtrar por categoría y equipo:**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/competitors/get-competitors-by-event?eventId=EVENT_ID&category=Pro&team=Team%20Red%20Bull' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN'
+```
+
+#### Respuestas
+
+- **200 OK**: Array JSON directo de competidores. Si no hay resultados, retorna `[]`.
+- **400 Bad Request**: eventId faltante (sin cuerpo).
+- **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
+- **500 Internal Server Error**: Error interno (sin cuerpo).
+
+#### Ejemplo de respuesta exitosa
+
+```json
+[
+  {
+    "id": "COMPETITOR_1_ID",
+    "eventId": "EVENT_ID",
+    "competitionCategory": {
+      "pilotNumber": "42",
+      "registrationCategory": "Pro"
+    },
+    "registrationDate": "2026-02-15T10:00:00",
+    "team": "Team Red Bull",
+    "score": 10,
+    "timesToStart": [],
+    "createdAt": "2026-02-15T08:00:00+00:00",
+    "updatedAt": "2026-02-15T09:00:00+00:00"
+  },
+  {
+    "id": "COMPETITOR_2_ID",
+    "eventId": "EVENT_ID",
+    "competitionCategory": {
+      "pilotNumber": "7",
+      "registrationCategory": "Amateur"
+    },
+    "registrationDate": "2026-02-14T10:00:00",
+    "team": "Solo",
+    "score": 5,
+    "timesToStart": [],
+    "createdAt": "2026-02-14T08:00:00+00:00",
+    "updatedAt": "2026-02-14T09:00:00+00:00"
+  }
+]
+```
+
+---
+
+### 6. `delete_competitor_user`
+
+Elimina el usuario competidor creado con `create_competitor_user` y todos sus datos asociados: participante en el evento, membership, subcolecciones (vehicles, emergencyContacts, healthData, personalData) y documento en `users`.
+
+**Tipo**: HTTP Request (DELETE)  
+**Endpoint**: `https://delete-competitor-user-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/delete-user`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Valor                          | Descripción          |
+| --------------- | ------------------------------ | -------------------- |
+| `Authorization` | `Bearer {Firebase Auth Token}` | Token de autenticación |
+| `Content-Type`  | `application/json`             | Body en JSON         |
+
+#### Body (JSON)
+
+El usuario se puede identificar por **userId** o por **email** (debe enviarse al menos uno). `eventId` es siempre requerido.
+
+| Campo     | Tipo   | Requerido | Descripción                                           |
+| --------- | ------ | --------- | ----------------------------------------------------- |
+| `userId`  | string | No*       | ID del usuario a eliminar (*requerido si no se envía email) |
+| `email`   | string | No*       | Email del usuario (*requerido si no se envía userId; se busca el usuario por este campo) |
+| `eventId` | string | **Sí**    | ID del evento (membership/participante)               |
+
+También se aceptan `user_id` y `event_id` como nombres de campo.
+
+#### Comandos cURL
+
+**Por userId:**
+
+```bash
+curl -X DELETE \
+  'https://system-track-monitor.web.app/api/competitors/delete-user' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"userId": "USER_ID", "eventId": "EVENT_ID"}'
+```
+
+**Por email:**
+
+```bash
+curl -X DELETE \
+  'https://system-track-monitor.web.app/api/competitors/delete-user' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"email": "usuario@example.com", "eventId": "EVENT_ID"}'
+```
+
+**Directo (Cloud Run):**
+
+```bash
+curl -X DELETE \
+  'https://delete-competitor-user-xa26lpxdea-uc.a.run.app' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"userId": "USER_ID", "eventId": "EVENT_ID"}'
+```
+
+#### Respuestas
+
+- **204 No Content**: Usuario y datos asociados eliminados correctamente (cuerpo vacío).
+- **400 Bad Request**: Body inválido, falta `eventId` o no se envió ni `userId` ni `email` (sin cuerpo).
+- **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
+- **404 Not Found**: Usuario no encontrado en `users` (sin cuerpo).
+- **500 Internal Server Error**: Error interno (sin cuerpo).
+
+---
+
+## 📦 Package: Staff
+
+Funciones relacionadas con la gestión de usuarios staff en eventos.
+
+### 1. `create_staff_user`
+
+Crea un usuario staff completo. Flujo transaccional de 3 pasos: (1) crea usuario en Firebase Auth, (2) crea documento en colección `users` con datos personales y contacto de emergencia, (3) crea subcolección `membership/{eventId}` con rol y checkpoints. Rollback automático si cualquier paso falla.
+
+**Tipo**: HTTP Request (POST)  
+**Endpoint**: `https://create-staff-user-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/staff/create-user`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Valor                              | Descripción          |
+| --------------- | ---------------------------------- | -------------------- |
+| `Authorization` | `Bearer {Firebase Auth Token}`     | Token de autenticación |
+| `Content-Type`  | `application/json`                 | Tipo de contenido    |
+
+#### Request Body (JSON)
+
+| Campo                     | Tipo   | Requerido              | Descripción                         |
+| ------------------------- | ------ | ---------------------- | ----------------------------------- |
+| `personalData`            | object | **Sí**                 | Datos personales                    |
+| `personalData.fullName`   | string | **Sí**                 | Nombre completo                     |
+| `personalData.email`      | string | **Sí**                 | Email (formato válido)              |
+| `personalData.phone`      | string | **Sí**                 | Teléfono (+52..., 10-15 dígitos)    |
+| `emergencyContact`        | object | **Sí**                 | Contacto de emergencia              |
+| `emergencyContact.fullName` | string | **Sí**               | Nombre del contacto                 |
+| `emergencyContact.phone`  | string | **Sí**                 | Teléfono del contacto               |
+| `username`                | string | **Sí**                 | Username (mínimo 4 caracteres)      |
+| `password`                | string | **Sí**                 | Contraseña (mín 8 chars, 1 letra, 1 número) |
+| `confirmPassword`         | string | **Sí**                 | Debe coincidir con password         |
+| `eventId`                 | string | **Sí**                 | ID del evento                       |
+| `role`                    | string | **Sí**                 | `"organizador"`, `"staff"` o `"checkpoint"` |
+| `checkpointId`            | string | **Sí** (si role=checkpoint) | ID del checkpoint              |
+
+#### Campos Retornados (201)
+
+| Campo          | Tipo   | Descripción                    |
+| -------------- | ------ | ------------------------------ |
+| `id`           | string | ID del usuario en colección `users` |
+| `authUserId`   | string | UID de Firebase Auth           |
+| `membershipId` | string | ID del evento (= eventId)      |
+
+#### Comandos cURL
+
+**Crear staff con rol "staff":**
+
+```bash
+curl -X POST \
+  'https://system-track-monitor.web.app/api/staff/create-user' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN' \
+  -d '{
+    "personalData": {
+      "fullName": "Ana García",
+      "email": "ana@example.com",
+      "phone": "+521234567890"
+    },
+    "emergencyContact": {
+      "fullName": "Luis García",
+      "phone": "+529876543210"
+    },
+    "username": "anagarcia",
+    "password": "MiPassw0rd123",
+    "confirmPassword": "MiPassw0rd123",
+    "eventId": "EVENT_ID",
+    "role": "staff"
+  }'
+```
+
+**Crear staff con rol "checkpoint" (requiere checkpointId):**
+
+```bash
+curl -X POST \
+  'https://system-track-monitor.web.app/api/staff/create-user' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN' \
+  -d '{
+    "personalData": {
+      "fullName": "Pedro López",
+      "email": "pedro@example.com",
+      "phone": "+521234567890"
+    },
+    "emergencyContact": {
+      "fullName": "Rosa López",
+      "phone": "+529876543210"
+    },
+    "username": "pedrolopez",
+    "password": "MiPassw0rd123",
+    "confirmPassword": "MiPassw0rd123",
+    "eventId": "EVENT_ID",
+    "role": "checkpoint",
+    "checkpointId": "CHECKPOINT_ID"
+  }'
+```
+
+**Crear staff con rol "organizador":**
+
+```bash
+curl -X POST \
+  'https://system-track-monitor.web.app/api/staff/create-user' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN' \
+  -d '{
+    "personalData": {
+      "fullName": "Carlos Ruiz",
+      "email": "carlos@example.com",
+      "phone": "+521234567890"
+    },
+    "emergencyContact": {
+      "fullName": "María Ruiz",
+      "phone": "+529876543210"
+    },
+    "username": "carlosruiz",
+    "password": "MiPassw0rd123",
+    "confirmPassword": "MiPassw0rd123",
+    "eventId": "EVENT_ID",
+    "role": "organizador"
+  }'
+```
+
+#### Respuestas
+
+- **201 Created**: `{"id": "USER_ID", "authUserId": "AUTH_UID", "membershipId": "EVENT_ID"}`
+- **400 Bad Request**: Body inválido, campos faltantes, rol inválido, checkpointId faltante para rol checkpoint (sin cuerpo).
+- **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
+- **409 Conflict**: Email o username ya registrado (sin cuerpo).
+- **500 Internal Server Error**: Error interno (sin cuerpo).
+
+#### Notas
+
+- Estructura Firestore creada:
+  - `users/{userId}` - Documento del usuario (personalData, emergencyContact, userData, authUserId)
+  - `users/{userId}/membership/{eventId}` - Relación con evento (role, checkpointIds, assignedAt)
+- A diferencia de `create_competitor_user`, no guarda healthData ni vehicleData.
+- Roles válidos: `organizador`, `staff`, `checkpoint`.
+- Si `role` es `checkpoint`, el campo `checkpointId` es obligatorio.
+- Rollback automático: si el paso 2 o 3 falla, se eliminan los recursos creados en pasos anteriores.
+
 ---
 
 ## 📦 Package: Checkpoints
@@ -1025,9 +1748,9 @@ Obtiene el día de carrera activo para un evento específico desde Firestore. Re
 
 #### Parámetros (Path o Query Parameters)
 
-| Parámetro | Tipo   | Requerido | Descripción                                    |
-| --------- | ------ | --------- | ---------------------------------------------- |
-| `eventId` | string | **Sí**    | ID del evento (puede venir en path o query)   |
+| Parámetro | Tipo   | Requerido | Descripción                                 |
+| --------- | ------ | --------- | ------------------------------------------- |
+| `eventId` | string | **Sí**    | ID del evento (puede venir en path o query) |
 
 **Nota**: El `eventId` puede venir en el path de la URL (`/api/checkpoint/dayofrace/active/{eventId}`) o como query parameter (`?eventId=xxx`).
 
@@ -1164,10 +1887,10 @@ Obtiene un checkpoint específico de un evento desde Firestore. Retorna el docum
 
 #### Parámetros (Path o Query Parameters)
 
-| Parámetro     | Tipo   | Requerido | Descripción                                    |
-| ------------- | ------ | --------- | ---------------------------------------------- |
+| Parámetro      | Tipo   | Requerido | Descripción                                     |
+| -------------- | ------ | --------- | ----------------------------------------------- |
 | `checkpointId` | string | **Sí**    | ID del checkpoint (puede venir en path o query) |
-| `eventId`     | string | **Sí**    | ID del evento (puede venir en path o query)   |
+| `eventId`      | string | **Sí**    | ID del evento (puede venir en path o query)     |
 
 **Nota**: Los parámetros pueden venir en el path de la URL (`/api/checkpoint/{checkpointId}/event/{eventId}`) o como query parameters (`?checkpointId=xxx&eventId=yyy`).
 
@@ -1318,10 +2041,10 @@ Obtiene la lista de competidores con su checkpoint específico y el nombre de la
 
 #### Parámetros (Path o Query Parameters)
 
-| Parámetro      | Tipo   | Requerido | Descripción                                    |
-| -------------- | ------ | --------- | ---------------------------------------------- |
-| `eventId`      | string | **Sí**    | ID del evento (puede venir en path o query)   |
-| `dayOfRaceId`  | string | **Sí**    | ID del día de carrera (puede venir en path o query) |
+| Parámetro      | Tipo   | Requerido | Descripción                                                  |
+| -------------- | ------ | --------- | ------------------------------------------------------------ |
+| `eventId`      | string | **Sí**    | ID del evento (puede venir en path o query)                  |
+| `dayOfRaceId`  | string | **Sí**    | ID del día de carrera (puede venir en path o query)          |
 | `checkpointId` | string | **Sí**    | ID del checkpoint para filtrar (puede venir en path o query) |
 
 **Nota**: Los parámetros pueden venir en el path de la URL (`/api/checkpoint/competitor-tracking/{eventId}/{dayOfRaceId}/{checkpointId}`) o como query parameters (`?eventId=xxx&dayOfRaceId=yyy&checkpointId=zzz`).
@@ -1367,17 +2090,20 @@ Obtiene la lista de competidores con su checkpoint específico y el nombre de la
 #### Consultas Firestore
 
 **Consulta 1: Obtener Todos los Competidores**
+
 - **Ruta**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors`
 - **Método**: Obtener todos los documentos sin filtros
 - **Timeout**: 20 segundos
 
 **Consulta 2: Obtener Checkpoint Específico por Competidor**
+
 - **Ruta**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors/{competitorId}/checkpoints/{checkpointId}`
 - **Método**: Obtener documento específico por ID (para cada competidor)
 - **Timeout**: 5 segundos por competidor
 - **Nota**: Solo se incluyen competidores que tienen el checkpoint específico. Si el checkpoint no existe para un competidor, ese competidor se omite.
 
 **Consulta 3: Obtener Todas las Rutas**
+
 - **Ruta**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/routes`
 - **Método**: Obtener todos los documentos sin filtros
 - **Timeout**: 20 segundos
@@ -1386,13 +2112,13 @@ Obtiene la lista de competidores con su checkpoint específico y el nombre de la
 
 La función filtra competidores visibles según estas reglas:
 
-| Status | Checkpoint Type | Visible |
-|--------|----------------|---------|
-| `out` | Cualquiera | ✅ Sí |
-| `outStart` | `start` | ✅ Sí |
-| `outStart` | `finish` | ✅ Sí |
-| `outStart` | Otros (pass, timer, etc.) | ❌ No |
-| Otros (none, check, outLast, disqualified) | Cualquiera | ✅ Sí |
+| Status                                     | Checkpoint Type           | Visible |
+| ------------------------------------------ | ------------------------- | ------- |
+| `out`                                      | Cualquiera                | ✅ Sí   |
+| `outStart`                                 | `start`                   | ✅ Sí   |
+| `outStart`                                 | `finish`                  | ✅ Sí   |
+| `outStart`                                 | Otros (pass, timer, etc.) | ❌ No   |
+| Otros (none, check, outLast, disqualified) | Cualquiera                | ✅ Sí   |
 
 **Valores de Status**: `none`, `check`, `out`, `outStart`, `outLast`, `disqualified`
 
@@ -1557,9 +2283,9 @@ Obtiene todos los competidores de un evento y día de carrera específico, inclu
 
 #### Parámetros (Path o Query Parameters)
 
-| Parámetro     | Tipo   | Requerido | Descripción                                    |
-| ------------- | ------ | --------- | ---------------------------------------------- |
-| `eventId`     | string | **Sí**    | ID del evento (puede venir en path o query)   |
+| Parámetro     | Tipo   | Requerido | Descripción                                         |
+| ------------- | ------ | --------- | --------------------------------------------------- |
+| `eventId`     | string | **Sí**    | ID del evento (puede venir en path o query)         |
 | `dayOfRaceId` | string | **Sí**    | ID del día de carrera (puede venir en path o query) |
 
 **Nota**: Los parámetros pueden venir en el path de la URL (`/api/checkpoint/all-competitor-tracking/{eventId}/{dayOfRaceId}`) o como query parameters (`?eventId=xxx&dayOfRaceId=yyy`).
@@ -1590,11 +2316,13 @@ Cada elemento del array contiene:
 #### Consultas Firestore
 
 **Consulta 1: Obtener Todos los Competidores**
+
 - **Ruta**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors`
 - **Método**: Obtener todos los documentos sin filtros
 - **Timeout**: 20 segundos
 
 **Consulta 2: Obtener TODOS los Checkpoints por Competidor**
+
 - **Ruta**: `events_tracking/{eventId}/competitor_tracking/{eventId}_{dayOfRaceId}/competitors/{competitorId}/checkpoints`
 - **Método**: Obtener todos los documentos sin filtros (para cada competidor)
 - **Nota**: A diferencia de `competitor_tracking`, esta función obtiene **TODOS** los checkpoints de cada competidor, no solo uno específico.
@@ -1738,7 +2466,7 @@ curl -X GET \
 - **Parámetros flexibles**: Los parámetros pueden venir en el path de la URL (`/api/checkpoint/all-competitor-tracking/{eventId}/{dayOfRaceId}`) o como query parameters (`?eventId=xxx&dayOfRaceId=yyy`).
 - **Sin wrapper**: La respuesta NO incluye un wrapper. Retorna directamente un array de `CompetitorTracking`.
 - **Array vacío**: Si no hay competidores, retorna `[]` (array vacío) con código 200 OK.
-- **Diferencia con `competitor_tracking`**: 
+- **Diferencia con `competitor_tracking`**:
   - `competitor_tracking`: Filtra por checkpoint específico, retorna `CompetitorTrackingWithRoute` con `routeName`
   - `all_competitor_tracking`: Obtiene TODOS los checkpoints, retorna `List<CompetitorTracking>` sin `routeName`
 
@@ -1763,12 +2491,12 @@ Actualiza el estado de un competidor en un checkpoint específico. Incluye lógi
 
 #### Parámetros (Path)
 
-| Parámetro     | Tipo   | Requerido | Descripción                                    |
-| ------------- | ------ | --------- | ---------------------------------------------- |
-| `eventId`     | string | **Sí**    | ID del evento (viene en el path)              |
-| `dayOfRaceId` | string | **Sí**    | ID del día de carrera (viene en el path)      |
-| `competitorId` | string | **Sí**    | ID del competidor (viene en el path)           |
-| `checkpointId` | string | **Sí**    | ID del checkpoint (viene en el path)          |
+| Parámetro      | Tipo   | Requerido | Descripción                              |
+| -------------- | ------ | --------- | ---------------------------------------- |
+| `eventId`      | string | **Sí**    | ID del evento (viene en el path)         |
+| `dayOfRaceId`  | string | **Sí**    | ID del día de carrera (viene en el path) |
+| `competitorId` | string | **Sí**    | ID del competidor (viene en el path)     |
+| `checkpointId` | string | **Sí**    | ID del checkpoint (viene en el path)     |
 
 #### Request Body
 
@@ -1789,14 +2517,17 @@ Actualiza el estado de un competidor en un checkpoint específico. Incluye lógi
 #### Lógica Condicional de Actualización
 
 **Cuando `status` NO es `out`, `outStart` o `outLast`:**
+
 - `checkpointDisable`: `null`
 - `checkpointDisableName`: `null`
 
 **Cuando `status` ES `out`, `outStart` o `outLast`:**
+
 - `checkpointDisable`: `checkpointId` (del path)
 - `checkpointDisableName`: Valor del request (o nombre del checkpoint si no se proporciona)
 
 **Campos siempre actualizados:**
+
 - `statusCompetitor`: Valor del campo `status` del request
 - `passTime`: Fecha/hora actual (generada automáticamente)
 - `updatedAt`: Fecha/hora actual (generada automáticamente)
@@ -1961,9 +2692,9 @@ Obtiene todos los días de carrera de un evento específico desde Firestore. Ret
 
 #### Parámetros (Path o Query Parameters)
 
-| Parámetro | Tipo   | Requerido | Descripción                                    |
-| --------- | ------ | --------- | ---------------------------------------------- |
-| `eventId` | string | **Sí**    | ID del evento (puede venir en path o query)   |
+| Parámetro | Tipo   | Requerido | Descripción                                 |
+| --------- | ------ | --------- | ------------------------------------------- |
+| `eventId` | string | **Sí**    | ID del evento (puede venir en path o query) |
 
 **Nota**: El parámetro puede venir en el path de la URL (`/api/days-of-race/{eventId}`) o como query parameter (`?eventId=xxx`).
 
@@ -2092,6 +2823,7 @@ curl -X GET \
 ### 10. `change_competitor_status`
 
 Cambia el estado de un competidor y actualiza todos sus checkpoints relacionados. Esta función consolida tres operaciones:
+
 1. Actualiza el checkpoint específico con el nuevo estado
 2. Limpia checkpoints superiores si el status anterior era 'out'
 3. Actualiza checkpoints superiores si el nuevo status es 'out'
@@ -2127,17 +2859,17 @@ Cambia el estado de un competidor y actualiza todos sus checkpoints relacionados
 
 **Campos del Request:**
 
-| Parámetro             | Tipo    | Requerido | Descripción                                                                 |
-| --------------------- | ------- | --------- | --------------------------------------------------------------------------- |
-| `eventId`             | string  | **Sí**    | ID del evento al que pertenece el competidor                                |
-| `dayOfRaceId`         | string  | **Sí**    | ID del día de carrera activo                                                |
-| `checkpointId`         | string  | **Sí**    | ID del checkpoint donde se actualiza el estado                              |
-| `orderCheckpoint`      | integer | **Sí**    | Orden numérico del checkpoint (usado para determinar checkpoints superiores) |
-| `competitorId`         | string  | **Sí**    | ID del competidor cuyo estado se actualiza                                  |
+| Parámetro              | Tipo    | Requerido | Descripción                                                                                                                                     |
+| ---------------------- | ------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `eventId`              | string  | **Sí**    | ID del evento al que pertenece el competidor                                                                                                    |
+| `dayOfRaceId`          | string  | **Sí**    | ID del día de carrera activo                                                                                                                    |
+| `checkpointId`         | string  | **Sí**    | ID del checkpoint donde se actualiza el estado                                                                                                  |
+| `orderCheckpoint`      | integer | **Sí**    | Orden numérico del checkpoint (usado para determinar checkpoints superiores)                                                                    |
+| `competitorId`         | string  | **Sí**    | ID del competidor cuyo estado se actualiza                                                                                                      |
 | `status`               | string  | **Sí**    | Nuevo estado del competidor. Valores válidos: `none`, `noneStart`, `noneLast`, `check`, `checkStart`, `checkLast`, `out`, `outStart`, `outLast` |
-| `lastStatusCompetitor` | string  | **Sí**    | Estado anterior del competidor. Mismos valores válidos que `status`          |
-| `checkpointName`       | string  | **Sí**    | Nombre del checkpoint (usado para `checkpointDisableName`)                  |
-| `note`                 | string  | No        | Nota opcional asociada al cambio de estado                                 |
+| `lastStatusCompetitor` | string  | **Sí**    | Estado anterior del competidor. Mismos valores válidos que `status`                                                                             |
+| `checkpointName`       | string  | **Sí**    | Nombre del checkpoint (usado para `checkpointDisableName`)                                                                                      |
+| `note`                 | string  | No        | Nota opcional asociada al cambio de estado                                                                                                      |
 
 **Valores Válidos para `status` y `lastStatusCompetitor`:**
 
@@ -2150,12 +2882,14 @@ Cambia el estado de un competidor y actualiza todos sus checkpoints relacionados
 #### Lógica de Implementación
 
 **Paso 1: Actualizar Checkpoint Específico**
+
 - Actualiza el checkpoint indicado con el nuevo `status`
 - Si el nuevo status NO es 'out', limpia `checkpointDisable` y `checkpointDisableName`
 - Si el nuevo status ES 'out', establece `checkpointDisable = checkpointId` y `checkpointDisableName = checkpointName`
 - Actualiza `passTime` y `updatedAt` con la fecha/hora actual
 
 **Paso 2: Limpiar Checkpoints Superiores** (solo si `lastStatusCompetitor` era 'out')
+
 - Obtiene todos los checkpoints del competidor
 - Filtra checkpoints con `order > orderCheckpoint`
 - Para cada checkpoint superior:
@@ -2164,6 +2898,7 @@ Cambia el estado de un competidor y actualiza todos sus checkpoints relacionados
   - Actualiza `updatedAt`
 
 **Paso 3: Actualizar Checkpoints Superiores** (solo si el nuevo `status` es 'out')
+
 - Obtiene todos los checkpoints del competidor
 - Filtra checkpoints con `order > orderCheckpoint`
 - Para cada checkpoint superior:
@@ -2519,19 +3254,19 @@ Recibe posición y datos del competidor en tiempo real (coordenadas, velocidad, 
 
 #### Parámetros (Query Parameters)
 
-| Parámetro     | Tipo   | Requerido | Descripción                          |
-| ------------- | ------ | --------- | ------------------------------------ |
-| `eventId`     | string | **Sí**    | UUID del evento                      |
-| `dayId`       | string | **Sí**    | UUID del día de carrera              |
-| `competitorId`| string | **Sí**    | UUID del competidor                  |
+| Parámetro      | Tipo   | Requerido | Descripción             |
+| -------------- | ------ | --------- | ----------------------- |
+| `eventId`      | string | **Sí**    | UUID del evento         |
+| `dayId`        | string | **Sí**    | UUID del día de carrera |
+| `competitorId` | string | **Sí**    | UUID del competidor     |
 
 #### Request Body (JSON)
 
-| Campo          | Tipo   | Requerido | Descripción                                    |
-| -------------- | ------ | --------- | ---------------------------------------------- |
-| `coordinates`  | object | **Sí**    | `latitude` (number), `longitude` (number)       |
-| `data`         | object | **Sí**    | `speed` (string), `type` (string)             |
-| `timeStamp`    | string | **Sí**    | Fecha/hora captura (ej. "DD/MM/YYYY HH:mm:ss")|
+| Campo         | Tipo   | Requerido | Descripción                                    |
+| ------------- | ------ | --------- | ---------------------------------------------- |
+| `coordinates` | object | **Sí**    | `latitude` (number), `longitude` (number)      |
+| `data`        | object | **Sí**    | `speed` (string), `type` (string)              |
+| `timeStamp`   | string | **Sí**    | Fecha/hora captura (ej. "DD/MM/YYYY HH:mm:ss") |
 
 Ejemplo:
 
@@ -2591,6 +3326,7 @@ Las siguientes funciones requieren autenticación Bearer token:
 - `get_vehicles` - Obtiene vehículos de un usuario (requiere Bearer token)
 - `update_vehicle` - Actualiza vehículo (requiere Bearer token)
 - `delete_vehicle` - Elimina vehículo (requiere Bearer token)
+- `search_vehicle` - Busca vehículo por branch, model y year (requiere Bearer token)
 - `catalog_vehicle` - CRUD catálogo marcas de motos (requiere Bearer token)
 - `catalog_year` - CRUD catálogo años (requiere Bearer token)
 - `catalog_color` - CRUD catálogo colores (requiere Bearer token)
@@ -2601,6 +3337,12 @@ Las siguientes funciones requieren autenticación Bearer token:
 - `update_competitor_status` - Actualiza el estado de un competidor en un checkpoint (requiere token para autenticación)
 - `change_competitor_status` - Cambia el estado de un competidor y actualiza checkpoints relacionados (requiere token para autenticación)
 - `days_of_race` - Obtiene todos los días de carrera (requiere token para autenticación)
+- `create_competitor` - Crea competidor básico en un evento (requiere Bearer token)
+- `create_competitor_user` - Crea template de usuario competidor + membership + participante en evento, sin Firebase Auth (requiere Bearer token)
+- `get_competitor_by_id` - Obtiene competidor por ID (requiere Bearer token)
+- `get_competitors_by_event` - Lista competidores de un evento con filtros (requiere Bearer token)
+- `delete_competitor_user` - Elimina usuario competidor creado con create_competitor_user (requiere Bearer token)
+- `create_staff_user` - Crea usuario staff completo con Auth y membership (requiere Bearer token)
 - `track_event_checkpoint` - Modifica datos de tracking
 - `track_competitors` - Modifica datos de tracking
 - `track_competitors_off` - Modifica datos de tracking
@@ -2699,6 +3441,9 @@ firebase deploy --only functions:update_vehicle
 # Desplegar solo delete_vehicle
 firebase deploy --only functions:delete_vehicle
 
+# Desplegar solo search_vehicle
+firebase deploy --only functions:search_vehicle
+
 # Desplegar catálogos (SPRTMNTRPP-82)
 firebase deploy --only functions:catalog_vehicle,functions:catalog_year,functions:catalog_color
 
@@ -2728,6 +3473,27 @@ firebase deploy --only functions:track_competitor_position
 
 # Desplegar funciones de tracking
 firebase deploy --only functions:track_event_checkpoint,functions:track_competitors,functions:track_competitors_off,functions:track_competitor_position
+
+# Desplegar solo create_competitor
+firebase deploy --only functions:create_competitor
+
+# Desplegar solo create_competitor_user
+firebase deploy --only functions:create_competitor_user
+
+# Desplegar solo get_competitor_by_id
+firebase deploy --only functions:get_competitor_by_id
+
+# Desplegar solo get_competitors_by_event
+firebase deploy --only functions:get_competitors_by_event
+
+# Desplegar solo delete_competitor_user
+firebase deploy --only functions:delete_competitor_user
+
+# Desplegar solo create_staff_user
+firebase deploy --only functions:create_staff_user
+
+# Desplegar todas las funciones nuevas de competitors y staff
+firebase deploy --only functions:create_competitor,functions:create_competitor_user,functions:delete_competitor_user,functions:get_competitor_by_id,functions:get_competitors_by_event,functions:create_staff_user
 ```
 
 ---
@@ -2740,29 +3506,29 @@ Para probar las funciones localmente, consulta el archivo [README_TESTING.md](./
 
 **Despliegue (producción):**
 
-| Acción | Comando |
-| ------ | ------- |
-| Desplegar todas las funciones | `firebase deploy --only functions` |
+| Acción                         | Comando                                           |
+| ------------------------------ | ------------------------------------------------- |
+| Desplegar todas las funciones  | `firebase deploy --only functions`                |
 | Desplegar una función concreta | `firebase deploy --only functions:NOMBRE_FUNCION` |
 
 Ejemplos: `firebase deploy --only functions:competitor_route`, `firebase deploy --only functions:events`.
 
 **Emulador (local):**
 
-| Acción | Comando |
-| ------ | ------- |
-| Iniciar emulador (functions + hosting, con path `/api/...`) | `firebase emulators:start --only functions,hosting` |
-| Iniciar con Firestore | `firebase emulators:start --only functions,hosting,firestore` |
-| Solo functions (sin path del API) | `firebase emulators:start --only functions` |
+| Acción                                                      | Comando                                                       |
+| ----------------------------------------------------------- | ------------------------------------------------------------- |
+| Iniciar emulador (functions + hosting, con path `/api/...`) | `firebase emulators:start --only functions,hosting`           |
+| Iniciar con Firestore                                       | `firebase emulators:start --only functions,hosting,firestore` |
+| Solo functions (sin path del API)                           | `firebase emulators:start --only functions`                   |
 
 **Emulador con debug e inspect:**
 
-| Acción | Comando |
-| ------ | ------- |
-| Emulador con logs detallados (debug) | `firebase emulators:start --only functions,hosting --debug` |
+| Acción                                          | Comando                                                                 |
+| ----------------------------------------------- | ----------------------------------------------------------------------- |
+| Emulador con logs detallados (debug)            | `firebase emulators:start --only functions,hosting --debug`             |
 | Emulador con inspector para depurador (Node.js) | `firebase emulators:start --only functions,hosting --inspect-functions` |
 
-**Nota:** `--inspect-functions` solo funciona con funciones en **Node.js**. En proyectos con funciones en **Python** el emulador mostrará *"--inspect-functions not supported for Python functions. Ignored."* Para depurar funciones Python con breakpoints, usa el flujo descrito en [Depuración con breakpoints](#depuración-con-breakpoints) (debugpy + Attach).
+**Nota:** `--inspect-functions` solo funciona con funciones en **Node.js**. En proyectos con funciones en **Python** el emulador mostrará _"--inspect-functions not supported for Python functions. Ignored."_ Para depurar funciones Python con breakpoints, usa el flujo descrito en [Depuración con breakpoints](#depuración-con-breakpoints) (debugpy + Attach).
 
 ---
 
@@ -2770,26 +3536,44 @@ Ejemplos: `firebase deploy --only functions:competitor_route`, `firebase deploy 
 
 Para poder usar **tanto el path del API como la URL directa de la función**, arranca el emulador con **functions** y **hosting**:
 
+**Requisitos:** El proyecto usa **Python 3.12** (`runtime: python312` en [firebase.json](firebase.json)). El venv está en `functions/venv` con las dependencias en [functions/requirements.txt](functions/requirements.txt). Debes tener sesión en Firebase (`firebase login`).
+
+**Iniciar emulador** (recomendado; así el emulador usa el Python del venv y encuentra el SDK):
+
 ```bash
+npm run emulators
+```
+
+Equivale a poner `functions/venv/bin` en el PATH y ejecutar el emulador. En macOS también se define `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` para evitar el crash de los workers Python al hacer fork (error tipo "objc ... fork() was called").
+
+Si prefieres hacerlo a mano en la misma terminal:
+
+```bash
+. functions/venv/bin/activate
+# En macOS, si ves crash "objc ... fork() was called", ejecuta antes:
+# export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 firebase emulators:start --only functions,hosting
 ```
 
 (O con Firestore: `firebase emulators:start --only functions,hosting,firestore`.)
 
+Comprobar configuración: `firebase login:list` (cuenta); `functions/venv/bin/python --version` (debe ser 3.12.x).
+
 **Puertos** (definidos en [firebase.json](firebase.json)):
 
-| Servicio   | Puerto | Uso |
-| ---------- | ------ | ----- |
-| Hosting    | 5050   | Acceso por **path del API** (rewrites) |
-| Functions  | 5001   | Acceso **directo por nombre de función** |
-| Firestore | 8080   | Emulador de base de datos |
-| UI         | 4000   | Interfaz del emulador |
+| Servicio  | Puerto | Uso                                      |
+| --------- | ------ | ---------------------------------------- |
+| Hosting   | 5050   | Acceso por **path del API** (rewrites)   |
+| Functions | 5001   | Acceso **directo por nombre de función** |
+| Firestore | 8080   | Emulador de base de datos                |
+| UI        | 4000   | Interfaz del emulador                    |
 
 **Nota:** El puerto de Hosting está en 5050 (no 5000) para evitar conflicto con otros servicios que suelen usar 5000 (p. ej. AirPlay en macOS).
 
 **Dos formas de llamar a una función:**
 
 1. **Por path del API** (igual que en producción con hosting): las peticiones pasan por Hosting y los rewrites envían a la función.
+
    ```
    http://localhost:5050/api/competitors/competitor-route?eventId=...&dayId=...&competitorId=...
    http://localhost:5050/api/checkpoint/dayofrace/active/EVENT_ID
@@ -2834,7 +3618,7 @@ Si solo ejecutas `firebase emulators:start --only functions` (sin hosting), solo
 
 3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, excepto `competitor_tracking`, `update_competitor_status` y `change_competitor_status` que retornan JSON con `success: false` en caso de error. Las funciones de tracking retornan objetos JSON con información del error.
 
-4. **Autenticación**: Las funciones `events`, `event_detail`, `event_categories`, `user_profile`, `create_user`, `get_vehicles`, `update_vehicle`, `delete_vehicle`, `catalog_vehicle`, `catalog_year`, `catalog_color`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
+4. **Autenticación**: Las funciones `events`, `event_detail`, `event_categories`, `user_profile`, `create_user`, `get_vehicles`, `update_vehicle`, `delete_vehicle`, `search_vehicle`, `catalog_vehicle`, `catalog_year`, `catalog_color`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
 
 5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
 

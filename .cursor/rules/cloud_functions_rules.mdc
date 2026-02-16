@@ -577,6 +577,7 @@ Antes de crear una Cloud Function, verificar:
 - [ ] ✅ Usa constantes de `FirestoreCollections` (no strings hardcodeados)
 - [ ] ✅ Si necesita nueva colección, la agregó a `FirestoreCollections` antes de usarla
 - [ ] ✅ Tipos de parámetros definidos o confirmados con el usuario si no se pueden inferir
+- [ ] ✅ Usa funciones de los helpers existentes (`auth_helper`, `datetime_helper`, `firestore_helper`, `validation_helper`, `helpers`) en lugar de duplicar lógica
 
 ### Checklist Pruebas unitarias
 
@@ -689,10 +690,202 @@ Usar mocks (por ejemplo `unittest.mock` o `pytest` fixtures) para Firestore, `ve
        return result
    ```
 
+## 🔧 Funciones Utilitarias Existentes (Reutilización Obligatoria)
+
+### Regla Obligatoria: Reutilizar Funciones de los Helpers
+
+**SIEMPRE** revisar los archivos helper existentes antes de crear cualquier función nueva. Si ya existe una función que resuelve la necesidad, **DEBE USARSE**. **NUNCA** duplicar lógica que ya está en los helpers.
+
+**Archivos helper disponibles:**
+
+---
+
+### 1. `utils/auth_helper.py` — Firebase Authentication
+
+Funciones centralizadas para gestionar usuarios en Firebase Auth.
+
+| Función | Descripción | Parámetros | Retorno |
+|---------|-------------|------------|---------|
+| `create_firebase_auth_user(email, password)` | Crea usuario en Firebase Auth | `email: str`, `password: str` | `str` (UID del usuario) |
+| `delete_firebase_auth_user(uid)` | Elimina usuario (útil para rollback) | `uid: str` | `bool` |
+| `update_firebase_auth_email(uid, new_email)` | Actualiza email del usuario | `uid: str`, `new_email: str` | `bool` |
+| `update_firebase_auth_password(uid, new_password)` | Actualiza contraseña del usuario | `uid: str`, `new_password: str` | `bool` |
+
+**Uso:**
+```python
+from utils.auth_helper import create_firebase_auth_user, delete_firebase_auth_user
+
+# Crear usuario
+uid = create_firebase_auth_user(email, password)
+
+# Rollback si falla algo después
+delete_firebase_auth_user(uid)
+```
+
+---
+
+### 2. `utils/datetime_helper.py` — Fechas y Timestamps
+
+Funciones para manejo consistente de fechas. Usar `get_current_timestamp()` para campos `createdAt` y `updatedAt`.
+
+| Función | Descripción | Parámetros | Retorno |
+|---------|-------------|------------|---------|
+| `get_current_timestamp()` | Timestamp actual ISO 8601 UTC | — | `str` (ej: `"2026-02-15T12:00:00+00:00"`) |
+| `parse_iso_datetime(iso_string)` | Convierte ISO 8601 a datetime | `iso_string: str` | `datetime` |
+| `format_datetime_for_firestore(dt)` | Formatea datetime para Firestore | `dt: datetime` | `str` (ISO 8601) |
+
+**Uso:**
+```python
+from utils.datetime_helper import get_current_timestamp
+
+data = {
+    "name": "Ejemplo",
+    "createdAt": get_current_timestamp(),
+    "updatedAt": get_current_timestamp(),
+}
+```
+
+---
+
+### 3. `utils/firestore_helper.py` — Operaciones CRUD en Firestore
+
+Clase `FirestoreHelper` centralizada para todas las operaciones con Firestore. **NO** acceder directamente a `firestore.client()` para CRUD; usar esta clase.
+
+| Método | Descripción | Parámetros | Retorno |
+|--------|-------------|------------|---------|
+| `get_document(collection_path, document_id)` | Obtiene documento por ID | `collection_path: str`, `document_id: str` | `Optional[Dict]` |
+| `create_document(collection_path, data)` | Crea documento con ID autogenerado | `collection_path: str`, `data: Dict` | `str` (ID creado) |
+| `create_document_with_id(collection_path, document_id, data)` | Crea documento con ID específico | `collection_path: str`, `document_id: str`, `data: Dict` | `str` (ID) |
+| `update_document(collection_path, document_id, data)` | Actualiza documento existente | `collection_path: str`, `document_id: str`, `data: Dict` | `bool` |
+| `delete_document(collection_path, document_id)` | Elimina documento | `collection_path: str`, `document_id: str` | `bool` |
+| `query_documents(collection_path, filters, order_by, limit)` | Query con filtros, orden y límite | `collection_path: str`, `filters: List[Dict]`, `order_by: List[Tuple]`, `limit: int` | `List[Tuple[str, Dict]]` |
+| `batch_update(updates)` | Actualiza múltiples documentos en batch | `updates: List[Tuple[str, str, Dict]]` | `bool` |
+
+**Uso:**
+```python
+from utils.firestore_helper import FirestoreHelper
+
+fs = FirestoreHelper()
+
+# Obtener documento
+doc = fs.get_document("events", event_id)
+
+# Crear documento
+new_id = fs.create_document("events/abc/participants", data)
+
+# Query con filtros
+results = fs.query_documents(
+    "events",
+    filters=[{"field": "status", "operator": "==", "value": "active"}],
+    order_by=[("createdAt", "desc")],
+    limit=10,
+)
+```
+
+---
+
+### 4. `utils/validation_helper.py` — Validaciones Comunes
+
+Funciones reutilizables de validación. **NO** escribir regex o validaciones manuales si ya existen aquí.
+
+| Función | Descripción | Parámetros | Retorno |
+|---------|-------------|------------|---------|
+| `validate_password(password)` | Valida requisitos de contraseña (≥8 chars, letra, número) | `password: str` | `Tuple[bool, str]` |
+| `validate_phone(phone)` | Valida formato de teléfono (+52..., 10-15 dígitos) | `phone: str` | `bool` |
+| `validate_required_fields(data, required_fields)` | Valida campos requeridos presentes y no vacíos | `data: Dict`, `required_fields: List[str]` | `Tuple[bool, str]` |
+| `validate_email(email)` | Valida formato de email | `email: str` | `bool` |
+
+**Uso:**
+```python
+from utils.validation_helper import validate_required_fields, validate_email
+
+# Validar campos requeridos del body
+is_valid, error_msg = validate_required_fields(request_data, ["name", "email", "phone"])
+if not is_valid:
+    logging.warning("function_name: %s", error_msg)
+    return https_fn.Response("", status=400, headers={"Access-Control-Allow-Origin": "*"})
+
+# Validar email
+if not validate_email(request_data["email"]):
+    return https_fn.Response("", status=400, headers={"Access-Control-Allow-Origin": "*"})
+```
+
+---
+
+### 5. `utils/helpers.py` — Utilidades Generales
+
+Funciones de conversión y formato para datos de Firestore.
+
+| Función | Descripción | Parámetros | Retorno |
+|---------|-------------|------------|---------|
+| `format_utc_to_local_datetime(utc_datetime)` | Convierte datetime UTC a ISO 8601 con Z | `utc_datetime: datetime` | `str` (ej: `"2025-10-24T19:03:35Z"`) |
+| `convert_firestore_value(value)` | Convierte valores de Firestore a JSON serializable (timestamps, dicts, lists, recursivo) | `value: Any` | `Any` (JSON serializable) |
+
+**Uso:**
+```python
+from utils.helpers import convert_firestore_value
+
+# Convertir documento completo de Firestore a JSON serializable
+doc_data = doc.to_dict()
+serializable_data = convert_firestore_value(doc_data)
+```
+
+---
+
+### ❌ Ejemplos de Duplicación Prohibida
+
+```python
+# ❌ INCORRECTO: Crear timestamp manualmente
+from datetime import datetime, timezone
+data["createdAt"] = datetime.now(timezone.utc).isoformat()
+
+# ✅ CORRECTO: Usar datetime_helper
+from utils.datetime_helper import get_current_timestamp
+data["createdAt"] = get_current_timestamp()
+```
+
+```python
+# ❌ INCORRECTO: Validar email con regex manual
+import re
+if not re.match(r"^[a-zA-Z0-9._%+-]+@...", email):
+    ...
+
+# ✅ CORRECTO: Usar validation_helper
+from utils.validation_helper import validate_email
+if not validate_email(email):
+    ...
+```
+
+```python
+# ❌ INCORRECTO: Acceder a Firestore directamente para CRUD
+db = firestore.client()
+doc = db.collection("events").document(event_id).get()
+
+# ✅ CORRECTO: Usar FirestoreHelper
+from utils.firestore_helper import FirestoreHelper
+fs = FirestoreHelper()
+doc = fs.get_document(FirestoreCollections.EVENTS, event_id)
+```
+
+```python
+# ❌ INCORRECTO: Crear usuario auth manualmente
+from firebase_admin import auth
+user = auth.create_user(email=email, password=password)
+
+# ✅ CORRECTO: Usar auth_helper
+from utils.auth_helper import create_firebase_auth_user
+uid = create_firebase_auth_user(email, password)
+```
+
 ## 📚 Referencias
 
 - `utils/helper_http.py` - Función `verify_bearer_token()`
 - `utils/helper_http_verb.py` - Función `validate_request()`
+- `utils/auth_helper.py` - Funciones de Firebase Authentication
+- `utils/datetime_helper.py` - Funciones de fechas y timestamps
+- `utils/firestore_helper.py` - Clase `FirestoreHelper` para CRUD en Firestore
+- `utils/validation_helper.py` - Funciones de validación (email, teléfono, campos, contraseña)
+- `utils/helpers.py` - Utilidades generales (conversión de valores Firestore, formato de fechas)
 - `models/firestore_collections.py` - Constantes de colecciones
 
 ## 🗄️ Uso de FirestoreCollections
@@ -837,3 +1030,4 @@ Descripción breve de la función.
 13. **SIEMPRE** incluir casos de prueba: happy path, parámetros faltantes, valor/tipo incorrecto, consultas que retornen data, operaciones de escritura que permitan validar éxito, múltiples llamadas al mismo API
 14. **SIEMPRE** diseñar consultas para que arrojen data; operaciones create/update/delete para que se pueda validar si funcionaron correctamente
 15. **SIEMPRE** tras pruebas pasando: documentar el API; luego commit con descripción de cambios y ticket de Jira si aplica; después deploy de las funciones
+16. **SIEMPRE** reutilizar funciones de los helpers existentes (`auth_helper`, `datetime_helper`, `firestore_helper`, `validation_helper`, `helpers`). **NUNCA** duplicar lógica que ya está en estos archivos (timestamps, validaciones, CRUD Firestore, gestión de auth users, conversión de valores)

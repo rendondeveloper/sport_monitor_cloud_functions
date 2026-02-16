@@ -1,6 +1,12 @@
 import logging
+
 from firebase_admin import auth
 from firebase_functions import https_fn
+
+try:
+    from firebase_admin._token_gen import ExpiredIdTokenError
+except ImportError:
+    ExpiredIdTokenError = type("ExpiredIdTokenError", (), {})
 
 
 def verify_bearer_token(req: https_fn.Request, function_name: str = "function") -> bool:
@@ -33,7 +39,14 @@ def verify_bearer_token(req: https_fn.Request, function_name: str = "function") 
     try:
         auth.verify_id_token(token)
         return True
+    except ExpiredIdTokenError:
+        logging.warning("%s: Token expirado", function_name)
+        return False
     except (ValueError, TypeError, AttributeError) as e:
+        logging.warning("%s: Error validando token: %s", function_name, e)
+        return False
+    except Exception as e:
+        # Cualquier otro error de auth (ej. token revocado, firma inválida) → 401, no 500
         logging.warning("%s: Error validando token: %s", function_name, e)
         return False
 

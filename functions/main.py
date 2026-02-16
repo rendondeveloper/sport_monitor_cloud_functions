@@ -12,7 +12,17 @@ logging.basicConfig(
 )
 
 # Importar funciones de competitors
-from competitors import competitor_route
+from competitors import (
+    competitor_route,
+    create_competitor,
+    create_competitor_user,
+    delete_competitor_user,
+    get_competitor_by_id,
+    get_competitors_by_event,
+)
+
+# Importar funciones de staff
+from staff import create_staff_user
 
 # Importar funciones de checkpoints
 from checkpoints import (
@@ -40,7 +50,7 @@ from tracking.tracking_competitors import track_competitors, track_competitors_o
 from users import user_profile, create_user
 
 # Importar funciones de vehicles
-from vehicles import delete_vehicle, get_vehicles, update_vehicle
+from vehicles import delete_vehicle, get_vehicles, search_vehicle, update_vehicle
 
 # Importar funciones de catalogs
 from catalogs import catalog_vehicle, catalog_year, catalog_color
@@ -78,9 +88,16 @@ initialize_app(options=_options if _options else None)
 # - update_competitor_status: checkpoints/update_competitor_status.py
 # - competitor_route: competitors/competitor_route.py
 # - track_competitor_position: tracking/track_competitor_position.py
+# - search_vehicle: vehicles/search_vehicle.py
 # - get_vehicles: vehicles/get_vehicles.py
 # - update_vehicle: vehicles/update_vehicle.py
 # - delete_vehicle: vehicles/delete_vehicle.py
 # - catalog_vehicle: catalogs/catalog_vehicle.py
 # - catalog_year: catalogs/catalog_year.py
 # - catalog_color: catalogs/catalog_color.py
+# - create_competitor: competitors/create_competitor.py
+# - create_competitor_user: competitors/create_competitor_user.py
+# - delete_competitor_user: competitors/delete_competitor_user.py
+# - get_competitor_by_id: competitors/get_competitor_by_id.py
+# - get_competitors_by_event: competitors/get_competitors_by_event.py
+# - create_staff_user: staff/create_staff_user.py

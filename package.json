@@ -1,0 +1,7 @@
+{
+  "name": "sport-monitor-cloud-functions",
+  "private": true,
+  "scripts": {
+    "emulators": "PATH=\"$PWD/functions/venv/bin:$PATH\" OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES firebase emulators:start --only functions,hosting"
+  }
+}
