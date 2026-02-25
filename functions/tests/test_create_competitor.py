@@ -52,12 +52,12 @@ def mock_firestore_helper():
 def valid_request_body():
     """Body válido para crear un competidor."""
     return {
+        "userId": "user_abc",
         "eventId": "event123",
         "competitionCategory": {
             "pilotNumber": "42",
             "registrationCategory": "Pro",
         },
-        "registrationDate": "2026-02-15T10:00:00",
         "team": "Team Red Bull",
     }
 
@@ -90,19 +90,21 @@ class TestCreateCompetitorHappyPath:
     ):
         from competitors.create_competitor import create_competitor
 
-        # Mock: evento existe
-        mock_firestore_helper.get_document.return_value = {"name": "Test Event"}
+        # Mock: usuario existe, evento existe, participante no existe
+        mock_firestore_helper.get_document.side_effect = [
+            {"email": "test@example.com"},
+            {"name": "Test Event"},
+            None,
+        ]
         # Mock: no hay duplicados
         mock_firestore_helper.query_documents.return_value = []
-        # Mock: crear documento retorna ID
-        mock_firestore_helper.create_document.return_value = "competitor_abc"
 
         req = _make_request(body=valid_request_body)
         response = create_competitor(req)
 
         assert response.status_code == 201
         data = json.loads(response.response[0])
-        assert data["id"] == "competitor_abc"
+        assert data["id"] == "user_abc"
 
     def test_create_competitor_without_pilot_number(
         self,
@@ -113,6 +115,7 @@ class TestCreateCompetitorHappyPath:
         from competitors.create_competitor import create_competitor
 
         body = {
+            "userId": "user_no_pilot",
             "eventId": "event123",
             "competitionCategory": {
                 "pilotNumber": "",
@@ -120,14 +123,17 @@ class TestCreateCompetitorHappyPath:
             },
         }
 
-        mock_firestore_helper.get_document.return_value = {"name": "Event"}
-        mock_firestore_helper.create_document.return_value = "comp_no_pilot"
+        # Mock: usuario existe, evento existe, participante no existe
+        mock_firestore_helper.get_document.side_effect = [
+            {"email": "test@example.com"},
+            {"name": "Event"},
+            None,
+        ]
 
         req = _make_request(body=body)
         response = create_competitor(req)
 
         assert response.status_code == 201
-        # No se llama a query_documents porque pilotNumber está vacío
         mock_firestore_helper.query_documents.assert_not_called()
 
 
@@ -146,6 +152,18 @@ class TestCreateCompetitorMissingParams:
 
         assert response.status_code == 400
 
+    def test_missing_user_id(
+        self,
+        mock_validate_request,
+        mock_verify_bearer_token,
+    ):
+        from competitors.create_competitor import create_competitor
+
+        req = _make_request(body={"eventId": "event123"})
+        response = create_competitor(req)
+
+        assert response.status_code == 400
+
     def test_missing_event_id(
         self,
         mock_validate_request,
@@ -153,7 +171,7 @@ class TestCreateCompetitorMissingParams:
     ):
         from competitors.create_competitor import create_competitor
 
-        req = _make_request(body={"competitionCategory": {}})
+        req = _make_request(body={"userId": "user_abc", "competitionCategory": {}})
         response = create_competitor(req)
 
         assert response.status_code == 400
@@ -165,7 +183,7 @@ class TestCreateCompetitorMissingParams:
     ):
         from competitors.create_competitor import create_competitor
 
-        req = _make_request(body={"eventId": "  "})
+        req = _make_request(body={"userId": "user_abc", "eventId": "  "})
         response = create_competitor(req)
 
         assert response.status_code == 400
@@ -181,7 +199,7 @@ class TestCreateCompetitorInvalidType:
     ):
         from competitors.create_competitor import create_competitor
 
-        req = _make_request(body={"eventId": 12345})
+        req = _make_request(body={"userId": "user_abc", "eventId": 12345})
         response = create_competitor(req)
 
         assert response.status_code == 400
@@ -203,9 +221,9 @@ class TestCreateCompetitorAuth:
 
 
 class TestCreateCompetitorNotFound:
-    """Evento no encontrado -> 404."""
+    """Evento o usuario no encontrado -> 404."""
 
-    def test_event_not_found(
+    def test_user_not_found(
         self,
         mock_validate_request,
         mock_verify_bearer_token,
@@ -215,14 +233,33 @@ class TestCreateCompetitorNotFound:
 
         mock_firestore_helper.get_document.return_value = None
 
-        req = _make_request(body={"eventId": "nonexistent"})
+        req = _make_request(body={"userId": "nonexistent", "eventId": "event123"})
+        response = create_competitor(req)
+
+        assert response.status_code == 404
+
+    def test_event_not_found(
+        self,
+        mock_validate_request,
+        mock_verify_bearer_token,
+        mock_firestore_helper,
+    ):
+        from competitors.create_competitor import create_competitor
+
+        # Usuario existe pero evento no
+        mock_firestore_helper.get_document.side_effect = [
+            {"email": "test@example.com"},
+            None,
+        ]
+
+        req = _make_request(body={"userId": "user_abc", "eventId": "nonexistent"})
         response = create_competitor(req)
 
         assert response.status_code == 404
 
 
 class TestCreateCompetitorDuplicate:
-    """Número de piloto duplicado -> 409."""
+    """Número de piloto duplicado o participante existente -> 409."""
 
     def test_duplicate_pilot_number(
         self,
@@ -233,7 +270,12 @@ class TestCreateCompetitorDuplicate:
     ):
         from competitors.create_competitor import create_competitor
 
-        mock_firestore_helper.get_document.return_value = {"name": "Event"}
+        # Usuario existe, evento existe, participante no existe
+        mock_firestore_helper.get_document.side_effect = [
+            {"email": "test@example.com"},
+            {"name": "Event"},
+            None,
+        ]
         mock_firestore_helper.query_documents.return_value = [
             ("existing_id", {"competitionCategory": {"pilotNumber": "42"}})
         ]
@@ -273,7 +315,7 @@ class TestCreateCompetitorExceptions:
 
         mock_firestore_helper.get_document.side_effect = ValueError("bad value")
 
-        req = _make_request(body={"eventId": "event123"})
+        req = _make_request(body={"userId": "user_abc", "eventId": "event123"})
         response = create_competitor(req)
         assert response.status_code == 400
 
@@ -287,7 +329,7 @@ class TestCreateCompetitorExceptions:
 
         mock_firestore_helper.get_document.side_effect = RuntimeError("db crash")
 
-        req = _make_request(body={"eventId": "event123"})
+        req = _make_request(body={"userId": "user_abc", "eventId": "event123"})
         response = create_competitor(req)
         assert response.status_code == 500
 
@@ -304,17 +346,17 @@ class TestCreateCompetitorMultipleCalls:
     ):
         from competitors.create_competitor import create_competitor
 
-        mock_firestore_helper.get_document.return_value = {"name": "Event"}
-        mock_firestore_helper.query_documents.return_value = []
-        mock_firestore_helper.create_document.side_effect = [
-            "comp_1",
-            "comp_2",
-            "comp_3",
+        # Cada llamada: usuario existe, evento existe, participante no existe
+        mock_firestore_helper.get_document.side_effect = [
+            {"email": "t@e.com"}, {"name": "Event"}, None,
+            {"email": "t@e.com"}, {"name": "Event"}, None,
+            {"email": "t@e.com"}, {"name": "Event"}, None,
         ]
+        mock_firestore_helper.query_documents.return_value = []
 
         for i in range(3):
             req = _make_request(body=valid_request_body)
             response = create_competitor(req)
             assert response.status_code == 201
             data = json.loads(response.response[0])
-            assert data["id"] == f"comp_{i + 1}"
+            assert data["id"] == "user_abc"

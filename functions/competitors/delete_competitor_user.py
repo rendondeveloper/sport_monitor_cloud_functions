@@ -221,7 +221,7 @@ def delete_competitor_user_resources(
         )
 
 
-@https_fn.on_request()
+@https_fn.on_request(region="us-east4")
 def delete_competitor_user(req: https_fn.Request) -> https_fn.Response:
     """
     Elimina el usuario competidor creado con create_competitor_user y sus datos asociados.

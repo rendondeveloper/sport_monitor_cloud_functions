@@ -65,7 +65,7 @@ def _convert_document_to_dict(
 # ============================================================================
 
 
-@https_fn.on_request()
+@https_fn.on_request(region="us-east4")
 def get_competitor_by_id(req: https_fn.Request) -> https_fn.Response:
     """
     Obtiene un competidor específico por su ID.

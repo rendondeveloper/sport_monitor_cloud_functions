@@ -139,7 +139,7 @@ def _build_response(
     }
 
 
-@https_fn.on_request()
+@https_fn.on_request(region="us-east4")
 def competitor_route(req: https_fn.Request) -> https_fn.Response:
     """
     Obtiene información del competidor y su ruta para un evento y día de carrera.

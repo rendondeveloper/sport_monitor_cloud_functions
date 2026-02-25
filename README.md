@@ -56,8 +56,11 @@ functions/
 │   ├── create_competitor.py       # create_competitor (POST)
 │   ├── create_competitor_user.py  # create_competitor_user (POST)
 │   ├── delete_competitor_user.py  # delete_competitor_user (DELETE)
+│   ├── get_competitor_by_email.py  # get_competitor_by_email (GET)
 │   ├── get_competitor_by_id.py    # get_competitor_by_id (GET)
-│   └── get_competitors_by_event.py # get_competitors_by_event (GET)
+│   ├── get_event_competitor_by_email.py # get_event_competitor_by_email (GET)
+│   ├── get_competitors_by_event.py # get_competitors_by_event (GET)
+│   └── list_competitors_by_event.py # list_competitors_by_event (GET, paginado)
 ├── staff/               # Package: Gestión de Staff
 │   └── create_staff_user.py       # create_staff_user (POST)
 ├── checkpoints/         # Package: Gestión de Checkpoints
@@ -1115,11 +1118,11 @@ Crea un nuevo competidor básico en un evento. Solo guarda datos de competición
 
 | Campo                  | Tipo   | Requerido | Descripción                  |
 | ---------------------- | ------ | --------- | ---------------------------- |
+| `userId`               | string | **Sí**    | ID del usuario en colección users |
 | `eventId`              | string | **Sí**    | ID del evento                |
 | `competitionCategory`  | object | No        | Categoría de competición     |
 | `competitionCategory.pilotNumber` | string | No | Número de piloto       |
 | `competitionCategory.registrationCategory` | string | No | Categoría de registro |
-| `registrationDate`     | string | No        | Fecha ISO 8601               |
 | `team`                 | string | No        | Nombre del equipo            |
 
 #### Campos Retornados (201)
@@ -1136,31 +1139,32 @@ curl -X POST \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN' \
   -d '{
+    "userId": "USER_ID",
     "eventId": "EVENT_ID",
     "competitionCategory": {
       "pilotNumber": "42",
       "registrationCategory": "Pro"
     },
-    "registrationDate": "2026-02-15T10:00:00",
     "team": "Team Red Bull"
   }'
 ```
 
 #### Respuestas
 
-- **201 Created**: `{"id": "GENERATED_COMPETITOR_ID"}`
+- **201 Created**: `{"id": "USER_ID"}` (mismo id que en users)
 - **400 Bad Request**: Body inválido o campos faltantes (sin cuerpo).
 - **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
-- **404 Not Found**: Evento no encontrado (sin cuerpo).
-- **409 Conflict**: Número de piloto duplicado en el evento (sin cuerpo).
+- **404 Not Found**: Usuario o evento no encontrado (sin cuerpo).
+- **409 Conflict**: Usuario ya participante en el evento, o número de piloto duplicado (sin cuerpo).
 - **500 Internal Server Error**: Error interno (sin cuerpo).
 
 #### Notas
 
-- El ID del competidor se genera automáticamente por Firestore.
-- Se guarda en `events/{eventId}/participants/{competitorId}`.
-- Campos automáticos: `score: 0`, `timesToStart: []`, `createdAt`, `updatedAt`.
+- El documento del participante usa el userId como id (mismo id que en users).
+- Se guarda en `events/{eventId}/participants/{userId}`.
+- Campos automáticos: `registrationDate` (timestamp actual), `score: 0`, `timesToStart: []`, `createdAt`, `updatedAt`.
 - Si `pilotNumber` no está vacío, se verifica que no exista duplicado en el mismo evento.
+- También acepta `competition` con campos `number`/`category` (se mapean a `pilotNumber`/`registrationCategory` en Firestore).
 
 ---
 
@@ -1185,17 +1189,17 @@ Crea en una sola llamada: template de usuario (sin Firebase Auth), subcoleccione
 
 | Campo                  | Tipo   | Requerido | Descripción                         |
 | ---------------------- | ------ | --------- | ----------------------------------- |
-| `personalData`         | object | **Sí**    | Datos personales (sin email; email va a nivel raíz) |
-| `personalData.fullName` | string | **Sí**   | Nombre completo                     |
-| `personalData.phone`   | string | **Sí**    | Teléfono (+52..., 10-15 dígitos)    |
-| `personalData.dateOfBirth` | string | No     | Fecha nacimiento ISO 8601           |
+| `email`                | string | **Sí**    | Email (formato válido)              |
+| `username`             | string | No        | Username (si se envía, mínimo 4 caracteres y único) |
+| `personalData`         | object | No        | Datos personales                    |
+| `personalData.fullName` | string | No       | Nombre completo                     |
+| `personalData.phone`   | string | No        | Teléfono (+52..., 10-15 dígitos). Si se envía, se valida formato |
+| `personalData.dateOfBirth` | string/null | No | Fecha nacimiento ISO 8601         |
 | `personalData.address` | string | No        | Dirección                           |
 | `personalData.city`    | string | No        | Ciudad                              |
 | `personalData.state`   | string | No        | Estado                              |
 | `personalData.country` | string | No        | País                                |
 | `personalData.postalCode` | string | No     | Código postal                       |
-| `email`                | string | **Sí**    | Email (formato válido; misma altura que username) |
-| `username`             | string | **Sí**    | Username (mínimo 4 caracteres)      |
 | `healthData`           | object | No        | Datos de salud                      |
 | `healthData.bloodType` | string | No        | Tipo de sangre                      |
 | `healthData.allergies` | string | No        | Alergias                            |
@@ -1203,21 +1207,20 @@ Crea en una sola llamada: template de usuario (sin Firebase Auth), subcoleccione
 | `healthData.medicalConditions` | string | No | Condiciones médicas              |
 | `healthData.insuranceProvider` | string | No | Proveedor de seguro              |
 | `healthData.insuranceNumber` | string | No   | Número de póliza                   |
-| `emergencyContacts`    | array  | **Sí**    | Lista de contactos de emergencia (al menos uno) |
-| `emergencyContacts[].fullName` | string | **Sí** | Nombre del contacto             |
+| `emergencyContacts`    | array  | No        | Lista de contactos de emergencia (puede ser `[]`) |
+| `emergencyContacts[].fullName` | string | Condicional | Nombre del contacto (requerido si se envía el contacto) |
 | `emergencyContacts[].relationship` | string | No | Relación con el usuario        |
-| `emergencyContacts[].phone` | string | **Sí** | Teléfono del contacto              |
+| `emergencyContacts[].phone` | string | Condicional | Teléfono del contacto (requerido si se envía el contacto) |
 | `vehicleData`          | object | No        | Si se envía, se crea un documento en `users/{userId}/vehicles` (id autogenerado) |
 | `vehicleData.branch`   | string | No        | Marca del vehículo (también se acepta `brand`)                                   |
 | `vehicleData.model`    | string | No        | Modelo                                                                           |
 | `vehicleData.year`     | int    | No        | Año                                                                              |
 | `vehicleData.color`    | string | No        | Color                                                                            |
-| `competition`          | object | **Sí**    | Datos de competición (eventId, pilotNumber, registrationCategory, team)         |
+| `competition`          | object | No        | Datos de competición. Si no se envía, se crea con valores por defecto            |
 | `competition.eventId`  | string | **Sí**    | ID del evento                                                                   |
-| `competition.pilotNumber` | string | No     | Número de piloto                                                                |
-| `competition.registrationCategory` | string | No | Categoría de registro                                              |
+| `competition.number`   | string | **Sí**    | Número de piloto                                                                |
+| `competition.category` | string | **Sí**    | Categoría de registro                                                           |
 | `competition.team`     | string | No        | Nombre del equipo                                                               |
-| `registrationDate`     | string | No        | Fecha ISO 8601 (opcional)                                                        |
 
 #### Campos Retornados (201)
 
@@ -1234,51 +1237,39 @@ curl -X POST \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN' \
   -d '{
+    "email": "piloto@example.com",
+    "username": "piloto01",
     "personalData": {
-      "fullName": "Juan Pérez",
-      "phone": "+521234567890",
-      "dateOfBirth": "1990-05-15T00:00:00",
-      "address": "Calle Principal 123",
-      "city": "CDMX",
-      "state": "CDMX",
-      "country": "México",
-      "postalCode": "01000"
+      "fullName": "Luis Enrique",
+      "phone": "",
+      "dateOfBirth": null,
+      "address": "",
+      "city": "",
+      "state": "",
+      "country": "",
+      "postalCode": ""
     },
-    "email": "juan@example.com",
     "healthData": {
-      "bloodType": "O+",
-      "allergies": "Ninguna",
-      "medications": "Ninguno",
-      "medicalConditions": "Ninguna",
-      "insuranceProvider": "Seguro XYZ",
-      "insuranceNumber": "ABC123456"
+      "bloodType": "No especificado",
+      "allergies": "",
+      "medications": "",
+      "medicalConditions": "",
+      "insuranceProvider": "",
+      "insuranceNumber": ""
     },
-    "emergencyContacts": [
-      {
-        "fullName": "María Pérez",
-        "relationship": "Esposa",
-        "phone": "+529876543210"
-      },
-      {
-        "fullName": "Carlos Pérez",
-        "relationship": "Hermano",
-        "phone": "+525555555555"
-      }
-    ],
+    "emergencyContacts": [],
     "vehicleData": {
-      "branch": "Toyota",
-      "model": "Hilux",
-      "year": 2025,
-      "color": "Gris"
+      "branch": "",
+      "model": "",
+      "year": 2026,
+      "color": ""
     },
-    "username": "juanperez",
     "competition": {
       "eventId": "EVENT_ID",
-      "pilotNumber": "42",
-      "registrationCategory": "Pro",
-      "team": "Team Red Bull"
-    },
-    "registrationDate": "2026-02-15T10:00:00"
+      "number": "1005",
+      "category": "Oro",
+      "team": ""
+    }
   }'
 ```
 
@@ -1293,14 +1284,19 @@ curl -X POST \
 
 #### Notas
 
+- El `userId` NO se envía en el request; lo genera la función automáticamente al crear el documento en `users`.
 - No se crea usuario en Firebase Auth. El documento en `users` tiene `isActive: false` y `authUserId: null`.
+- `registrationDate` se asigna automáticamente por la función (timestamp actual); no se envía en el request.
+- Los campos `number` y `category` del request se almacenan como `pilotNumber` y `registrationCategory` en Firestore.
+- Si `competition` no se envía en el request, se crea con valores por defecto (vacíos) y la validación de sus campos internos aplicará.
+- Todos los campos excepto `email` y `competition` (con `eventId`, `number`, `category`) son opcionales. Los valores pueden ser vacíos (`""`) o `null`.
 - Estructura Firestore creada:
   - `users/{userId}` - Documento raíz (**email**, **username** a la misma altura, isActive: false, etc.; sin userData)
   - `users/{userId}/personalData/{id}` - Un documento; **id autogenerado** (map)
   - `users/{userId}/healthData/{id}` - Un documento; **id autogenerado** (map)
   - `users/{userId}/emergencyContact/{id}` - Un documento por contacto; **ids autogenerados** (map)
   - `users/{userId}/vehicles/{vehicleId}` - Vehículo (si se envió vehicleData); id autogenerado
-  - `users/{userId}/membership/{eventId}` - Relación con evento
+  - `users/{userId}/membership/{eventId}` - Relación con evento (solo `createdAt` y `updatedAt`; userId y eventId están implícitos en la ruta)
   - `events/{eventId}/participants/{userId}` - Participante en el evento (mismo id que en users)
 - Si cualquier paso falla, se hace rollback automático (subcolecciones y documento users).
 
@@ -1393,7 +1389,256 @@ curl -X GET \
 
 ---
 
-### 5. `get_competitors_by_event`
+### 5. `get_competitor_by_email`
+
+Obtiene un usuario competidor buscándolo por email. Busca en la colección `users` y retorna el documento raíz junto con todas sus subcolecciones: `personalData`, `healthData`, `emergencyContacts`, `vehicles` y `membership`.
+
+**Tipo**: HTTP Request (GET)  
+**Endpoint**: `https://get-competitor-by-email-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/get-competitor-by-email`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Valor                              | Descripción          |
+| --------------- | ---------------------------------- | -------------------- |
+| `Authorization` | `Bearer {Firebase Auth Token}`     | Token de autenticación |
+
+#### Parámetros (Query Parameters)
+
+| Parámetro | Tipo   | Requerido | Descripción                   |
+| --------- | ------ | --------- | ----------------------------- |
+| `email`   | string | **Sí**    | Email del usuario competidor  |
+
+#### Campos Retornados (200)
+
+| Campo                         | Tipo    | Descripción                              |
+| ----------------------------- | ------- | ---------------------------------------- |
+| `id`                          | string  | ID del usuario                           |
+| `email`                       | string  | Email del usuario                        |
+| `username`                    | string  | Nombre de usuario                        |
+| `authUserId`                  | string  | ID de Firebase Auth (null si no activado)|
+| `avatarUrl`                   | string  | URL del avatar (null si no tiene)        |
+| `isActive`                    | boolean | Si el usuario está activo                |
+| `createdAt`                   | string  | Fecha de creación                        |
+| `updatedAt`                   | string  | Fecha de actualización                   |
+| `personalData`                | array   | Datos personales (fullName, phone, etc.) |
+| `healthData`                  | array   | Datos de salud (bloodType, allergies, etc.) |
+| `emergencyContacts`           | array   | Contactos de emergencia                  |
+| `vehicles`                    | array   | Vehículos (branch, year, model, color)   |
+| `membership`                  | array   | Membresías a eventos (eventId, userId)   |
+
+#### Comandos cURL
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/competitors/get-competitor-by-email?email=pilot@example.com' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN'
+```
+
+#### Respuestas
+
+- **200 OK**: Objeto JSON con datos del usuario y todas sus subcolecciones.
+- **400 Bad Request**: Email faltante o formato inválido (sin cuerpo).
+- **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
+- **404 Not Found**: Usuario no encontrado con ese email (sin cuerpo).
+- **500 Internal Server Error**: Error interno (sin cuerpo).
+
+#### Ejemplo de respuesta exitosa
+
+```json
+{
+  "id": "USER_ID",
+  "email": "pilot@example.com",
+  "username": "pilot42",
+  "authUserId": null,
+  "avatarUrl": null,
+  "isActive": false,
+  "createdAt": "2026-02-15T08:00:00+00:00",
+  "updatedAt": "2026-02-15T09:00:00+00:00",
+  "personalData": [
+    {
+      "id": "DOC_ID",
+      "fullName": "Juan Pérez",
+      "phone": "+521234567890",
+      "dateOfBirth": null,
+      "address": "",
+      "city": "",
+      "state": "",
+      "country": "",
+      "postalCode": "",
+      "createdAt": "2026-02-15T08:00:00+00:00",
+      "updatedAt": "2026-02-15T08:00:00+00:00"
+    }
+  ],
+  "healthData": [
+    {
+      "id": "DOC_ID",
+      "bloodType": "O+",
+      "allergies": "",
+      "medications": "",
+      "medicalConditions": "",
+      "insuranceProvider": "",
+      "insuranceNumber": "",
+      "createdAt": "2026-02-15T08:00:00+00:00",
+      "updatedAt": "2026-02-15T08:00:00+00:00"
+    }
+  ],
+  "emergencyContacts": [
+    {
+      "id": "DOC_ID",
+      "fullName": "María López",
+      "phone": "+529876543210",
+      "relationship": "Spouse",
+      "createdAt": "2026-02-15T08:00:00+00:00",
+      "updatedAt": "2026-02-15T08:00:00+00:00"
+    }
+  ],
+  "vehicles": [
+    {
+      "id": "DOC_ID",
+      "branch": "Honda",
+      "year": 2024,
+      "model": "CRF450R",
+      "color": "Red",
+      "createdAt": "2026-02-15T08:00:00+00:00",
+      "updatedAt": "2026-02-15T08:00:00+00:00"
+    }
+  ],
+  "membership": [
+    {
+      "id": "EVENT_ID",
+      "userId": "USER_ID",
+      "eventId": "EVENT_ID",
+      "createdAt": "2026-02-15T08:00:00+00:00",
+      "updatedAt": "2026-02-15T08:00:00+00:00"
+    }
+  ]
+}
+```
+
+---
+
+### 6. `get_event_competitor_by_email`
+
+Obtiene un competidor de un evento buscándolo por email. Busca al usuario por email en `users`, valida que sea participante en `events/{eventId}/participants` y retorna los datos del usuario (con subcolecciones). El objeto `register` con los datos de competición se incluye dentro de la entrada de `membership` que corresponde al evento consultado.
+
+**Tipo**: HTTP Request (GET)  
+**Endpoint**: `https://get-event-competitor-by-email-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/get-event-competitor-by-email`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Valor                              | Descripción          |
+| --------------- | ---------------------------------- | -------------------- |
+| `Authorization` | `Bearer {Firebase Auth Token}`     | Token de autenticación |
+
+#### Parámetros (Query Parameters)
+
+| Parámetro | Tipo   | Requerido | Descripción                   |
+| --------- | ------ | --------- | ----------------------------- |
+| `eventId` | string | **Sí**    | ID del evento                 |
+| `email`   | string | **Sí**    | Email del usuario competidor  |
+
+#### Campos Retornados (200)
+
+| Campo                                   | Tipo    | Descripción                               |
+| ---------------------------------------- | ------- | ----------------------------------------- |
+| `id`                                     | string  | ID del usuario                            |
+| `email`                                  | string  | Email del usuario                         |
+| `personalData`                           | array   | Datos personales (fullName, phone, etc.)  |
+| `healthData`                             | array   | Datos de salud (bloodType, allergies, etc.) |
+| `emergencyContacts`                      | array   | Contactos de emergencia                   |
+| `vehicles`                               | array   | Vehículos (branch, year, model, color)    |
+| `membership`                             | array   | Membresías a eventos (la del evento consultado incluye `register`) |
+| `membership[].register.number`           | string  | Número de piloto en el evento             |
+| `membership[].register.category`         | string  | Categoría de registro en el evento        |
+| `membership[].register.team`             | string  | Nombre del equipo en el evento            |
+
+#### Comandos cURL
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/competitors/get-event-competitor-by-email?eventId=EVENT_ID&email=pilot@example.com' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN'
+```
+
+#### Respuestas
+
+- **200 OK**: Objeto JSON con datos del usuario y subcolecciones. La membership del evento consultado incluye `register`.
+- **400 Bad Request**: Parámetros faltantes o email con formato inválido (sin cuerpo).
+- **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
+- **404 Not Found**: Usuario no encontrado por email o no es participante del evento (sin cuerpo).
+- **500 Internal Server Error**: Error interno (sin cuerpo).
+
+#### Ejemplo de respuesta exitosa
+
+```json
+{
+  "id": "USER_ID",
+  "email": "pilot@example.com",
+  "personalData": [
+    {
+      "id": "DOC_ID",
+      "fullName": "Juan Pérez",
+      "phone": "+521234567890",
+      "dateOfBirth": "1990-05-15T00:00:00",
+      "address": "Calle Principal 123",
+      "city": "CDMX",
+      "state": "CDMX",
+      "country": "México",
+      "postalCode": "01000"
+    }
+  ],
+  "healthData": [
+    {
+      "id": "DOC_ID",
+      "bloodType": "O+",
+      "allergies": "Ninguna",
+      "medications": "Ninguno",
+      "medicalConditions": "Ninguna",
+      "insuranceProvider": "Seguro XYZ",
+      "insuranceNumber": "ABC123456"
+    }
+  ],
+  "emergencyContacts": [
+    {
+      "id": "DOC_ID",
+      "fullName": "María Pérez",
+      "phone": "+529876543210",
+      "relationship": "Esposa"
+    }
+  ],
+  "vehicles": [
+    {
+      "id": "DOC_ID",
+      "branch": "Toyota",
+      "year": 2025,
+      "model": "Hilux",
+      "color": "Gris"
+    }
+  ],
+  "membership": [
+    {
+      "id": "EVENT_ID",
+      "userId": "USER_ID",
+      "eventId": "EVENT_ID",
+      "register": {
+        "number": "42",
+        "category": "Pro",
+        "team": "Team Red Bull"
+      }
+    }
+  ]
+}
+```
+
+---
+
+### 7. `get_competitors_by_event`
 
 Obtiene todos los competidores de un evento, ordenados por fecha de registro descendente. Soporta filtros opcionales por categoría y equipo.
 
@@ -1510,7 +1755,87 @@ curl -X GET \
 
 ---
 
-### 6. `delete_competitor_user`
+### 6. `list_competitors_by_event`
+
+Lista competidores de un evento con **paginación por cursor**. Devuelve por cada competidor: id (documento), nombre, categoría, número y equipo. Región: us-east4.
+
+**Tipo**: HTTP Request (GET)  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/list-competitors-by-event`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Valor                              | Descripción          |
+| --------------- | ---------------------------------- | -------------------- |
+| `Authorization` | `Bearer {Firebase Auth Token}`     | Token de autenticación |
+
+#### Parámetros (Query Parameters)
+
+| Parámetro   | Tipo   | Requerido | Descripción                                                                 |
+| ----------- | ------ | --------- | --------------------------------------------------------------------------- |
+| `eventId`   | string | **Sí**    | ID del evento                                                               |
+| `limit`     | int    | No        | Tamaño de página (default 20, máx 100)                                      |
+| `cursor`    | string | No        | ID del último documento de la página anterior (`lastDocId`) para siguiente página |
+
+#### Respuesta 200 - Estructura
+
+Array directo de objetos con:
+  - **id**: ID del documento del competidor en la colección del evento (para identificarlo).
+  - **name**: Nombre completo del competidor (desde datos personales del usuario).
+  - **category**: Categoría de registro (`registrationCategory`).
+  - **number**: Número de piloto (`pilotNumber`).
+  - **team**: Nombre del equipo.
+
+#### Comandos cURL
+
+**Primera página:**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/competitors/list-competitors-by-event?eventId=EVENT_ID&limit=20' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN'
+```
+
+**Siguiente página (usar `lastDocId` de la respuesta anterior como `cursor`):**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/competitors/list-competitors-by-event?eventId=EVENT_ID&limit=20&cursor=LAST_DOC_ID' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN'
+```
+
+#### Respuestas
+
+- **200 OK**: Array directo de competidores (`[{ id, name, category, number, team }, ...]`).
+- **400 Bad Request**: eventId faltante o inválido (sin cuerpo).
+- **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
+- **500 Internal Server Error**: Error interno (sin cuerpo).
+
+#### Ejemplo de respuesta exitosa
+
+```json
+[
+  {
+    "id": "USER_ID_1",
+    "name": "Juan Pérez",
+    "category": "Pro",
+    "number": "42",
+    "team": "Team Red Bull"
+  },
+  {
+    "id": "USER_ID_2",
+    "name": "María García",
+    "category": "Amateur",
+    "number": "7",
+    "team": "Solo"
+  }
+]
+```
+
+---
+
+### 7. `delete_competitor_user`
 
 Elimina el usuario competidor creado con `create_competitor_user` y todos sus datos asociados: participante en el evento, membership, subcolecciones (vehicles, emergencyContacts, healthData, personalData) y documento en `users`.
 
@@ -3339,8 +3664,11 @@ Las siguientes funciones requieren autenticación Bearer token:
 - `days_of_race` - Obtiene todos los días de carrera (requiere token para autenticación)
 - `create_competitor` - Crea competidor básico en un evento (requiere Bearer token)
 - `create_competitor_user` - Crea template de usuario competidor + membership + participante en evento, sin Firebase Auth (requiere Bearer token)
+- `get_competitor_by_email` - Obtiene usuario competidor por email con todas sus subcolecciones (requiere Bearer token)
 - `get_competitor_by_id` - Obtiene competidor por ID (requiere Bearer token)
+- `get_event_competitor_by_email` - Obtiene competidor de un evento por email con datos de usuario y register en membership (requiere Bearer token)
 - `get_competitors_by_event` - Lista competidores de un evento con filtros (requiere Bearer token)
+- `list_competitors_by_event` - Lista paginada de competidores (id, nombre, categoría, número, equipo) por evento (requiere Bearer token)
 - `delete_competitor_user` - Elimina usuario competidor creado con create_competitor_user (requiere Bearer token)
 - `create_staff_user` - Crea usuario staff completo con Auth y membership (requiere Bearer token)
 - `track_event_checkpoint` - Modifica datos de tracking
@@ -3480,11 +3808,20 @@ firebase deploy --only functions:create_competitor
 # Desplegar solo create_competitor_user
 firebase deploy --only functions:create_competitor_user
 
+# Desplegar solo get_competitor_by_email
+firebase deploy --only functions:get_competitor_by_email
+
+# Desplegar solo get_event_competitor_by_email
+firebase deploy --only functions:get_event_competitor_by_email
+
 # Desplegar solo get_competitor_by_id
 firebase deploy --only functions:get_competitor_by_id
 
 # Desplegar solo get_competitors_by_event
 firebase deploy --only functions:get_competitors_by_event
+
+# Desplegar solo list_competitors_by_event
+firebase deploy --only functions:list_competitors_by_event
 
 # Desplegar solo delete_competitor_user
 firebase deploy --only functions:delete_competitor_user
@@ -3493,7 +3830,7 @@ firebase deploy --only functions:delete_competitor_user
 firebase deploy --only functions:create_staff_user
 
 # Desplegar todas las funciones nuevas de competitors y staff
-firebase deploy --only functions:create_competitor,functions:create_competitor_user,functions:delete_competitor_user,functions:get_competitor_by_id,functions:get_competitors_by_event,functions:create_staff_user
+firebase deploy --only functions:create_competitor,functions:create_competitor_user,functions:delete_competitor_user,functions:get_competitor_by_email,functions:get_competitor_by_id,functions:get_event_competitor_by_email,functions:get_competitors_by_event,functions:list_competitors_by_event,functions:create_staff_user
 ```
 
 ---

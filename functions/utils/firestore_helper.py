@@ -171,6 +171,7 @@ class FirestoreHelper:
         filters: Optional[List[Dict[str, Any]]] = None,
         order_by: Optional[List[Tuple[str, str]]] = None,
         limit: Optional[int] = None,
+        start_after_doc_id: Optional[str] = None,
     ) -> List[Tuple[str, Dict[str, Any]]]:
         """
         Ejecuta una query en una colección.
@@ -180,6 +181,7 @@ class FirestoreHelper:
             filters: Lista de filtros [{"field": ..., "operator": ..., "value": ...}].
             order_by: Lista de ordenamiento [("field", "asc"|"desc")].
             limit: Límite de resultados.
+            start_after_doc_id: ID del documento tras el cual empezar (cursor para paginación).
 
         Returns:
             Lista de tuplas (document_id, document_data).
@@ -201,6 +203,14 @@ class FirestoreHelper:
                         else firestore.Query.ASCENDING
                     )
                     query = query.order_by(field, direction=dir_enum)
+
+            if start_after_doc_id:
+                doc_ref = self.db.collection(collection_path).document(
+                    start_after_doc_id
+                )
+                snap = doc_ref.get()
+                if snap.exists:
+                    query = query.start_after(snap)
 
             if limit:
                 query = query.limit(limit)

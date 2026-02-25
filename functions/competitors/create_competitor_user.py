@@ -39,16 +39,12 @@ from utils.validation_helper import (
 LOG = logging.getLogger(__name__)
 LOG_PREFIX = "[create_competitor_user]"
 
-# Campos de primer nivel requeridos en el request body (sin password: no se crea Auth)
+# Único campo requerido a nivel raíz: email. competition se crea con defaults si no existe.
 _REQUIRED_TOP_FIELDS = [
-    "personalData",
-    "emergencyContacts",
-    "username",
     "email",
-    "competition",
 ]
 
-_REQUIRED_PERSONAL_DATA_FIELDS = ["fullName", "phone"]
+_REQUIRED_COMPETITION_FIELDS = ["eventId", "number", "category"]
 
 # Nombres de subcolecciones (fallback si no existen en FirestoreCollections)
 _USER_PERSONAL_DATA = getattr(
@@ -69,56 +65,55 @@ _USER_EMERGENCY_CONTACT = getattr(
 
 def _validate_request_data(request_data: Dict[str, Any]) -> Optional[str]:
     """
-    Valida todos los campos del request body.
+    Valida el request body. Requerido: email.
+    Si competition no existe, se crea con valores por defecto.
+    Campos de competition: eventId, number, category (requeridos si competition está presente).
 
     Returns:
         None si todo es válido, string con descripción del error si falla.
     """
-    # Campos de primer nivel
+    # Campos de primer nivel requeridos
     is_valid, msg = validate_required_fields(request_data, _REQUIRED_TOP_FIELDS)
     if not is_valid:
         return msg
 
-    # Datos personales
-    personal_data = request_data.get("personalData", {})
-    is_valid, msg = validate_required_fields(
-        personal_data, _REQUIRED_PERSONAL_DATA_FIELDS
-    )
-    if not is_valid:
-        return f"personalData: {msg}"
-
-    # Validar email (a nivel raíz, misma altura que username)
+    # Email (formato)
     email = request_data.get("email", "")
     if not validate_email(email):
         return "Formato de email inválido"
 
-    # Validar teléfono
-    if not validate_phone(personal_data.get("phone", "")):
-        return "Formato de teléfono inválido"
-
-    # Validar username
-    username = request_data.get("username", "")
-    if len(username) < 4:
-        return "El username debe tener al menos 4 caracteres"
-
-    # Validar emergencyContacts: debe ser una lista con al menos un contacto
-    emergency_contacts = request_data.get("emergencyContacts")
-    if not isinstance(emergency_contacts, list):
-        return "emergencyContacts debe ser una lista"
-    if len(emergency_contacts) < 1:
-        return "emergencyContacts debe tener al menos un contacto"
-    for i, contact in enumerate(emergency_contacts):
-        if not isinstance(contact, dict):
-            return f"emergencyContacts[{i}] debe ser un objeto"
-        if not contact.get("fullName") or not contact.get("phone"):
-            return f"emergencyContacts[{i}]: fullName y phone son requeridos"
-
-    # Validar competition (debe ser objeto y contener eventId)
-    comp = request_data.get("competition", {})
+    # Competition: crear objeto vacío si no existe
+    comp = request_data.get("competition")
+    if comp is None:
+        request_data["competition"] = {}
+        comp = {}
     if not isinstance(comp, dict):
         return "competition debe ser un objeto"
-    if not comp.get("eventId"):
-        return "competition.eventId es requerido"
+    is_valid, msg = validate_required_fields(comp, _REQUIRED_COMPETITION_FIELDS)
+    if not is_valid:
+        return f"competition: {msg}"
+
+    # Opcionales: validar solo si están presentes
+    personal_data = request_data.get("personalData", {})
+    if personal_data is not None and isinstance(personal_data, dict):
+        phone = personal_data.get("phone", "")
+        if phone and not validate_phone(phone):
+            return "personalData.phone: formato de teléfono inválido"
+
+    username = request_data.get("username", "")
+    if username and len(username) < 4:
+        return "El username debe tener al menos 4 caracteres"
+
+    emergency_contacts = request_data.get("emergencyContacts")
+    if emergency_contacts is not None:
+        if not isinstance(emergency_contacts, list):
+            return "emergencyContacts debe ser una lista"
+        for i, contact in enumerate(emergency_contacts):
+            if not isinstance(contact, dict):
+                return f"emergencyContacts[{i}] debe ser un objeto"
+            if contact.get("fullName") or contact.get("phone"):
+                if not contact.get("fullName") or not contact.get("phone"):
+                    return f"emergencyContacts[{i}]: fullName y phone son requeridos si se envía el contacto"
 
     return None
 
@@ -228,20 +223,15 @@ def _build_emergency_contact_document(contact: Dict[str, Any]) -> Dict[str, Any]
     }
 
 
-def _build_membership_document(
-    user_id: str,
-    request_data: Dict[str, Any],
-) -> Dict[str, Any]:
+def _build_membership_document() -> Dict[str, Any]:
     """
     Construye el documento de membership para relacionar usuario con evento.
     Ruta: users/{userId}/membership/{eventId}
+    userId y eventId están implícitos en la ruta del documento.
     """
     now = get_current_timestamp()
-    comp = request_data.get("competition", {})
 
     return {
-        "userId": user_id,
-        "eventId": comp.get("eventId", ""),
         "createdAt": now,
         "updatedAt": now,
     }
@@ -350,7 +340,7 @@ def _rollback_user_creation(
 # ============================================================================
 
 
-@https_fn.on_request()
+@https_fn.on_request(region="us-east4")
 def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
     """
     Crea en una sola llamada: template de usuario (users), membership y participante en el evento.
@@ -370,14 +360,17 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
     - Authorization: Bearer {Firebase Auth Token} (requerido)
 
     Request Body (JSON):
-    - personalData: object (requerido) - fullName, phone, dateOfBirth, address, ... (email va a nivel raíz)
-    - healthData: object (opcional) - bloodType, allergies, medications, ...
-    - emergencyContacts: array (requerido) - al menos un elemento; cada uno: fullName, phone, relationship (opcional)
-    - vehicleData: object (opcional) - se guarda en users/{userId}/vehicles con id autogenerado; campos: branch (o brand), year, model, color
-    - username: string (requerido) - mínimo 4 caracteres
-    - competition: object (requerido) - eventId, pilotNumber, registrationCategory, team
-    - registrationDate: string (opcional) - Fecha ISO 8601
-    - team: string (opcional) - Nombre del equipo
+    Requeridos:
+    - email: string (raíz) - formato válido
+    - competition: object - eventId, number, category (requeridos); team (opcional).
+      Si no se envía, se crea con valores por defecto.
+    Opcionales:
+    - personalData: object - fullName, phone, dateOfBirth, address, city, state, country, postalCode
+    - healthData: object - bloodType, allergies, medications, medicalConditions, insuranceProvider, insuranceNumber
+    - emergencyContacts: array - cada elemento: fullName, phone, relationship (opcional)
+    - vehicleData: object - branch (o brand), year, model, color
+    - username: string - si se envía, mínimo 4 caracteres y único
+    Nota: registrationDate se asigna automáticamente por la función.
 
     Returns:
     - 201: {"id": "<userId>", "membershipId": "<eventId>"} (usuario + participante creados)
@@ -445,8 +438,8 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
                 headers={"Access-Control-Allow-Origin": "*"},
             )
 
-        # Validar unicidad de username
-        if _validate_unique_username(helper, username):
+        # Validar unicidad de username solo si se envió (opcional)
+        if username and _validate_unique_username(helper, username):
             LOG.warning("%s Username duplicado: %s", LOG_PREFIX, username)
             return https_fn.Response(
                 "",
@@ -568,7 +561,7 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
                 raise
 
         # PASO 3: Subcolección membership
-        membership_doc = _build_membership_document(user_id, request_data)
+        membership_doc = _build_membership_document()
         membership_path = (
             f"{FirestoreCollections.USERS}/{user_id}"
             f"/{FirestoreCollections.USER_MEMBERSHIP}"
@@ -633,7 +626,7 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
             )
 
         competition = request_data.get("competition", {})
-        pilot_number = competition.get("pilotNumber", "")
+        pilot_number = competition.get("number", "")
         if pilot_number and _check_duplicate_competitor(helper, event_id, pilot_number):
             LOG.warning(
                 "%s Número de piloto duplicado: %s en evento %s",

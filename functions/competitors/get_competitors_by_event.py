@@ -71,7 +71,7 @@ def _convert_documents_to_list(
 # ============================================================================
 
 
-@https_fn.on_request()
+@https_fn.on_request(region="us-east4")
 def get_competitors_by_event(req: https_fn.Request) -> https_fn.Response:
     """
     Obtiene todos los competidores de un evento.

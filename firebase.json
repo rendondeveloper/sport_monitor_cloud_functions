@@ -15,6 +15,7 @@
   ],
   "hosting": {
     "public": "public",
+    "site": "system-track-monitor",
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -104,52 +105,72 @@
       {
         "source": "/api/catalogs/vehicle",
         "function": "catalog_vehicle",
-        "region": "us-central1"
+        "region": "us-east4"
       },
       {
         "source": "/api/catalogs/year",
         "function": "catalog_year",
-        "region": "us-central1"
+        "region": "us-east4"
       },
       {
         "source": "/api/catalogs/color",
         "function": "catalog_color",
-        "region": "us-central1"
+        "region": "us-east4"
       },
       {
         "source": "/api/competitors/competitor-route/**",
         "function": "competitor_route",
-        "region": "us-central1"
+        "region": "us-east4"
       },
       {
         "source": "/api/competitors/create-user",
         "function": "create_competitor_user",
-        "region": "us-central1"
+        "region": "us-east4"
       },
       {
         "source": "/api/competitors/delete-user",
         "function": "delete_competitor_user",
-        "region": "us-central1"
+        "region": "us-east4"
+      },
+      {
+        "source": "/api/competitors/get-competitor-by-email",
+        "function": "get_competitor_by_email",
+        "region": "us-east4"
+      },
+      {
+        "source": "/api/competitors/get-event-competitor-by-email",
+        "function": "get_event_competitor_by_email",
+        "region": "us-east4"
       },
       {
         "source": "/api/competitors/get-competitor-by-id",
         "function": "get_competitor_by_id",
-        "region": "us-central1"
+        "region": "us-east4"
       },
       {
         "source": "/api/competitors/get-competitor-by-id/**",
         "function": "get_competitor_by_id",
-        "region": "us-central1"
+        "region": "us-east4"
       },
       {
         "source": "/api/competitors/get-competitors-by-event",
         "function": "get_competitors_by_event",
-        "region": "us-central1"
+        "region": "us-east4"
       },
       {
         "source": "/api/competitors/get-competitors-by-event/**",
         "function": "get_competitors_by_event",
-        "region": "us-central1"
+        "region": "us-east4"
+      },
+      {
+        "source": "/api/competitors/list-competitors-by-event",
+        "function": "list_competitors_by_event",
+        "region": "us-east4"
+      },
+      {
+        "source": "/api/competitors/list-competitors-by-event/**",
+        "function": "list_competitors_by_event",
+        "region": "us-east4"
       },
       {
         "source": "/api/tracking/track-event-checkpoint",

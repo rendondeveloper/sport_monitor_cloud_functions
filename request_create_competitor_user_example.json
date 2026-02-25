@@ -1,0 +1,35 @@
+{
+    "personalData": {
+        "fullName": "Luis Enrique",
+        "phone": "",
+        "dateOfBirth": null,
+        "address": "",
+        "city": "",
+        "state": "",
+        "country": "",
+        "postalCode": ""
+    },
+    "email": "luisenrique5@gmail.com",
+    "healthData": {
+        "bloodType": "No especificado",
+        "allergies": "",
+        "medications": "",
+        "medicalConditions": "",
+        "insuranceProvider": "",
+        "insuranceNumber": ""
+    },
+    "emergencyContacts": [],
+    "vehicleData": {
+        "branch": "",
+        "model": "",
+        "year": 2026,
+        "color": ""
+    },
+    "username": "luisenrique5@gmail.com",
+    "competition": {
+        "eventId": "cN6ykYvP5WortNOxr3j6",
+        "number": "1005",
+        "category": "Oro",
+        "team": ""
+    }
+}

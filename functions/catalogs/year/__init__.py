@@ -19,7 +19,7 @@ from .update_year import handle_update
 LOG_PREFIX = "[catalog_year]"
 
 
-@https_fn.on_request()
+@https_fn.on_request(region="us-east4")
 def catalog_year(req: https_fn.Request) -> https_fn.Response:
     """GET lista, POST/PUT/DELETE masivo para catálogo años."""
     validation_response = validate_request(

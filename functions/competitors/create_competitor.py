@@ -72,8 +72,10 @@ def _build_competitor_document(
 ) -> Dict[str, Any]:
     """
     Construye el documento del competidor para Firestore.
-    Acepta "competition" (eventId, pilotNumber, registrationCategory, team) o
+    Acepta "competition" (eventId, number, category, team) o
     "competitionCategory" + eventId/team a nivel raíz (retrocompatibilidad).
+    Campos number/category mapean a pilotNumber/registrationCategory en Firestore.
+    registrationDate se asigna automáticamente.
     """
     now = get_current_timestamp()
     comp = request_data.get("competition") or request_data.get("competitionCategory") or {}
@@ -84,10 +86,10 @@ def _build_competitor_document(
         "userId": user_id,
         "eventId": event_id,
         "competitionCategory": {
-            "pilotNumber": comp.get("pilotNumber", ""),
-            "registrationCategory": comp.get("registrationCategory", ""),
+            "pilotNumber": comp.get("number") or comp.get("pilotNumber", ""),
+            "registrationCategory": comp.get("category") or comp.get("registrationCategory", ""),
         },
-        "registrationDate": request_data.get("registrationDate", now),
+        "registrationDate": now,
         "team": team,
         "score": 0,
         "timesToStart": [],
@@ -101,7 +103,7 @@ def _build_competitor_document(
 # ============================================================================
 
 
-@https_fn.on_request()
+@https_fn.on_request(region="us-east4")
 def create_competitor(req: https_fn.Request) -> https_fn.Response:
     """
     Crea un participante en el evento vinculado a un usuario (mismo id en users y en participants).

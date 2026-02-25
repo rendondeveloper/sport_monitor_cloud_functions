@@ -17,8 +17,11 @@ from competitors import (
     create_competitor,
     create_competitor_user,
     delete_competitor_user,
+    get_competitor_by_email,
     get_competitor_by_id,
+    get_event_competitor_by_email,
     get_competitors_by_event,
+    list_competitors_by_event,
 )
 
 # Importar funciones de staff
