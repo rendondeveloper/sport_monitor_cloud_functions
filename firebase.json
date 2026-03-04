@@ -148,6 +148,11 @@
         "region": "us-east4"
       },
       {
+        "source": "/api/competitors/get-event-competitor-by-id",
+        "function": "get_event_competitor_by_id",
+        "region": "us-east4"
+      },
+      {
         "source": "/api/competitors/get-competitor-by-id",
         "function": "get_competitor_by_id",
         "region": "us-east4"

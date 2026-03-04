@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Tuple
 
 from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
+from models.paginated_response import PaginatedResponse
 from utils.firestore_helper import FirestoreHelper
 from utils.helper_http import verify_bearer_token
 from utils.helper_http_verb import validate_request
@@ -61,18 +62,40 @@ def _get_user_full_name(helper: FirestoreHelper, user_id: str) -> str:
     return ""
 
 
+def _load_category_map(helper: FirestoreHelper, event_id: str) -> Dict[str, str]:
+    """
+    Carga el mapa id→nombre de las categorías del evento.
+
+    Retorna dict vacío si no hay categorías o hay un error. Si el id no está
+    en el mapa, _build_competitor_item devuelve el valor raw como fallback.
+    """
+    path = (
+        f"{FirestoreCollections.EVENTS}/{event_id}"
+        f"/{FirestoreCollections.EVENT_CATEGORIES}"
+    )
+    try:
+        results = helper.query_documents(path)
+        return {doc_id: (doc_data.get("name") or doc_id) for doc_id, doc_data in results}
+    except (AttributeError, KeyError, RuntimeError, TypeError) as e:
+        LOG.warning("%s No se pudo cargar el mapa de categorías: %s", LOG_PREFIX, e)
+        return {}
+
+
 def _build_competitor_item(
     helper: FirestoreHelper,
     doc_id: str,
     doc_data: Dict[str, Any],
+    category_map: Dict[str, str],
 ) -> Dict[str, Any]:
     """Construye un item de la lista: id, name, category, number, team."""
     comp_cat = doc_data.get("competitionCategory") or {}
     name = _get_user_full_name(helper, doc_id)
+    raw_category = comp_cat.get("registrationCategory", "")
+    category_name = category_map.get(raw_category, raw_category)
     return {
         "id": doc_id,
         "name": name,
-        "category": comp_cat.get("registrationCategory", ""),
+        "category": category_name,
         "number": comp_cat.get("pilotNumber", ""),
         "team": doc_data.get("team", ""),
     }
@@ -147,6 +170,8 @@ def list_competitors_by_event(req: https_fn.Request) -> https_fn.Response:
         helper = FirestoreHelper()
         collection_path = _get_collection_path(event_id)
 
+        category_map = _load_category_map(helper, event_id)
+
         # Pedir limit+1 para saber si hay más páginas
         documents: List[Tuple[str, Dict[str, Any]]] = helper.query_documents(
             collection_path,
@@ -155,17 +180,28 @@ def list_competitors_by_event(req: https_fn.Request) -> https_fn.Response:
             start_after_doc_id=cursor if cursor else None,
         )
 
-        if len(documents) > limit:
+        has_more = len(documents) > limit
+        if has_more:
             documents = documents[:limit]
 
         competitors = [
-            _build_competitor_item(helper, doc_id, doc_data)
+            _build_competitor_item(helper, doc_id, doc_data, category_map)
             for doc_id, doc_data in documents
             if isinstance(doc_data, dict)
         ]
 
+        last_doc_id = documents[-1][0] if documents else None
+        paginated = PaginatedResponse.create(
+            items=competitors,
+            limit=limit,
+            page=1,
+            has_more=has_more,
+            last_doc_id=last_doc_id,
+        )
+        body = paginated.to_dict()
+
         return https_fn.Response(
-            json.dumps(competitors, ensure_ascii=False),
+            json.dumps(body, ensure_ascii=False),
             status=200,
             headers={
                 "Content-Type": "application/json; charset=utf-8",

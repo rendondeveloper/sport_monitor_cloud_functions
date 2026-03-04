@@ -1676,7 +1676,68 @@ curl -X GET \
 
 ---
 
-### 7. `get_competitors_by_event`
+### 7. `get_event_competitor_by_id`
+
+Obtiene un competidor de un evento buscándolo directamente por su ID. Valida que el competidor sea participante en `events/{eventId}/participants/{competitorId}`, obtiene los datos del usuario en `users/{competitorId}` y retorna los datos del usuario (con subcolecciones). El objeto `register` con los datos de competición se incluye dentro de la entrada de `membership` que corresponde al evento consultado.
+
+**Tipo**: HTTP Request (GET)
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/get-event-competitor-by-id`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Valor                              | Descripción          |
+| --------------- | ---------------------------------- | -------------------- |
+| `Authorization` | `Bearer {Firebase Auth Token}`     | Token de autenticación |
+
+#### Parámetros (Query Parameters)
+
+| Parámetro      | Tipo   | Requerido | Descripción                        |
+| -------------- | ------ | --------- | ---------------------------------- |
+| `eventId`      | string | **Sí**    | ID del evento                      |
+| `competitorId` | string | **Sí**    | ID del competidor (userId)         |
+
+#### Campos Retornados (200)
+
+| Campo                                   | Tipo    | Descripción                               |
+| ---------------------------------------- | ------- | ----------------------------------------- |
+| `id`                                     | string  | ID del usuario                            |
+| `email`                                  | string  | Email del usuario                         |
+| `personalData`                           | array   | Datos personales (fullName, phone, etc.)  |
+| `healthData`                             | array   | Datos de salud (bloodType, etc.)          |
+| `emergencyContacts`                      | array   | Contactos de emergencia                   |
+| `vehicles`                               | array   | Vehículos (branch, year, model, color)    |
+| `membership`                             | array   | Membresías a eventos (la del evento consultado incluye `register`) |
+| `membership[].register.number`           | string  | Número de piloto en el evento             |
+| `membership[].register.category`         | string  | Categoría de registro en el evento        |
+| `membership[].register.team`             | string  | Nombre del equipo en el evento            |
+
+#### Comandos cURL
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/competitors/get-event-competitor-by-id?eventId=EVENT_ID&competitorId=COMPETITOR_ID' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN'
+```
+
+#### Respuestas
+
+- **200 OK**: Objeto JSON con datos del usuario y subcolecciones. La membership del evento consultado incluye `register`.
+- **400 Bad Request**: Parámetros faltantes (sin cuerpo).
+- **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
+- **404 Not Found**: Competidor no es participante del evento o usuario no encontrado (sin cuerpo).
+- **500 Internal Server Error**: Error interno (sin cuerpo).
+
+#### Deploy
+
+```bash
+firebase deploy --only functions:get_event_competitor_by_id
+```
+
+---
+
+### 8. `get_competitors_by_event`
 
 Obtiene todos los competidores de un evento, ordenados por fecha de registro descendente. Soporta filtros opcionales por categoría y equipo.
 

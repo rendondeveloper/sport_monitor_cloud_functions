@@ -20,6 +20,7 @@ from competitors import (
     get_competitor_by_email,
     get_competitor_by_id,
     get_event_competitor_by_email,
+    get_event_competitor_by_id,
     get_competitors_by_event,
     list_competitors_by_event,
 )
@@ -102,6 +103,7 @@ initialize_app(options=_options if _options else None)
 # - create_competitor: competitors/create_competitor.py
 # - create_competitor_user: competitors/create_competitor_user.py
 # - delete_competitor_user: competitors/delete_competitor_user.py
+# - get_event_competitor_by_id: competitors/get_event_competitor_by_id.py
 # - get_competitor_by_id: competitors/get_competitor_by_id.py
 # - get_competitors_by_event: competitors/get_competitors_by_event.py
 # - create_staff_user: staff/create_staff_user.py
