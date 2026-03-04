@@ -201,7 +201,7 @@ def _build_health_data_document(request_data: Dict[str, Any]) -> Dict[str, Any]:
     health_data = request_data.get("healthData", {})
     return {
         "bloodType": health_data.get("bloodType", ""),
-        "allergies": health_data.get("allergies", ""),
+        "socialSecurityNumber": health_data.get("socialSecurityNumber", ""),
         "medications": health_data.get("medications", ""),
         "medicalConditions": health_data.get("medicalConditions", ""),
         "insuranceProvider": health_data.get("insuranceProvider", ""),
@@ -366,7 +366,7 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
       Si no se envía, se crea con valores por defecto.
     Opcionales:
     - personalData: object - fullName, phone, dateOfBirth, address, city, state, country, postalCode
-    - healthData: object - bloodType, allergies, medications, medicalConditions, insuranceProvider, insuranceNumber
+    - healthData: object - bloodType, socialSecurityNumber, medications, medicalConditions, insuranceProvider, insuranceNumber
     - emergencyContacts: array - cada elemento: fullName, phone, relationship (opcional)
     - vehicleData: object - branch (o brand), year, model, color
     - username: string - si se envía, mínimo 4 caracteres y único

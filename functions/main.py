@@ -56,7 +56,7 @@ from users import user_profile, create_user
 from vehicles import delete_vehicle, get_vehicles, search_vehicle, update_vehicle
 
 # Importar funciones de catalogs
-from catalogs import catalog_vehicle, catalog_year, catalog_color
+from catalogs import catalog_vehicle, catalog_year, catalog_color, catalog_relationship_type
 
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
@@ -98,6 +98,7 @@ initialize_app(options=_options if _options else None)
 # - catalog_vehicle: catalogs/catalog_vehicle.py
 # - catalog_year: catalogs/catalog_year.py
 # - catalog_color: catalogs/catalog_color.py
+# - catalog_relationship_type: catalogs/relationship_type/__init__.py
 # - create_competitor: competitors/create_competitor.py
 # - create_competitor_user: competitors/create_competitor_user.py
 # - delete_competitor_user: competitors/delete_competitor_user.py

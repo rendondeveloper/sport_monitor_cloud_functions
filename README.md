@@ -1009,6 +1009,44 @@ CRUD de catálogos en Firestore: **vehicles** (marcas y modelos de motos), **yea
 
 Errores: 400 (body/items inválido), 401 (token), 404 (documento no encontrado en PUT), 500 (interno). Sin JSON en cuerpos de error.
 
+### 4. Catálogo Relationship Types – `/api/catalogs/relationship-type`
+
+Catálogo de tipos de relación para contactos de emergencia. Solo **lectura** (GET). Ruta en Firestore: `catalogs/default/relationship_types`. Requiere Bearer token.
+
+| Método | Descripción                              | Body |
+| ------ | ---------------------------------------- | ---- |
+| GET    | Lista `[{id, label, order}]` ordenada   | —    |
+
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/catalogs/relationship-type`
+
+**Ejemplo de respuesta GET**:
+```json
+[
+  {"id": "abc1", "label": "Padre", "order": 1},
+  {"id": "abc2", "label": "Madre", "order": 2},
+  {"id": "abc3", "label": "Cónyuge / Esposo(a)", "order": 3},
+  {"id": "abc4", "label": "Hijo", "order": 4},
+  {"id": "abc5", "label": "Hija", "order": 5},
+  ...
+  {"id": "abc20", "label": "Otro", "order": 20}
+]
+```
+
+**cURL**:
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/catalogs/relationship-type' \
+  -H 'Authorization: Bearer <token>'
+```
+
+Errores: 401 (token inválido), 405 (método no permitido), 500 (interno). Sin JSON en cuerpos de error.
+
+**Seed del catálogo** (crear los 20 tipos de relación en Firestore):
+```bash
+cd sport_monitor_cloud_functions
+python scripts/seed_relationship_types.py
+```
+
 ---
 
 ## 📦 Package: Competitors
@@ -3655,6 +3693,7 @@ Las siguientes funciones requieren autenticación Bearer token:
 - `catalog_vehicle` - CRUD catálogo marcas de motos (requiere Bearer token)
 - `catalog_year` - CRUD catálogo años (requiere Bearer token)
 - `catalog_color` - CRUD catálogo colores (requiere Bearer token)
+- `catalog_relationship_type` - GET catálogo tipos de relación para contactos de emergencia (requiere Bearer token)
 - `day_of_race_active` - Obtiene día de carrera activo (requiere token para autenticación)
 - `checkpoint` - Obtiene checkpoint específico (requiere token para autenticación)
 - `competitor_tracking` - Obtiene tracking de competidores filtrado por checkpoint (requiere token para autenticación)
@@ -3774,6 +3813,9 @@ firebase deploy --only functions:search_vehicle
 
 # Desplegar catálogos (SPRTMNTRPP-82)
 firebase deploy --only functions:catalog_vehicle,functions:catalog_year,functions:catalog_color
+
+# Desplegar solo catalog_relationship_type
+firebase deploy --only functions:catalog_relationship_type
 
 # Desplegar solo day_of_race_active
 firebase deploy --only functions:day_of_race_active
