@@ -158,21 +158,15 @@ def delete_competitor_user_resources(
     Si algún documento no existe, se registra y se continúa con el resto.
     """
     # 1. Participante en events/{eventId}/participants/{userId}
-    try:
-        collection_path = _get_collection_path(event_id)
-        helper.delete_document(collection_path, user_id)
-        LOG.info(
-            "%s delete_competitor_user_resources: participante eliminado %s en evento %s",
-            LOG_PREFIX,
-            user_id,
-            event_id,
-        )
-    except Exception as e:
-        LOG.warning(
-            "%s delete_competitor_user_resources: error eliminando participante: %s",
-            LOG_PREFIX,
-            e,
-        )
+    # Sin try/except: si falla, la excepción se propaga y el handler devuelve 500.
+    collection_path = _get_collection_path(event_id)
+    helper.delete_document(collection_path, user_id)
+    LOG.info(
+        "%s delete_competitor_user_resources: participante eliminado %s en evento %s",
+        LOG_PREFIX,
+        user_id,
+        event_id,
+    )
 
     # 2. Membership users/{userId}/membership/{eventId}
     try:
@@ -206,19 +200,13 @@ def delete_competitor_user_resources(
         )
 
     # 4. Documento usuario en users/{userId}
-    try:
-        helper.delete_document(FirestoreCollections.USERS, user_id)
-        LOG.info(
-            "%s delete_competitor_user_resources: usuario eliminado %s",
-            LOG_PREFIX,
-            user_id,
-        )
-    except Exception as e:
-        LOG.warning(
-            "%s delete_competitor_user_resources: error eliminando usuario: %s",
-            LOG_PREFIX,
-            e,
-        )
+    # Sin try/except: si falla, la excepción se propaga y el handler devuelve 500.
+    helper.delete_document(FirestoreCollections.USERS, user_id)
+    LOG.info(
+        "%s delete_competitor_user_resources: usuario eliminado %s",
+        LOG_PREFIX,
+        user_id,
+    )
 
 
 @https_fn.on_request(region="us-east4")

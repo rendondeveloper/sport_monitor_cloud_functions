@@ -2,6 +2,7 @@
 from .competitor_route import competitor_route
 from .create_competitor import create_competitor
 from .create_competitor_user import create_competitor_user
+from .delete_competitor import delete_competitor
 from .delete_competitor_user import delete_competitor_user
 from .get_competitor_by_email import get_competitor_by_email
 from .get_competitor_by_id import get_competitor_by_id
@@ -14,6 +15,7 @@ __all__ = [
     "competitor_route",
     "create_competitor",
     "create_competitor_user",
+    "delete_competitor",
     "delete_competitor_user",
     "get_competitor_by_email",
     "get_competitor_by_id",

@@ -133,6 +133,11 @@
         "region": "us-east4"
       },
       {
+        "source": "/api/competitors/delete-competitor",
+        "function": "delete_competitor",
+        "region": "us-east4"
+      },
+      {
         "source": "/api/competitors/delete-user",
         "function": "delete_competitor_user",
         "region": "us-east4"

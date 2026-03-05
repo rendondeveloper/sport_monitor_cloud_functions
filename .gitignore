@@ -70,3 +70,8 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+
+scripts/
+
+.env/

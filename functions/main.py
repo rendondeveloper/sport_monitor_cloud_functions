@@ -16,6 +16,7 @@ from competitors import (
     competitor_route,
     create_competitor,
     create_competitor_user,
+    delete_competitor,
     delete_competitor_user,
     get_competitor_by_email,
     get_competitor_by_id,

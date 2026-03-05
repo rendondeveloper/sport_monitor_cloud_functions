@@ -55,7 +55,8 @@ functions/
 │   ├── competitor_route.py        # competitor_route
 │   ├── create_competitor.py       # create_competitor (POST)
 │   ├── create_competitor_user.py  # create_competitor_user (POST)
-│   ├── delete_competitor_user.py  # delete_competitor_user (DELETE)
+│   ├── delete_competitor.py       # delete_competitor (DELETE, solo participante)
+│   ├── delete_competitor_user.py  # delete_competitor_user (DELETE, usuario completo)
 │   ├── get_competitor_by_email.py  # get_competitor_by_email (GET)
 │   ├── get_competitor_by_id.py    # get_competitor_by_id (GET)
 │   ├── get_event_competitor_by_email.py # get_event_competitor_by_email (GET)
@@ -2005,6 +2006,66 @@ curl -X DELETE \
 
 ---
 
+### 8. `delete_competitor`
+
+Elimina **solo el participante del evento** (y su membership en `users/{userId}/membership/{eventId}`). **No elimina** el documento del usuario en `users` ni sus subcolecciones (vehicles, emergencyContacts, healthData, personalData). Útil para quitar a un competidor de un evento sin borrar su cuenta ni datos.
+
+**Tipo**: HTTP Request (DELETE)  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/delete-competitor`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+| Header          | Valor                          | Descripción          |
+| --------------- | ------------------------------ | -------------------- |
+| `Authorization` | `Bearer {Firebase Auth Token}` | Token de autenticación |
+| `Content-Type`  | `application/json`             | Body en JSON         |
+
+#### Body (JSON)
+
+El participante se identifica por **userId** o por **email** (debe enviarse al menos uno). `eventId` es siempre requerido.
+
+| Campo     | Tipo   | Requerido | Descripción                                           |
+| --------- | ------ | --------- | ----------------------------------------------------- |
+| `userId`  | string | No*       | ID del usuario/participante a eliminar del evento (*requerido si no se envía email) |
+| `email`   | string | No*       | Email del usuario (*requerido si no se envía userId)  |
+| `eventId` | string | **Sí**    | ID del evento                                         |
+
+También se aceptan `user_id` y `event_id` como nombres de campo.
+
+#### Comandos cURL
+
+**Por userId:**
+
+```bash
+curl -X DELETE \
+  'https://system-track-monitor.web.app/api/competitors/delete-competitor' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"userId": "USER_ID", "eventId": "EVENT_ID"}'
+```
+
+**Por email:**
+
+```bash
+curl -X DELETE \
+  'https://system-track-monitor.web.app/api/competitors/delete-competitor' \
+  -H 'Authorization: Bearer YOUR_FIREBASE_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"email": "usuario@example.com", "eventId": "EVENT_ID"}'
+```
+
+#### Respuestas
+
+- **204 No Content**: Participante (y membership) eliminados correctamente (cuerpo vacío).
+- **400 Bad Request**: Body inválido, falta `eventId` o no se envió ni `userId` ni `email` (sin cuerpo).
+- **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
+- **404 Not Found**: Participante no encontrado en el evento (sin cuerpo).
+- **500 Internal Server Error**: Error interno (sin cuerpo).
+
+---
+
 ## 📦 Package: Staff
 
 Funciones relacionadas con la gestión de usuarios staff en eventos.
@@ -3769,7 +3830,8 @@ Las siguientes funciones requieren autenticación Bearer token:
 - `get_event_competitor_by_email` - Obtiene competidor de un evento por email con datos de usuario y register en membership (requiere Bearer token)
 - `get_competitors_by_event` - Lista competidores de un evento con filtros (requiere Bearer token)
 - `list_competitors_by_event` - Lista paginada de competidores (id, nombre, categoría, número, equipo) por evento (requiere Bearer token)
-- `delete_competitor_user` - Elimina usuario competidor creado con create_competitor_user (requiere Bearer token)
+- `delete_competitor` - Elimina solo el participante del evento (y membership); no elimina el usuario ni sus datos (requiere Bearer token)
+- `delete_competitor_user` - Elimina usuario competidor creado con create_competitor_user y todos sus datos (requiere Bearer token)
 - `create_staff_user` - Crea usuario staff completo con Auth y membership (requiere Bearer token)
 - `track_event_checkpoint` - Modifica datos de tracking
 - `track_competitors` - Modifica datos de tracking
@@ -3926,14 +3988,17 @@ firebase deploy --only functions:get_competitors_by_event
 # Desplegar solo list_competitors_by_event
 firebase deploy --only functions:list_competitors_by_event
 
-# Desplegar solo delete_competitor_user
+# Desplegar solo delete_competitor (solo participante del evento)
+firebase deploy --only functions:delete_competitor
+
+# Desplegar solo delete_competitor_user (usuario completo)
 firebase deploy --only functions:delete_competitor_user
 
 # Desplegar solo create_staff_user
 firebase deploy --only functions:create_staff_user
 
 # Desplegar todas las funciones nuevas de competitors y staff
-firebase deploy --only functions:create_competitor,functions:create_competitor_user,functions:delete_competitor_user,functions:get_competitor_by_email,functions:get_competitor_by_id,functions:get_event_competitor_by_email,functions:get_competitors_by_event,functions:list_competitors_by_event,functions:create_staff_user
+firebase deploy --only functions:create_competitor,functions:create_competitor_user,functions:delete_competitor,functions:delete_competitor_user,functions:get_competitor_by_email,functions:get_competitor_by_id,functions:get_event_competitor_by_email,functions:get_competitors_by_event,functions:list_competitors_by_event,functions:create_staff_user
 ```
 
 ---
