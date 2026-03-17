@@ -1,10 +1,12 @@
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from firebase_admin import firestore
 from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
 from models.paginated_response import PaginatedResponse
+from utils.firestore_helper import FirestoreHelper
 from utils.helper_http_verb import validate_request
 
 from .event_short_document import EventShortDocument
@@ -39,6 +41,7 @@ def events(req: https_fn.Request) -> https_fn.Response:
         limit_param = req.args.get("size", "50")
         page_param = req.args.get("page", "1")
         last_doc_id = req.args.get("lastDocId")
+        user_id = req.args.get("userId", "").strip() or None
 
         # Parámetros de paginación
         limit = min(int(limit_param), 100)  # Default 50, máximo 100
@@ -52,6 +55,13 @@ def events(req: https_fn.Request) -> https_fn.Response:
 
         # Inicializar Firestore
         db = firestore.client()
+        helper = FirestoreHelper()
+
+        # Validar que el userId existe en Firestore; si no existe, ignorar inscripción
+        if user_id:
+            user_doc = helper.get_document(FirestoreCollections.USERS, user_id)
+            if user_doc is None:
+                user_id = None
 
         # Consultar eventos usando la constante
         events_ref = db.collection(FirestoreCollections.EVENTS)
@@ -118,6 +128,48 @@ def events(req: https_fn.Request) -> https_fn.Response:
         if has_more:
             events_docs = events_docs[:limit]  # Remover el documento extra
 
+        # Batch get de participantes para verificar inscripción del usuario
+        enrolled_event_ids = set()
+        if user_id and events_docs:
+            participant_refs = [
+                db.document(
+                    f"{FirestoreCollections.EVENTS}/{doc.id}"
+                    f"/{FirestoreCollections.EVENT_PARTICIPANTS}/{user_id}"
+                )
+                for doc in events_docs
+            ]
+            participant_snaps = db.get_all(participant_refs)
+            enrolled_event_ids = {
+                snap.reference.parent.parent.id
+                for snap in participant_snaps
+                if snap.exists
+            }
+
+        # Fetch paralelo de event_content (primer doc) para imageUrl y locationName
+        event_content_map = {}
+
+        def _fetch_content(event_id):
+            try:
+                snaps = (
+                    db.collection(FirestoreCollections.EVENTS)
+                    .document(event_id)
+                    .collection(FirestoreCollections.EVENT_CONTENT)
+                    .limit(1)
+                    .get()
+                )
+                if snaps:
+                    return event_id, snaps[0].to_dict() or {}
+            except Exception as e:
+                logging.warning(f"events: event_content error {event_id}: {e}")
+            return event_id, None
+
+        with ThreadPoolExecutor(max_workers=min(len(events_docs), 10)) as executor:
+            futures = {executor.submit(_fetch_content, doc.id): doc.id for doc in events_docs}
+            for future in as_completed(futures):
+                eid, content = future.result()
+                if content:
+                    event_content_map[eid] = content
+
         # Procesar documentos
         events_data = []
         last_document_id = None
@@ -129,12 +181,24 @@ def events(req: https_fn.Request) -> https_fn.Response:
                     continue
 
                 # Convertir usando el modelo EventShortDocument con mapeo automático
+                is_enrolled = (doc.id in enrolled_event_ids) if user_id else None
                 event = EventShortDocument.from_firestore_data(event_data, doc.id)
-                # Convertir directamente a dict usando el método del modelo
-                events_data.append(event.to_dict())
+                event_dict = event.to_dict()
+                event_dict["isEnrolled"] = is_enrolled
+
+                # Sobrescribir imageUrl y locationName desde event_content
+                content = event_content_map.get(doc.id)
+                if content:
+                    photo_main = content.get("photoMain")
+                    address = content.get("address")
+                    if photo_main:
+                        event_dict["imageUrl"] = photo_main
+                    if address:
+                        event_dict["locationName"] = address
+
+                events_data.append(event_dict)
                 last_document_id = doc.id
             except Exception as e:
-                # Solo loggear errores, no cada evento procesado
                 logging.warning(f"events: Error procesando evento {doc.id}: {str(e)}")
                 continue
 

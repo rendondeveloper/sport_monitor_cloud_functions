@@ -51,8 +51,8 @@ from tracking.track_competitor_position import track_competitor_position
 from tracking.tracking_checkpoint import track_event_checkpoint
 from tracking.tracking_competitors import track_competitors, track_competitors_off
 
-# Importar funciones de users
-from users import user_profile, create_user
+# Importar funciones de users (una sola función: user_route; despacha por path a read/create/update)
+from users import user_route
 
 # Importar funciones de vehicles
 from vehicles import delete_vehicle, get_vehicles, search_vehicle, update_vehicle
@@ -82,8 +82,7 @@ initialize_app(options=_options if _options else None)
 # - events: events/events_customer.py
 # - event_detail: events/events_detail_customer.py
 # - event_categories: events/event_categories.py
-# - user_profile: users/user_profile.py
-# - create_user: users/user_create.py
+# - user_route: users/user_route.py (router: /api/users/read, /api/users/profile, /api/users/create, /api/users/update)
 # - day_of_race_active: checkpoints/day_of_race_active.py
 # - checkpoint: checkpoints/checkpoint.py
 # - competitor_tracking: checkpoints/competitor_tracking.py

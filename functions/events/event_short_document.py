@@ -14,17 +14,17 @@ class EventShortDocument:
         start_date_time_utc: datetime,
         location_name: str,
         subtitle: Optional[str] = None,
-        timezone: Optional[str] = None,
         image_url: Optional[str] = None,
+        is_enrolled: Optional[bool] = None,
     ):
         self.id = id
         self.title = title
         self.subtitle = subtitle
         self.status = status
         self.start_date_time_utc = start_date_time_utc
-        self.timezone = timezone
         self.location_name = location_name
         self.image_url = image_url
+        self.is_enrolled = is_enrolled
 
     def to_dict(self) -> dict:
         """Convierte el objeto a diccionario para JSON/Firestore"""
@@ -34,9 +34,9 @@ class EventShortDocument:
             "subtitle": self.subtitle,
             "status": self.status.value,
             "startDateTime": self.start_date_time_utc.isoformat(),
-            "timezone": self.timezone,
             "locationName": self.location_name,
             "imageUrl": self.image_url,
+            "isEnrolled": self.is_enrolled,
         }
 
     @classmethod
@@ -68,7 +68,6 @@ class EventShortDocument:
             subtitle=data.get("subtitle"),
             status=status,
             start_date_time_utc=start_date_time_utc,
-            timezone=data.get("timezone"),
             location_name=data.get("locationName", ""),
             image_url=data.get("imageUrl"),
         )
@@ -90,7 +89,6 @@ class EventShortDocument:
         location_name = data.get("location", "")
         subtitle = data.get("subtitle")
         status_str = data.get("status", "draft")
-        timezone = data.get("timezone")
         image_url = data.get("imageUrl")
         
         # Parsear status (con fallback a draft como en Dart)
@@ -144,7 +142,6 @@ class EventShortDocument:
             subtitle=subtitle,
             status=status,
             start_date_time_utc=start_date_time,
-            timezone=timezone,
             location_name=location_name,
             image_url=image_url,
         )
@@ -157,9 +154,9 @@ class EventShortDocument:
             subtitle=kwargs.get("subtitle", self.subtitle),
             status=kwargs.get("status", self.status),
             start_date_time_utc=kwargs.get("start_date_time_utc", self.start_date_time_utc),
-            timezone=kwargs.get("timezone", self.timezone),
             location_name=kwargs.get("location_name", self.location_name),
             image_url=kwargs.get("image_url", self.image_url),
+            is_enrolled=kwargs.get("is_enrolled", self.is_enrolled),
         )
 
     def __eq__(self, other):

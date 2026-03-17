@@ -136,6 +136,20 @@ def _build_active_membership_with_register(
     return result
 
 
+def _check_user_inscribed_in_event(
+    helper: FirestoreHelper, user_id: str, event_id: str
+) -> bool:
+    """
+    Verifica si el usuario ya es participante del evento.
+
+    Returns:
+        True si existe el documento en events/{eventId}/participants/{userId}.
+    """
+    participants_path = _get_participants_path(event_id)
+    participant = helper.get_document(participants_path, user_id)
+    return participant is not None
+
+
 def _build_user_response(
     user_id: str,
     user_data: Dict[str, Any],
@@ -144,6 +158,7 @@ def _build_user_response(
     emergency_contacts: List[Dict[str, Any]],
     vehicles: List[Dict[str, Any]],
     memberships: List[Dict[str, Any]],
+    user_was_inscribed_into_event: bool = False,
 ) -> Dict[str, Any]:
     """Construye el objeto de respuesta con datos raíz y subcolecciones (sin createdAt/updatedAt)."""
     return {
@@ -153,6 +168,7 @@ def _build_user_response(
         "authUserId": user_data.get("authUserId"),
         "avatarUrl": user_data.get("avatarUrl"),
         "isActive": user_data.get("isActive", False),
+        "userWasInscribedIntoEvent": user_was_inscribed_into_event,
         "personalData": personal_data,
         "healthData": health_data,
         "emergencyContacts": emergency_contacts,
@@ -179,9 +195,10 @@ def get_competitor_by_email(req: https_fn.Request) -> https_fn.Response:
 
     Query Parameters:
     - email: string (requerido) - Email del usuario competidor
+    - eventId: string (opcional) - ID del evento para verificar inscripción previa
 
     Returns:
-    - 200: Objeto JSON con datos del usuario y subcolecciones
+    - 200: Objeto JSON con datos del usuario, subcolecciones y userWasInscribedIntoEvent
     - 400: Bad Request - email faltante o formato inválido
     - 401: Unauthorized - token inválido o faltante
     - 404: Not Found - usuario no encontrado
@@ -203,6 +220,7 @@ def get_competitor_by_email(req: https_fn.Request) -> https_fn.Response:
             )
 
         email = (req.args.get("email") or "").strip()
+        event_id = (req.args.get("eventId") or "").strip()
 
         if not email:
             LOG.warning("%s email faltante o vacío", LOG_PREFIX)
@@ -256,6 +274,19 @@ def get_competitor_by_email(req: https_fn.Request) -> https_fn.Response:
             helper, user_id, event_ids
         )
 
+        user_was_inscribed = False
+        if event_id:
+            user_was_inscribed = _check_user_inscribed_in_event(
+                helper, user_id, event_id
+            )
+            LOG.info(
+                "%s userWasInscribedIntoEvent=%s para userId=%s eventId=%s",
+                LOG_PREFIX,
+                user_was_inscribed,
+                user_id,
+                event_id,
+            )
+
         result = _build_user_response(
             user_id,
             user_data,
@@ -264,6 +295,7 @@ def get_competitor_by_email(req: https_fn.Request) -> https_fn.Response:
             emergency_contacts,
             vehicles,
             memberships,
+            user_was_inscribed_into_event=user_was_inscribed,
         )
 
         return https_fn.Response(

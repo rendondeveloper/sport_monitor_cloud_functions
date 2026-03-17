@@ -5,12 +5,18 @@ Flujo en una sola llamada:
 1. Crea documento en colección 'users' (campos raíz: email, userData, isActive, etc.).
 2.1. Crea subcolección users/{userId}/personalData (documento con id autogenerado).
 2.2. Crea subcolección users/{userId}/healthData (documento con id autogenerado).
-2.3. Crea subcolección users/{userId}/emergencyContact (un doc por contacto, id autogenerado; map).
+2.3. Procesa emergencyContacts (array mixto):
+     - Contacto con datos completos: crea en users/{userId}/emergencyContacts → {"id": autoId} en evento
+     - Contacto solo con {id}: valida existencia en users/ → {"id": id} en evento (400 si no existe)
 2.4. Si hay vehicleData: documento en users/{userId}/vehicles (id autogenerado; branch, year, model, color).
 3. Crea subcolección users/{userId}/membership/{eventId}.
 4. Crea participante en events/{eventId}/participants con el mismo userId como id.
 
-Rollback automático si falla cualquier paso (incluye borrado de subcolecciones). Requiere Bearer token.
+Si el usuario ya existe (mismo email) se ejecuta Flujo B: no se recrea el usuario, solo se registra
+en el evento con merge de datos y los mismos contactos (array mixto).
+
+Rollback automático si falla cualquier paso (incluye borrado de subcolecciones y contactos del evento).
+Requiere Bearer token.
 """
 
 import json
@@ -104,6 +110,19 @@ def _validate_request_data(request_data: Dict[str, Any]) -> Optional[str]:
     if username and len(username) < 4:
         return "El username debe tener al menos 4 caracteres"
 
+    vehicle_data = request_data.get("vehicleData")
+    if vehicle_data is not None:
+        if not isinstance(vehicle_data, dict):
+            return "vehicleData debe ser un objeto"
+        existing_id = vehicle_data.get("id")
+        has_data = vehicle_data.get("branch") or vehicle_data.get("brand") or vehicle_data.get("model")
+        if not existing_id and not has_data:
+            return "vehicleData: debe tener id o datos del vehículo (branch/brand, model)"
+        if existing_id and has_data:
+            return "vehicleData: no puede tener id y datos al mismo tiempo"
+        if existing_id and not isinstance(existing_id, str):
+            return "vehicleData.id debe ser un string"
+
     emergency_contacts = request_data.get("emergencyContacts")
     if emergency_contacts is not None:
         if not isinstance(emergency_contacts, list):
@@ -111,7 +130,15 @@ def _validate_request_data(request_data: Dict[str, Any]) -> Optional[str]:
         for i, contact in enumerate(emergency_contacts):
             if not isinstance(contact, dict):
                 return f"emergencyContacts[{i}] debe ser un objeto"
-            if contact.get("fullName") or contact.get("phone"):
+            existing_id = contact.get("id")
+            has_data = contact.get("fullName") or contact.get("phone")
+            if not existing_id and not has_data:
+                return f"emergencyContacts[{i}]: debe tener id o datos completos (fullName y phone)"
+            if existing_id and has_data:
+                return f"emergencyContacts[{i}]: no puede tener id y datos al mismo tiempo"
+            if existing_id and not isinstance(existing_id, str):
+                return f"emergencyContacts[{i}].id debe ser un string"
+            if has_data:
                 if not contact.get("fullName") or not contact.get("phone"):
                     return f"emergencyContacts[{i}]: fullName y phone son requeridos si se envía el contacto"
 
@@ -301,11 +328,39 @@ def _rollback_user_creation(
     created_health_data_id: Optional[str] = None,
     created_emergency_contact_ids: Optional[list] = None,
     created_vehicle_id: Optional[str] = None,
+    created_event_ec_ids: Optional[list] = None,
+    created_event_vehicle_id: Optional[str] = None,
 ) -> None:
     """
-    Rollback: elimina membership (si event_id), subcolecciones del usuario
-    (vehicles, emergencyContact, healthData, personalData por id) y luego el documento users.
+    Rollback: elimina vehículo y emergency contacts del evento, membership, subcolecciones del usuario y el documento users.
     """
+    if user_id and event_id and created_event_vehicle_id:
+        participant_vehicle_path = (
+            f"{FirestoreCollections.EVENTS}/{event_id}"
+            f"/{FirestoreCollections.EVENT_PARTICIPANTS}/{user_id}"
+            f"/{FirestoreCollections.PARTICIPANT_VEHICLE}"
+        )
+        try:
+            helper.delete_document(participant_vehicle_path, created_event_vehicle_id)
+            LOG.info("%s Rollback: event vehicle/%s eliminado", LOG_PREFIX, created_event_vehicle_id)
+        except Exception:
+            LOG.warning(
+                "%s Rollback: error eliminando event vehicle/%s", LOG_PREFIX, created_event_vehicle_id
+            )
+    if user_id and event_id and created_event_ec_ids:
+        participant_ec_path = (
+            f"{FirestoreCollections.EVENTS}/{event_id}"
+            f"/{FirestoreCollections.EVENT_PARTICIPANTS}/{user_id}"
+            f"/{FirestoreCollections.PARTICIPANT_EMERGENCY_CONTACTS}"
+        )
+        for ec_id in created_event_ec_ids:
+            try:
+                helper.delete_document(participant_ec_path, ec_id)
+                LOG.info("%s Rollback: event emergencyContact/%s eliminado", LOG_PREFIX, ec_id)
+            except Exception:
+                LOG.warning(
+                    "%s Rollback: error eliminando event emergencyContact/%s", LOG_PREFIX, ec_id
+                )
     if user_id and event_id:
         try:
             membership_path = (
@@ -333,6 +388,289 @@ def _rollback_user_creation(
             LOG.info("%s Rollback: usuario eliminado %s", LOG_PREFIX, user_id)
         except Exception:
             LOG.warning("%s Rollback: error eliminando usuario %s", LOG_PREFIX, user_id)
+
+
+# ============================================================================
+# FUNCIONES AUXILIARES - FLUJO B (Usuario existente)
+# ============================================================================
+
+
+def _find_existing_user_by_email(
+    helper: FirestoreHelper, email: str
+) -> Optional[tuple]:
+    """
+    Busca un usuario existente por email.
+    Returns: (user_id, user_data) o None si no existe.
+    """
+    results = helper.query_documents(
+        FirestoreCollections.USERS,
+        filters=[{"field": "email", "operator": "==", "value": email}],
+        limit=1,
+    )
+    if not results:
+        return None
+    return results[0]
+
+
+def _merge_update_personal_data(
+    helper: FirestoreHelper, user_id: str, request_data: Dict[str, Any]
+) -> None:
+    """
+    Actualiza personalData del usuario con merge: solo reemplaza campos no vacíos/nulos.
+    Si no existe el documento, lo crea.
+    """
+    path = f"{FirestoreCollections.USERS}/{user_id}/{_USER_PERSONAL_DATA}"
+    pd = request_data.get("personalData") or {}
+    existing_docs = helper.query_documents(path, limit=1)
+    if not existing_docs:
+        helper.create_document(path, _build_personal_data_document(request_data))
+        return
+    doc_id, _ = existing_docs[0]
+    fields = [
+        "fullName", "phone", "dateOfBirth", "address",
+        "city", "state", "country", "postalCode",
+    ]
+    update_fields = {f: pd[f] for f in fields if pd.get(f)}
+    if update_fields:
+        update_fields["updatedAt"] = get_current_timestamp()
+        helper.update_document(path, doc_id, update_fields)
+
+
+def _merge_update_health_data(
+    helper: FirestoreHelper, user_id: str, request_data: Dict[str, Any]
+) -> None:
+    """
+    Actualiza healthData del usuario con merge: solo reemplaza campos no vacíos/nulos.
+    Si no existe el documento, lo crea.
+    """
+    path = f"{FirestoreCollections.USERS}/{user_id}/{_USER_HEALTH_DATA}"
+    hd = request_data.get("healthData") or {}
+    existing_docs = helper.query_documents(path, limit=1)
+    if not existing_docs:
+        helper.create_document(path, _build_health_data_document(request_data))
+        return
+    doc_id, _ = existing_docs[0]
+    fields = [
+        "bloodType", "socialSecurityNumber", "medications",
+        "medicalConditions", "insuranceProvider", "insuranceNumber",
+    ]
+    update_fields = {f: hd[f] for f in fields if hd.get(f)}
+    if update_fields:
+        update_fields["updatedAt"] = get_current_timestamp()
+        helper.update_document(path, doc_id, update_fields)
+
+
+def _process_emergency_contacts(
+    helper: FirestoreHelper,
+    user_id: str,
+    event_id: str,
+    emergency_contacts: list,
+    out_user_ec_ids: Optional[list] = None,
+) -> Optional[str]:
+    """
+    Procesa contactos de emergencia (array mixto). Válido para Flujo A y Flujo B.
+
+    - Item con datos completos: crea en users/emergencyContacts → {"id": autoId} en evento
+    - Item solo con {id}: valida existencia en users/emergencyContacts → {"id": id} en evento
+
+    Args:
+        out_user_ec_ids: lista mutable donde se acumulan los IDs creados en users/ (para rollback).
+
+    Returns:
+        None si todo ok, o el id del contacto no encontrado si falla la validación.
+    """
+    participant_ec_path = (
+        f"{FirestoreCollections.EVENTS}/{event_id}"
+        f"/{FirestoreCollections.EVENT_PARTICIPANTS}/{user_id}"
+        f"/{FirestoreCollections.PARTICIPANT_EMERGENCY_CONTACTS}"
+    )
+    user_ec_path = (
+        f"{FirestoreCollections.USERS}/{user_id}/{_USER_EMERGENCY_CONTACT}"
+    )
+
+    for contact in emergency_contacts:
+        if not isinstance(contact, dict):
+            continue
+        existing_id = contact.get("id")
+        has_data = contact.get("fullName") or contact.get("phone")
+
+        if has_data:
+            # Contacto nuevo: crear en users → {"id": autoId} en evento
+            contact_doc = _build_emergency_contact_document(contact)
+            auto_id = helper.create_document(user_ec_path, contact_doc)
+            if out_user_ec_ids is not None:
+                out_user_ec_ids.append(auto_id)
+            helper.create_document_with_id(participant_ec_path, auto_id, {"id": auto_id})
+            LOG.info("%s Nuevo contacto creado: %s", LOG_PREFIX, auto_id)
+        elif existing_id:
+            # Contacto existente: validar que exista en users antes de referenciar
+            existing_doc = helper.get_document(user_ec_path, existing_id)
+            if existing_doc is None:
+                LOG.warning("%s Contacto no encontrado en users: %s", LOG_PREFIX, existing_id)
+                return existing_id
+            helper.create_document_with_id(
+                participant_ec_path, existing_id, {"id": existing_id}
+            )
+            LOG.info("%s Contacto existente referenciado: %s", LOG_PREFIX, existing_id)
+
+    return None
+
+
+def _process_vehicle(
+    helper: FirestoreHelper,
+    user_id: str,
+    event_id: str,
+    request_data: Dict[str, Any],
+    out_vehicle_id: Optional[list] = None,
+) -> Optional[str]:
+    """
+    Procesa vehicleData del request. Válido para Flujo A y Flujo B.
+
+    - Datos completos: crea en users/{userId}/vehicles → {"id": autoId} en evento
+    - Solo {id}: valida existencia en users/{userId}/vehicles → {"id": id} en evento
+
+    Args:
+        out_vehicle_id: lista mutable de un elemento donde se guarda el ID creado en users/ (para rollback).
+
+    Returns:
+        None si todo ok, o el id del vehículo no encontrado si falla la validación.
+    """
+    vehicle_data = request_data.get("vehicleData")
+    if not vehicle_data or not isinstance(vehicle_data, dict):
+        return None
+
+    vehicles_path = (
+        f"{FirestoreCollections.USERS}/{user_id}"
+        f"/{FirestoreCollections.USER_VEHICLES}"
+    )
+    participant_vehicle_path = (
+        f"{FirestoreCollections.EVENTS}/{event_id}"
+        f"/{FirestoreCollections.EVENT_PARTICIPANTS}/{user_id}"
+        f"/{FirestoreCollections.PARTICIPANT_VEHICLE}"
+    )
+
+    existing_id = vehicle_data.get("id")
+    has_data = vehicle_data.get("branch") or vehicle_data.get("brand") or vehicle_data.get("model")
+
+    if has_data:
+        # Vehículo nuevo: crear en users → {"id": autoId} en evento
+        vehicle_doc = _build_vehicle_document(request_data)
+        auto_id = helper.create_document(vehicles_path, vehicle_doc)
+        if out_vehicle_id is not None:
+            out_vehicle_id.append(auto_id)
+        helper.create_document_with_id(participant_vehicle_path, auto_id, {"id": auto_id})
+        LOG.info("%s Vehículo creado: %s", LOG_PREFIX, auto_id)
+    elif existing_id:
+        # Vehículo existente: validar que exista en users antes de referenciar
+        existing_doc = helper.get_document(vehicles_path, existing_id)
+        if existing_doc is None:
+            LOG.warning("%s Vehículo no encontrado en users: %s", LOG_PREFIX, existing_id)
+            return existing_id
+        helper.create_document_with_id(participant_vehicle_path, existing_id, {"id": existing_id})
+        LOG.info("%s Vehículo existente referenciado: %s", LOG_PREFIX, existing_id)
+
+    return None
+
+
+def _create_competitor_for_existing_user(
+    helper: FirestoreHelper,
+    user_id: str,
+    request_data: Dict[str, Any],
+) -> https_fn.Response:
+    """
+    Flujo B: El usuario ya existe en Firestore.
+    Registra al usuario en un nuevo evento sin recrear su documento raíz.
+    """
+    competition = request_data.get("competition", {})
+    event_id = competition.get("eventId", "")
+
+    # Verificar que el evento exista
+    if not _validate_event_exists(helper, event_id):
+        LOG.warning("%s [FlujoB] Evento no encontrado: %s", LOG_PREFIX, event_id)
+        return https_fn.Response(
+            "", status=404, headers={"Access-Control-Allow-Origin": "*"}
+        )
+
+    # Verificar que NO sea ya participante del evento → 409
+    collection_path = _get_collection_path(event_id)
+    if helper.get_document(collection_path, user_id) is not None:
+        LOG.warning(
+            "%s [FlujoB] Usuario %s ya inscrito en evento %s",
+            LOG_PREFIX, user_id, event_id,
+        )
+        return https_fn.Response(
+            "", status=409, headers={"Access-Control-Allow-Origin": "*"}
+        )
+
+    # Verificar número de piloto no duplicado → 409
+    pilot_number = competition.get("number", "")
+    if pilot_number and _check_duplicate_competitor(helper, event_id, pilot_number):
+        LOG.warning(
+            "%s [FlujoB] Número de piloto duplicado: %s en evento %s",
+            LOG_PREFIX, pilot_number, event_id,
+        )
+        return https_fn.Response(
+            "", status=409, headers={"Access-Control-Allow-Origin": "*"}
+        )
+
+    # Actualizar datos del usuario (merge: solo campos no vacíos)
+    _merge_update_personal_data(helper, user_id, request_data)
+    _merge_update_health_data(helper, user_id, request_data)
+
+    # Procesar contactos de emergencia (array mixto: existentes + nuevos)
+    emergency_contacts = request_data.get("emergencyContacts") or []
+    if isinstance(emergency_contacts, list):
+        failed_id = _process_emergency_contacts(
+            helper, user_id, event_id, emergency_contacts
+        )
+        if failed_id is not None:
+            return https_fn.Response(
+                json.dumps(
+                    {"error": f"emergencyContact {failed_id} no encontrado"},
+                    ensure_ascii=False,
+                ),
+                status=400,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+    # Procesar vehículo (nuevo con datos o existente con {id})
+    failed_vehicle_id = _process_vehicle(helper, user_id, event_id, request_data)
+    if failed_vehicle_id is not None:
+        return https_fn.Response(
+            json.dumps(
+                {"error": f"vehicle {failed_vehicle_id} no encontrado"},
+                ensure_ascii=False,
+            ),
+            status=400,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    # Crear membership
+    membership_path = (
+        f"{FirestoreCollections.USERS}/{user_id}"
+        f"/{FirestoreCollections.USER_MEMBERSHIP}"
+    )
+    helper.create_document_with_id(membership_path, event_id, _build_membership_document())
+    LOG.info("%s [FlujoB] Membership creado: %s/%s", LOG_PREFIX, user_id, event_id)
+
+    # Crear participante en el evento
+    competitor_doc = _build_competitor_document(request_data, user_id)
+    helper.create_document_with_id(collection_path, user_id, competitor_doc)
+    LOG.info(
+        "%s [FlujoB] Participante creado: userId=%s eventId=%s",
+        LOG_PREFIX, user_id, event_id,
+    )
+
+    return https_fn.Response(
+        json.dumps({"id": user_id, "membershipId": event_id}, ensure_ascii=False),
+        status=201,
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+    )
 
 
 # ============================================================================
@@ -429,13 +767,15 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
         email = request_data.get("email", "")
         username = request_data.get("username", "")
 
-        # Validar unicidad de email
-        if _validate_unique_email(helper, email):
-            LOG.warning("%s Email duplicado: %s", LOG_PREFIX, email)
-            return https_fn.Response(
-                "",
-                status=409,
-                headers={"Access-Control-Allow-Origin": "*"},
+        # Verificar si el usuario ya existe → Flujo B
+        existing_user = _find_existing_user_by_email(helper, email)
+        if existing_user is not None:
+            LOG.info(
+                "%s Usuario existente, iniciando Flujo B: %s", LOG_PREFIX, email
+            )
+            existing_user_id, _ = existing_user
+            return _create_competitor_for_existing_user(
+                helper, existing_user_id, request_data
             )
 
         # Validar unicidad de username solo si se envió (opcional)
@@ -511,52 +851,91 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
             )
             raise
 
-        # PASO 2.3: Subcolección emergencyContact (un documento por contacto, id autogenerado)
-        emergency_contact_path = (
-            f"{FirestoreCollections.USERS}/{user_id}"
-            f"/{_USER_EMERGENCY_CONTACT}"
-        )
+        # PASO 2.3: Subcolección emergencyContact en users + referencia {"id"} en evento
         try:
-            for contact in emergency_contacts:
-                contact_doc = _build_emergency_contact_document(
-                    contact if isinstance(contact, dict) else {}
-                )
-                doc_id = helper.create_document(emergency_contact_path, contact_doc)
-                created_emergency_contact_ids.append(doc_id)
-        except Exception:
-            _rollback_user_creation(
-                helper,
-                user_id,
-                None,
-                rollback_subcollections=True,
-                created_personal_data_id=created_personal_data_id,
-                created_health_data_id=created_health_data_id,
-                created_emergency_contact_ids=created_emergency_contact_ids,
-                created_vehicle_id=None,
+            failed_id = _process_emergency_contacts(
+                helper, user_id, event_id, emergency_contacts,
+                out_user_ec_ids=created_emergency_contact_ids,
             )
-            raise
-
-        # PASO 2.4: Subcolección users/{userId}/vehicles (un documento si hay vehicleData; id autogenerado)
-        created_vehicle_id = None
-        vehicle_data = request_data.get("vehicleData")
-        if vehicle_data and isinstance(vehicle_data, dict):
-            vehicles_path = (
-                f"{FirestoreCollections.USERS}/{user_id}"
-                f"/{FirestoreCollections.USER_VEHICLES}"
-            )
-            try:
-                vehicle_doc = _build_vehicle_document(request_data)
-                created_vehicle_id = helper.create_document(vehicles_path, vehicle_doc)
-            except Exception:
+            if failed_id is not None:
                 _rollback_user_creation(
                     helper,
                     user_id,
-                    None,
+                    event_id,
                     rollback_subcollections=True,
                     created_personal_data_id=created_personal_data_id,
                     created_health_data_id=created_health_data_id,
                     created_emergency_contact_ids=created_emergency_contact_ids,
                     created_vehicle_id=None,
+                    created_event_ec_ids=created_emergency_contact_ids,
+                )
+                return https_fn.Response(
+                    json.dumps(
+                        {"error": f"emergencyContact {failed_id} no encontrado"},
+                        ensure_ascii=False,
+                    ),
+                    status=400,
+                    headers={"Access-Control-Allow-Origin": "*"},
+                )
+        except Exception:
+            _rollback_user_creation(
+                helper,
+                user_id,
+                event_id,
+                rollback_subcollections=True,
+                created_personal_data_id=created_personal_data_id,
+                created_health_data_id=created_health_data_id,
+                created_emergency_contact_ids=created_emergency_contact_ids,
+                created_vehicle_id=None,
+                created_event_ec_ids=created_emergency_contact_ids,
+            )
+            raise
+
+        # PASO 2.4: Vehículo en users + referencia {"id"} en evento
+        created_vehicle_id = None
+        out_vehicle_id: list = []
+        vehicle_data = request_data.get("vehicleData")
+        if vehicle_data and isinstance(vehicle_data, dict):
+            try:
+                failed_vehicle_id = _process_vehicle(
+                    helper, user_id, event_id, request_data,
+                    out_vehicle_id=out_vehicle_id,
+                )
+                if out_vehicle_id:
+                    created_vehicle_id = out_vehicle_id[0]
+                if failed_vehicle_id is not None:
+                    _rollback_user_creation(
+                        helper,
+                        user_id,
+                        event_id,
+                        rollback_subcollections=True,
+                        created_personal_data_id=created_personal_data_id,
+                        created_health_data_id=created_health_data_id,
+                        created_emergency_contact_ids=created_emergency_contact_ids,
+                        created_vehicle_id=None,
+                        created_event_ec_ids=created_emergency_contact_ids,
+                        created_event_vehicle_id=None,
+                    )
+                    return https_fn.Response(
+                        json.dumps(
+                            {"error": f"vehicle {failed_vehicle_id} no encontrado"},
+                            ensure_ascii=False,
+                        ),
+                        status=400,
+                        headers={"Access-Control-Allow-Origin": "*"},
+                    )
+            except Exception:
+                _rollback_user_creation(
+                    helper,
+                    user_id,
+                    event_id,
+                    rollback_subcollections=True,
+                    created_personal_data_id=created_personal_data_id,
+                    created_health_data_id=created_health_data_id,
+                    created_emergency_contact_ids=created_emergency_contact_ids,
+                    created_vehicle_id=None,
+                    created_event_ec_ids=created_emergency_contact_ids,
+                    created_event_vehicle_id=None,
                 )
                 raise
 
@@ -578,6 +957,8 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
                 created_health_data_id=created_health_data_id,
                 created_emergency_contact_ids=created_emergency_contact_ids,
                 created_vehicle_id=created_vehicle_id,
+                created_event_ec_ids=created_emergency_contact_ids,
+                created_event_vehicle_id=created_vehicle_id,
             )
             raise
 
@@ -594,6 +975,8 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
                 created_health_data_id=created_health_data_id,
                 created_emergency_contact_ids=created_emergency_contact_ids,
                 created_vehicle_id=created_vehicle_id,
+                created_event_ec_ids=created_emergency_contact_ids,
+                created_event_vehicle_id=created_vehicle_id,
             )
             return https_fn.Response(
                 "",
@@ -618,6 +1001,8 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
                 created_health_data_id=created_health_data_id,
                 created_emergency_contact_ids=created_emergency_contact_ids,
                 created_vehicle_id=created_vehicle_id,
+                created_event_ec_ids=created_emergency_contact_ids,
+                created_event_vehicle_id=created_vehicle_id,
             )
             return https_fn.Response(
                 "",
@@ -643,6 +1028,8 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
                 created_health_data_id=created_health_data_id,
                 created_emergency_contact_ids=created_emergency_contact_ids,
                 created_vehicle_id=created_vehicle_id,
+                created_event_ec_ids=created_emergency_contact_ids,
+                created_event_vehicle_id=created_vehicle_id,
             )
             return https_fn.Response(
                 "",
@@ -663,6 +1050,8 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
                 created_health_data_id=created_health_data_id,
                 created_emergency_contact_ids=created_emergency_contact_ids,
                 created_vehicle_id=created_vehicle_id,
+                created_event_ec_ids=created_emergency_contact_ids,
+                created_event_vehicle_id=created_vehicle_id,
             )
             raise
 

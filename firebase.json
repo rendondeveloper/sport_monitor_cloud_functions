@@ -73,18 +73,93 @@
         "region": "us-central1"
       },
       {
+        "source": "/api/users/read",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/read/**",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/users/profile",
-        "function": "user_profile",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/profile/**",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/personalData",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/personalData/**",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/healthData",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/healthData/**",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/emergencyContacts",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/emergencyContacts/**",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/vehicles",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/vehicles/**",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/membership",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/membership/**",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/subscribedEvents",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/subscribedEvents/**",
+        "function": "user_route",
         "region": "us-central1"
       },
       {
         "source": "/api/users/create",
-        "function": "create_user",
+        "function": "user_route",
         "region": "us-central1"
       },
       {
         "source": "/api/users/create/**",
-        "function": "create_user",
+        "function": "user_route",
         "region": "us-central1"
       },
       {
@@ -126,6 +201,16 @@
         "source": "/api/competitors/competitor-route/**",
         "function": "competitor_route",
         "region": "us-east4"
+      },
+      {
+        "source": "/api/users/update",
+        "function": "user_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/update/**",
+        "function": "user_route",
+        "region": "us-central1"
       },
       {
         "source": "/api/competitors/create-user",

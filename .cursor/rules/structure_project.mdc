@@ -2,548 +2,1142 @@
 alwaysApply: true
 ---
 
+# Reglas para Cloud Functions - Firebase
 
-# IdentaPlus School - Flutter Project Rules
+## 📋 Principios Fundamentales
 
-## 🏗️ Arquitectura del Proyecto
+### 1. Validación Obligatoria
 
-### Tecnologías Principales
-- **Flutter**: Framework principal para desarrollo multiplataforma
-- **Dart**: Lenguaje de programación
-- **Provider**: Gestión de estado (MVVM pattern)
-- **Riverpod**: Gestión de estado avanzada (en algunas features)
-- **Freezed**: Generación de código para modelos inmutables
-- **Clean Architecture**: Separación de capas (Data, Domain, Presentation)
-- **Screaming Architecture**: Estructura organizada por features
+**TODAS** las Cloud Functions deben usar:
 
-### Patrones de Diseño
-- **MVVM (Model-View-ViewModel)**: Con Provider como ViewModel
-- **Repository Pattern**: Para acceso a datos
-- **Use Case Pattern**: Para lógica de negocio
-- **Dependency Injection**: Con GetIt
-- **Observer Pattern**: Con Provider/Riverpod
+- `validate_request()` - Para validar CORS y método HTTP
+- `verify_bearer_token()` - Para autenticación
 
-## 📁 Estructura del Proyecto
+### 2. Respuestas Directas (Sin Wrappers)
 
-### Core (`lib/core/`)
-```
-lib/core/
-├── navigation/
-│   ├── constants/
-│   │   └── route_paths.dart          # Rutas de navegación
-│   └── router.dart                   # Configuración de navegación
-├── util/                             # Funciones reutilizables
-├── values/
-│   ├── values_api.dart               # Constantes de APIs
-│   ├── values_app.dart               # Constantes generales
-│   ├── values_collection.dart        # Constantes Firebase
-│   ├── values_inputs.dart            # Constantes de inputs
-│   └── values_shared_preferences.dart # Constantes de almacenamiento
-├── network/
-│   └── apiconnect.dart               # Cliente HTTP
-├── modeling/
-│   ├── provider/
-│   │   └── base_provider.dart        # Provider base
-│   ├── dto/                          # Data Transfer Objects
-│   ├── enum/                         # Enumeraciones
-│   └── extension/                    # Extensiones
-├── di/
-│   └── core_di.dart                  # Inyección de dependencias
-├── db/                               # Base de datos local
-├── singleton/                        # Singletons de la app
-└── feature/                          # Features core (login, user info)
+**NUNCA** usar wrappers como `success`, `message`, `data` en respuestas exitosas.
+
+**✅ CORRECTO:**
+
+```python
+# Respuesta de catálogo
+return https_fn.Response(
+    json.dumps([
+        {"label": "uno"},
+        {"label": "dos"}
+    ], ensure_ascii=False),
+    status=200,
+    headers={
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+    },
+)
+
+# Respuesta de objeto único
+return https_fn.Response(
+    json.dumps({
+        "id": "123",
+        "name": "Ejemplo"
+    }, ensure_ascii=False),
+    status=200,
+    headers={
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+    },
+)
 ```
 
-### Features (`lib/features/`)
-```
-lib/features/
-├── feature_name/
-│   ├── feature_name_export.dart      # Archivo de exportación central
-│   ├── di/
-│   │   └── feature_name_di.dart      # DI específico del feature (Riverpod)
-│   ├── data/
-│   │   └── repositories/
-│   │       └── feature_name_repository.dart
-│   ├── domain/
-│   │   ├── entities/
-│   │   │   └── feature_entity.dart
-│   │   └── use_cases/
-│   │       └── feature_use_case.dart
-│   └── presentation/
-│       ├── provider/
-│       │   ├── feature_name_provider.dart
-│       │   ├── feature_name_state.dart
-│       │   └── feature_name_state.freezed.dart
-│       ├── controller/
-│       │   └── feature_name_controller.dart
-│       └── screens/
-│           ├── feature_name_screen.dart
-│           ├── feature_name_loading_screen.dart
-│           └── feature_name_error_screen.dart
+**❌ INCORRECTO:**
+
+```python
+# NO usar wrappers
+return https_fn.Response(
+    json.dumps({
+        "success": True,
+        "message": "Operación exitosa",
+        "data": [...]
+    }, ensure_ascii=False),
+    status=200,
+)
 ```
 
-### Internacionalización (`lib/l10n/`)
-- Archivos de traducción en formato ARB
-- Soporte para español e inglés
+### 3. Errores con Códigos HTTP Apropiados
 
-## 🎯 Convenciones de Nomenclatura
+Los errores deben retornar **solo el código HTTP** sin cuerpo JSON (excepto casos específicos).
 
-### Archivos y Carpetas
-- **snake_case**: Para nombres de archivos y carpetas
-- **PascalCase**: Para nombres de clases
-- **camelCase**: Para variables y métodos
+**✅ CORRECTO:**
 
-### Providers
-- Sufijo `Provider`: `FeatureProvider`
-- Sufijo `State`: `FeatureState`
-- Usar `StateNotifier` con Riverpod
+```python
+# Error 400 - Bad Request
+return https_fn.Response(
+    "",
+    status=400,
+    headers={"Access-Control-Allow-Origin": "*"},
+)
 
-### Estados (Freezed)
-```dart
-@freezed
-class FeatureState with _$FeatureState {
-  const factory FeatureState.empty() = _Empty;
-  const factory FeatureState.loading() = _Loading;
-  const factory FeatureState.loaded({
-    required Data data,
-  }) = _Loaded;
-  const factory FeatureState.error({
-    required String message,
-  }) = _Error;
-}
+# Error 401 - Unauthorized
+return https_fn.Response(
+    "",
+    status=401,
+    headers={"Access-Control-Allow-Origin": "*"},
+)
+
+# Error 404 - Not Found
+return https_fn.Response(
+    "",
+    status=404,
+    headers={"Access-Control-Allow-Origin": "*"},
+)
+
+# Error 500 - Internal Server Error
+return https_fn.Response(
+    "",
+    status=500,
+    headers={"Access-Control-Allow-Origin": "*"},
+)
 ```
 
-### Modelos
-- Sufijo `Model`: `UserModel`
-- Sufijo `Entity`: `UserEntity`
-- Sufijo `DTO`: `UserDTO`
+**❌ INCORRECTO:**
 
-## 🔧 Configuración de Dependencias
+```python
+# NO retornar JSON en errores
+return https_fn.Response(
+    json.dumps({
+        "success": False,
+        "error": "Mensaje de error"
+    }, ensure_ascii=False),
+    status=400,
+)
+```
 
-### Dependencias Principales
-- `provider: ^6.0.3` - Gestión de estado
-- `riverpod: ^2.5.0` - Gestión de estado avanzada
-- `freezed_annotation: ^2.4.1` - Modelos inmutables
-- `get_it: ^7.2.0` - Inyección de dependencias
-- `http: ^0.13.5` - Cliente HTTP
-- `shared_preferences: ^2.2.2` - Almacenamiento local
-- `firebase_core: ^3.15.2` - Firebase
+### 4. Patrón Early Return
 
-### Dev Dependencies
-- `build_runner: ^2.4.8` - Generación de código
-- `freezed: ^2.4.7` - Generador de Freezed
+**SIEMPRE** usar Early Return para validaciones y errores. Esto mejora la legibilidad y reduce anidación.
 
-## 🚀 Patrones de Implementación
+**✅ CORRECTO:**
 
-### Provider Pattern (Riverpod)
-```dart
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../domain/use_cases/feature_use_case.dart';
-import 'feature_state.dart';
+```python
+@https_fn.on_request()
+def my_function(req: https_fn.Request) -> https_fn.Response:
+    # Validar CORS y método HTTP
+    validation_response = validate_request(
+        req, ["GET"], "my_function", return_json_error=False
+    )
+    if validation_response is not None:
+        return validation_response
 
-class FeatureProvider extends StateNotifier<FeatureState> {
-  final FeatureUseCase useCase;
-  
-  FeatureProvider({
-    required this.useCase,
-  }) : super(const FeatureState.loading());
+    try:
+        # Validar Bearer token
+        if not verify_bearer_token(req, "my_function"):
+            logging.warning("my_function: Token inválido o faltante")
+            return https_fn.Response(
+                "",
+                status=401,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
 
-  Future<void> loadData() async {
-    state = const FeatureState.loading();
+        # Validar parámetros
+        param = req.args.get("param")
+        if not param or param.strip() == "":
+            logging.warning("my_function: Parámetro faltante")
+            return https_fn.Response(
+                "",
+                status=400,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
 
-    try {
-      final data = await useCase.call();
+        # Lógica principal
+        # ... código de la función ...
 
-      if(data == null) {
-        state = const FeatureState.empty();
-        return;
-      }
+        # Retornar respuesta exitosa (JSON directo)
+        return https_fn.Response(
+            json.dumps(result, ensure_ascii=False),
+            status=200,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",
+            },
+        )
 
-      state = FeatureState.loaded(data: data);
-    } catch (e) {
-      state = FeatureState.error(message: e.toString());
+    except ValueError as e:
+        logging.error("my_function: Error de validación: %s", e)
+        return https_fn.Response(
+            "",
+            status=400,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+    except (AttributeError, KeyError, RuntimeError, TypeError) as e:
+        logging.error("my_function: Error interno: %s", e, exc_info=True)
+        return https_fn.Response(
+            "",
+            status=500,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+```
+
+**❌ INCORRECTO (sin Early Return):**
+
+```python
+@https_fn.on_request()
+def my_function(req: https_fn.Request) -> https_fn.Response:
+    validation_response = validate_request(...)
+    if validation_response is None:
+        if verify_bearer_token(req, "my_function"):
+            param = req.args.get("param")
+            if param and param.strip() != "":
+                # Lógica anidada...
+                return response
+            else:
+                return error_response
+        else:
+            return error_response
+    else:
+        return validation_response
+```
+
+## 📦 Contexto de paquetes (models y utils)
+
+Las Cloud Functions deben apoyarse en **`functions/models`** para tipos y constantes de datos, y en **`functions/utils`** para validación, autenticación, Firestore, fechas y conversiones. Usar siempre lo que ya existe; no duplicar estructuras ni lógica.
+
+### Package `functions/models/`
+
+| Archivo                    | Exporta / Contenido                                                                                                                                                                                              | Uso                                                                                                   |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `firestore_collections.py` | `FirestoreCollections`                                                                                                                                                                                           | Constantes de nombres de colecciones; **usar siempre** en lugar de strings en rutas de Firestore.     |
+| `event_document.py`        | `EventDocument`, `EventStatus`                                                                                                                                                                                   | Modelo de evento deportivo y enum de estados (draft, published, inProgress, etc.); lógica de eventos. |
+| `events_response.py`       | `EventsResponse`                                                                                                                                                                                                 | Modelo de respuesta de eventos disponibles; `to_dict()`, `from_dict()`, `from_firestore()`.           |
+| `checkpoint_tracking.py`   | `TrackingCheckpoint`, `Checkpoint`, `CheckpointType`, `CompetitorsTrackingStatus`, `Competitor`                                                                                                                  | Modelos de tracking y checkpoints; enums para tipo de checkpoint y estado de competidor.              |
+| `competitor_tracking.py`   | `CheckpointsTracking`, `CompetitorTracking`, `CompetitorTrackingDocument`                                                                                                                                        | Modelos adicionales para tracking de competidores; uso interno cuando se necesiten.                   |
+| `paginated_response.py`    | `PaginatedResponse`, `PaginationInfo`                                                                                                                                                                            | Respuestas paginadas; `PaginatedResponse.create()` para construir.                                    |
+| `__init__.py`              | `EventsResponse`, `EventDocument`, `EventStatus`, `TrackingCheckpoint`, `Checkpoint`, `CheckpointType`, `CompetitorsTrackingStatus`, `Competitor`, `FirestoreCollections`, `PaginatedResponse`, `PaginationInfo` | Importar desde `models` cuando aplique.                                                               |
+
+**Regla:** Usar estos modelos y constantes cuando apliquen; no inventar estructuras duplicadas.
+
+### Package `functions/utils/`
+
+| Módulo                 | Función principal                                                                   | Uso                                                                                                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `helper_http.py`       | `verify_bearer_token(req, function_name)`                                           | Validar Bearer token; retorna `bool`. Si `False`, retornar 401.                                                                                                          |
+| `helper_http_verb.py`  | `validate_request(req, allowed_methods, function_name, return_json_error)`          | Validar CORS preflight y método HTTP en una llamada; retorna `Optional[Response]`. También: `handle_cors_preflight`, `validate_http_method` si se necesita por separado. |
+| `auth_helper.py`       | Crear/eliminar/actualizar usuarios Firebase Auth                                    | Ver sección "Funciones Utilitarias Existentes" más abajo.                                                                                                                |
+| `datetime_helper.py`   | `get_current_timestamp()`, parseo y formato de fechas                               | Timestamps y fechas en Firestore/API.                                                                                                                                    |
+| `firestore_helper.py`  | `FirestoreHelper`: get, create, update, delete, query                               | CRUD en Firestore; no usar `firestore.client()` directo para CRUD.                                                                                                       |
+| `validation_helper.py` | `validate_email`, `validate_phone`, `validate_required_fields`, `validate_password` | Validación de body y parámetros.                                                                                                                                         |
+| `helpers.py`           | `convert_firestore_value`, `format_utc_to_local_datetime`                           | Conversión de valores Firestore a JSON y formato de fechas.                                                                                                              |
+
+## 🏗️ Estructura de una Cloud Function
+
+### Template Base
+
+```python
+import json
+import logging
+from typing import Any, Dict, List
+
+from firebase_admin import firestore
+from firebase_functions import https_fn
+from models.firestore_collections import FirestoreCollections
+from utils.helper_http import verify_bearer_token
+from utils.helper_http_verb import validate_request
+
+
+@https_fn.on_request()
+def function_name(req: https_fn.Request) -> https_fn.Response:
+    """
+    Descripción de la función.
+
+    Headers:
+    - Authorization: Bearer {Firebase Auth Token} (requerido)
+
+    Parámetros:
+    - param1: Descripción (requerido)
+    - param2: Descripción (opcional)
+
+    Returns:
+    - 200: JSON directo con los datos
+    - 400: Bad Request - parámetros faltantes o inválidos
+    - 401: Unauthorized - token inválido o faltante
+    - 404: Not Found - recurso no encontrado
+    - 500: Internal Server Error
+    """
+    # 1. Validar CORS y método HTTP (OBLIGATORIO)
+    validation_response = validate_request(
+        req, ["GET"], "function_name", return_json_error=False
+    )
+    if validation_response is not None:
+        return validation_response
+
+    try:
+        # 2. Validar Bearer token (OBLIGATORIO)
+        if not verify_bearer_token(req, "function_name"):
+            logging.warning("function_name: Token inválido o faltante")
+            return https_fn.Response(
+                "",
+                status=401,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        # 3. Validar parámetros (Early Return)
+        param1 = req.args.get("param1")
+        if not param1 or param1.strip() == "":
+            logging.warning("function_name: param1 faltante o vacío")
+            return https_fn.Response(
+                "",
+                status=400,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        # 4. Lógica principal
+        db = firestore.client()
+        # ... código de la función ...
+
+        # 5. Retornar respuesta exitosa (JSON directo, sin wrapper)
+        return https_fn.Response(
+            json.dumps(result, ensure_ascii=False),
+            status=200,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+        )
+
+    except ValueError as e:
+        logging.error("function_name: Error de validación: %s", e)
+        return https_fn.Response(
+            "",
+            status=400,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+    except (AttributeError, KeyError, RuntimeError, TypeError) as e:
+        logging.error("function_name: Error interno: %s", e, exc_info=True)
+        return https_fn.Response(
+            "",
+            status=500,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+```
+
+## 📝 Ejemplos por Tipo de Respuesta
+
+### 1. Respuesta de Array (Catálogo/Lista)
+
+```python
+# Obtener lista de categorías
+@https_fn.on_request()
+def get_categories(req: https_fn.Request) -> https_fn.Response:
+    validation_response = validate_request(
+        req, ["GET"], "get_categories", return_json_error=False
+    )
+    if validation_response is not None:
+        return validation_response
+
+    try:
+        if not verify_bearer_token(req, "get_categories"):
+            logging.warning("get_categories: Token inválido o faltante")
+            return https_fn.Response(
+                "",
+                status=401,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        # Lógica para obtener categorías
+        categories = [
+            {"id": "1", "label": "Categoría 1"},
+            {"id": "2", "label": "Categoría 2"},
+        ]
+
+        # Retornar array directo
+        return https_fn.Response(
+            json.dumps(categories, ensure_ascii=False),
+            status=200,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",
+            },
+        )
+
+    except Exception as e:
+        logging.error("get_categories: Error: %s", e, exc_info=True)
+        return https_fn.Response(
+            "",
+            status=500,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+```
+
+### 2. Respuesta de Objeto Único
+
+```python
+# Obtener detalle de un recurso
+@https_fn.on_request()
+def get_resource_detail(req: https_fn.Request) -> https_fn.Response:
+    validation_response = validate_request(
+        req, ["GET"], "get_resource_detail", return_json_error=False
+    )
+    if validation_response is not None:
+        return validation_response
+
+    try:
+        if not verify_bearer_token(req, "get_resource_detail"):
+            logging.warning("get_resource_detail: Token inválido o faltante")
+            return https_fn.Response(
+                "",
+                status=401,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        resource_id = req.args.get("resourceId")
+        if not resource_id or resource_id.strip() == "":
+            logging.warning("get_resource_detail: resourceId faltante")
+            return https_fn.Response(
+                "",
+                status=400,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        # Lógica para obtener recurso
+        resource = {
+            "id": resource_id,
+            "name": "Nombre del Recurso",
+            "description": "Descripción",
+        }
+
+        # Retornar objeto directo
+        return https_fn.Response(
+            json.dumps(resource, ensure_ascii=False),
+            status=200,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",
+            },
+        )
+
+    except Exception as e:
+        logging.error("get_resource_detail: Error: %s", e, exc_info=True)
+        return https_fn.Response(
+            "",
+            status=500,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+```
+
+### 3. Respuesta de Array Vacío
+
+```python
+# Si no hay datos, retornar array vacío
+if not items:
+    return https_fn.Response(
+        json.dumps([], ensure_ascii=False),
+        status=200,
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+```
+
+### 4. Respuesta 404 (Recurso No Encontrado)
+
+```python
+# Verificar existencia del recurso
+resource_doc = db.collection("resources").document(resource_id).get()
+if not resource_doc.exists:
+    logging.warning("get_resource: Recurso no encontrado: %s", resource_id)
+    return https_fn.Response(
+        "",
+        status=404,
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+```
+
+## 🔍 Validaciones Comunes
+
+### Validación de Parámetros Query
+
+```python
+# Validar parámetro requerido
+param = req.args.get("param")
+if not param or param.strip() == "":
+    logging.warning("function_name: param faltante o vacío")
+    return https_fn.Response(
+        "",
+        status=400,
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+```
+
+### Validación de Request Body (POST/PUT)
+
+```python
+# Parsear request body
+try:
+    request_data = req.get_json(silent=True)
+    if request_data is None:
+        logging.warning("function_name: Request body inválido o faltante")
+        return https_fn.Response(
+            "",
+            status=400,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+except (ValueError, TypeError) as e:
+    logging.warning("function_name: Error parseando JSON: %s", e)
+    return https_fn.Response(
+        "",
+        status=400,
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+# Validar campos requeridos
+required_fields = ["field1", "field2"]
+missing_fields = [f for f in required_fields if f not in request_data]
+if missing_fields:
+    logging.warning("function_name: Campos faltantes: %s", missing_fields)
+    return https_fn.Response(
+        "",
+        status=400,
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+```
+
+### Validación de Tipos
+
+```python
+# Validar que un campo sea un número
+try:
+    order = int(request_data.get("order"))
+    if order < 0:
+        raise ValueError("order debe ser positivo")
+except (ValueError, TypeError):
+    logging.warning("function_name: order inválido")
+    return https_fn.Response(
+        "",
+        status=400,
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+```
+
+## 🎯 Aislamiento de Tareas
+
+### Separar Lógica en Funciones Auxiliares
+
+**✅ CORRECTO:**
+
+```python
+def _get_competitors_from_firestore(db, event_id, day_of_race_id):
+    """Obtiene competidores desde Firestore."""
+    tracking_id = f"{event_id}_{day_of_race_id}"
+    competitors_ref = (
+        db.collection(FirestoreCollections.EVENT_TRACKING)
+        .document(event_id)
+        .collection(FirestoreCollections.EVENT_TRACKING_COMPETITOR_TRACKING)
+        .document(tracking_id)
+        .collection(FirestoreCollections.EVENT_TRACKING_COMPETITOR)
+    )
+    return competitors_ref.get()
+
+
+def _build_competitor_dict(competitor_doc):
+    """Construye diccionario de competidor."""
+    competitor_data = competitor_doc.to_dict()
+    return {
+        "id": competitor_doc.id,
+        "name": competitor_data.get("name", ""),
+        "order": competitor_data.get("order", 0),
     }
-  }
 
-  void resetState() {
-    state = const FeatureState.loading();
-  }
+
+@https_fn.on_request()
+def get_competitors(req: https_fn.Request) -> https_fn.Response:
+    # Validaciones...
+
+    db = firestore.client()
+    competitors_snapshot = _get_competitors_from_firestore(db, event_id, day_of_race_id)
+
+    result = [
+        _build_competitor_dict(doc)
+        for doc in competitors_snapshot
+    ]
+
+    return https_fn.Response(
+        json.dumps(result, ensure_ascii=False),
+        status=200,
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+```
+
+**❌ INCORRECTO (todo en una función):**
+
+```python
+@https_fn.on_request()
+def get_competitors(req: https_fn.Request) -> https_fn.Response:
+    # Validaciones...
+
+    # Todo el código mezclado
+    db = firestore.client()
+    tracking_id = f"{event_id}_{day_of_race_id}"
+    competitors_ref = (
+        db.collection(FirestoreCollections.EVENT_TRACKING)
+        .document(event_id)
+        .collection(FirestoreCollections.EVENT_TRACKING_COMPETITOR_TRACKING)
+        .document(tracking_id)
+        .collection(FirestoreCollections.EVENT_TRACKING_COMPETITOR)
+    )
+    competitors_snapshot = competitors_ref.get()
+
+    result = []
+    for doc in competitors_snapshot:
+        competitor_data = doc.to_dict()
+        result.append({
+            "id": doc.id,
+            "name": competitor_data.get("name", ""),
+            "order": competitor_data.get("order", 0),
+        })
+
+    return https_fn.Response(...)
+```
+
+### Router central + handlers sin token
+
+Cuando varias operaciones (read, create, update) comparten el mismo dominio (p. ej. usuarios), se puede exponer **una sola Cloud Function** que actúe como router: valida CORS, método HTTP y Bearer token **una vez**, parsea el path y delega a módulos internos que exponen `handle(req)`. Esos handlers **no** llaman a `validate_request` ni `verify_bearer_token`; asumen que el request ya fue validado. Ejemplo: `users/user_route.py` despacha a `read.handle`, `create.handle`, `update.handle` según el path (`/api/users/read`, `/api/users/create`, `/api/users/update`).
+
+## 📋 Checklist de Implementación
+
+Antes de crear una Cloud Function, verificar:
+
+- [ ] ✅ Usa `validate_request()` para validar CORS y método HTTP
+- [ ] ✅ Usa `verify_bearer_token()` para autenticación
+- [ ] ✅ Respuesta exitosa retorna JSON directo (sin wrappers)
+- [ ] ✅ Errores retornan solo código HTTP (sin JSON)
+- [ ] ✅ Usa patrón Early Return para validaciones
+- [ ] ✅ Lógica separada en funciones auxiliares
+- [ ] ✅ Logging apropiado para errores y warnings
+- [ ] ✅ Headers CORS correctos
+- [ ] ✅ Manejo de excepciones con try/except
+- [ ] ✅ Validación de parámetros con Early Return
+- [ ] ✅ Documentación en docstring
+- [ ] ✅ Usa constantes de `FirestoreCollections` (no strings hardcodeados)
+- [ ] ✅ Si necesita nueva colección, la agregó a `FirestoreCollections` antes de usarla
+- [ ] ✅ Tipos de parámetros definidos o confirmados con el usuario si no se pueden inferir
+- [ ] ✅ Usa funciones de los helpers existentes (`helper_http`, `helper_http_verb`, `auth_helper`, `datetime_helper`, `firestore_helper`, `validation_helper`, `helpers`) en lugar de duplicar lógica
+
+### Checklist Pruebas unitarias
+
+- [ ] ✅ Existe archivo de pruebas unitarias para la función (p. ej. `test_<nombre>.py`)
+- [ ] ✅ Librería de pruebas (p. ej. pytest, pytest-cov) añadida a `requirements.txt` o dev si no existía
+- [ ] ✅ Cobertura mínima 90% configurada y alcanzada
+- [ ] ✅ Casos: happy path, parámetros faltantes, valor/tipo incorrecto, consultas con data, escrituras que validen éxito, múltiples llamadas al mismo API
+
+### Checklist Post-Implementación
+
+Después de que las pruebas unitarias pasen y antes del deploy, verificar:
+
+- [ ] ✅ Función documentada completamente en `README.md`
+- [ ] ✅ Endpoint URL documentado (directo y con hosting)
+- [ ] ✅ Parámetros documentados (query, path, body)
+- [ ] ✅ Ejemplos de cURL incluidos en README
+- [ ] ✅ Respuestas documentadas (éxito y errores)
+- [ ] ✅ Función agregada a lista de funciones con autenticación en README
+- [ ] ✅ Comando de deploy agregado en sección de despliegue del README
+- [ ] ✅ Estructura del proyecto actualizada en README si es necesario
+- [ ] ✅ Commit realizado con descripción de cambios y ticket de Jira si aplica
+- [ ] ✅ Deploy de las funciones afectadas ejecutado
+
+## 🧪 Pruebas unitarias
+
+### Regla obligatoria: archivo de pruebas por Cloud Function
+
+**TODAS** las Cloud Functions deben tener su **archivo de pruebas unitarias** asociado (por ejemplo `test_<nombre_funcion>.py` en `functions/tests/` o junto al módulo). Si la librería para pruebas unitarias no existe en el proyecto, se debe **agregar** (por ejemplo `pytest`, `pytest-cov`) y configurar la ejecución y el reporte de cobertura.
+
+### Cobertura mínima
+
+- Las pruebas deben alcanzar al menos **90% de cobertura** (coverage) del código de la función. Configurar el comando de pruebas con reporte de cobertura (por ejemplo `pytest --cov=... --cov-report=... --cov-fail-under=90`).
+
+### Tipos de parámetros antes de implementar
+
+- Antes de crear la Cloud Function, se debe conocer de forma **explícita** el **tipo** de cada parámetro (query, path, body): string, número, booleano, array, objeto, etc.
+- Si los tipos **no se pueden inferir** de la especificación del endpoint, del ticket o del contexto, **se debe preguntar al usuario** antes de continuar con la implementación. No asumir tipos sin confirmación.
+
+### Casos de prueba obligatorios
+
+Incluir al menos los siguientes casos en el archivo de pruebas unitarias:
+
+1. **Happy path**: petición válida con todos los parámetros correctos; respuesta exitosa (200 u otro código de éxito) y estructura esperada.
+2. **Parámetros faltantes**: casos donde **uno o más** parámetros requeridos no vienen en la petición; debe esperarse 400 (o el código que aplique).
+3. **Parámetros con valor o tipo incorrecto**: parámetro que no contiene el valor esperado o tiene tipo incorrecto (por ejemplo string donde se espera número, formato inválido). Debe validarse el tipo según lo definido y retornar el código de error apropiado (por ejemplo 400).
+4. **Consultas (lectura de información)**: las funciones que solicitan información de forma interna (por ejemplo lecturas a Firestore) deben tener casos donde se **simule que la consulta arroja data** y se verifique que la respuesta incluye esos datos correctamente.
+5. **Modificaciones (create, update, delete)**: las funciones que realizan escrituras deben tener casos donde se **simule que la operación se ejecutó correctamente** y la respuesta (o el código HTTP) permita **validar que la operación funcionó** (por ejemplo 200/204, o el contrato definido para la función).
+6. **Múltiples llamadas al mismo API**: incluir al menos un caso que simule **varias llamadas seguidas** al mismo endpoint (por ejemplo dos o más requests al mismo handler) para comprobar que el comportamiento es estable y no hay efectos colaterales incorrectos.
+
+Usar mocks (por ejemplo `unittest.mock` o `pytest` fixtures) para Firestore, `verify_bearer_token`, `validate_request` y cualquier dependencia externa, de modo que las pruebas sean unitarias y no dependan de servicios reales.
+
+### Orden de trabajo
+
+1. Implementar la Cloud Function.
+2. Añadir o configurar la librería de pruebas y cobertura si no existe.
+3. Escribir y ejecutar las pruebas unitarias hasta alcanzar al menos 90% de cobertura y que todos los casos obligatorios pasen.
+4. Solo después de que las pruebas pasen: documentar el API en `README.md` (ver sección de documentación).
+5. Una vez finalizada la documentación: hacer **commit** con una descripción clara de los cambios y **relacionar el ticket de Jira** en el mensaje de commit si existe (por ejemplo `SPRTMNTRPP-74 Add competitor_route function`).
+6. Realizar el **deploy** de las funciones afectadas (por ejemplo `firebase deploy --only functions:NOMBRE_FUNCION` o `firebase deploy --only functions` según corresponda).
+
+## 📤 Consultas y operaciones de escritura
+
+### Consultas (lectura de información)
+
+- Las funciones que realizan **consultas** para obtener información (por ejemplo get document, list collection) deben diseñarse de forma que la respuesta **arroje data**: retornar los datos solicitados en el cuerpo de la respuesta exitosa (JSON directo, sin wrappers), o el código/estructura acordada para “sin resultados” (por ejemplo array vacío o 404 según el contrato).
+
+### Modificaciones (create, update, delete)
+
+- Las funciones que realizan **create**, **update** o **delete** deben permitir **validar que la operación funcionó correctamente**: mediante el código HTTP (por ejemplo 200, 204) y, si el contrato del API lo define, mediante una respuesta que indique éxito. No dejar operaciones de escritura sin una forma clara de verificar el resultado en las pruebas y en el uso del API.
+
+## 🚫 Errores Comunes a Evitar
+
+### ❌ NO hacer esto:
+
+1. **Usar wrappers en respuestas exitosas:**
+
+   ```python
+   # ❌ INCORRECTO
+   return json.dumps({"success": True, "data": result})
+   ```
+
+2. **Retornar JSON en errores:**
+
+   ```python
+   # ❌ INCORRECTO
+   return json.dumps({"error": "Mensaje"}, status=400)
+   ```
+
+3. **Anidar validaciones:**
+
+   ```python
+   # ❌ INCORRECTO
+   if condition1:
+       if condition2:
+           if condition3:
+               # código
+   ```
+
+4. **Mezclar lógica en la función principal:**
+
+   ```python
+   # ❌ INCORRECTO
+   @https_fn.on_request()
+   def my_function(req):
+       # 200 líneas de código mezclado
+   ```
+
+5. **Olvidar validar token:**
+   ```python
+   # ❌ INCORRECTO
+   @https_fn.on_request()
+   def my_function(req):
+       # No valida token
+       return result
+   ```
+
+## 🔧 Funciones Utilitarias Existentes (Reutilización Obligatoria)
+
+### Regla Obligatoria: Reutilizar Funciones de los Helpers
+
+**SIEMPRE** revisar los archivos helper existentes antes de crear cualquier función nueva. Si ya existe una función que resuelve la necesidad, **DEBE USARSE**. **NUNCA** duplicar lógica que ya está en los helpers.
+
+**Archivos helper disponibles:**
+
+---
+
+### 1. `utils/helper_http.py` — Autenticación Bearer
+
+Verificación del token Bearer en el header `Authorization`. Usar al inicio del flujo de la función; si retorna `False`, retornar 401.
+
+| Función                                   | Descripción                              | Parámetros                                                    | Retorno                                                  |
+| ----------------------------------------- | ---------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
+| `verify_bearer_token(req, function_name)` | Verifica el token Bearer (Firebase Auth) | `req: Request`, `function_name: str` (opcional, para logging) | `bool`: `True` si válido, `False` si falta o es inválido |
+
+**Uso:**
+
+```python
+from utils.helper_http import verify_bearer_token
+
+if not verify_bearer_token(req, "my_function"):
+    logging.warning("my_function: Token inválido o faltante")
+    return https_fn.Response("", status=401, headers={"Access-Control-Allow-Origin": "*"})
+```
+
+---
+
+### 2. `utils/helper_http_verb.py` — CORS y método HTTP
+
+Validación de CORS preflight (OPTIONS) y método HTTP permitido. Usar antes que cualquier otra lógica en la función.
+
+| Función                                                                        | Descripción                                        | Parámetros                                                                                                            | Retorno                                                       |
+| ------------------------------------------------------------------------------ | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `validate_request(req, allowed_methods, function_name, return_json_error)`     | Valida CORS preflight y método HTTP en una llamada | `req`, `allowed_methods: List[str]` (ej. `["GET"]`), `function_name`, `return_json_error: bool` (recomendado `False`) | `Optional[Response]`: si no es `None`, retornar esa respuesta |
+| `handle_cors_preflight(req, allowed_methods)`                                  | Solo responde a OPTIONS (CORS)                     | `req`, `allowed_methods`                                                                                              | `Optional[Response]` o `None`                                 |
+| `validate_http_method(req, allowed_methods, function_name, return_json_error)` | Solo valida que el método esté permitido           | mismos que arriba                                                                                                     | `Optional[Response]` o `None`                                 |
+
+**Uso:**
+
+```python
+from utils.helper_http_verb import validate_request
+
+validation_response = validate_request(
+    req, ["GET"], "my_function", return_json_error=False
+)
+if validation_response is not None:
+    return validation_response
+```
+
+---
+
+### 3. `utils/auth_helper.py` — Firebase Authentication
+
+Funciones centralizadas para gestionar usuarios en Firebase Auth.
+
+| Función                                            | Descripción                          | Parámetros                      | Retorno                 |
+| -------------------------------------------------- | ------------------------------------ | ------------------------------- | ----------------------- |
+| `create_firebase_auth_user(email, password)`       | Crea usuario en Firebase Auth        | `email: str`, `password: str`   | `str` (UID del usuario) |
+| `delete_firebase_auth_user(uid)`                   | Elimina usuario (útil para rollback) | `uid: str`                      | `bool`                  |
+| `update_firebase_auth_email(uid, new_email)`       | Actualiza email del usuario          | `uid: str`, `new_email: str`    | `bool`                  |
+| `update_firebase_auth_password(uid, new_password)` | Actualiza contraseña del usuario     | `uid: str`, `new_password: str` | `bool`                  |
+
+**Uso:**
+
+```python
+from utils.auth_helper import create_firebase_auth_user, delete_firebase_auth_user
+
+# Crear usuario
+uid = create_firebase_auth_user(email, password)
+
+# Rollback si falla algo después
+delete_firebase_auth_user(uid)
+```
+
+---
+
+### 4. `utils/datetime_helper.py` — Fechas y Timestamps
+
+Funciones para manejo consistente de fechas. Usar `get_current_timestamp()` para campos `createdAt` y `updatedAt`.
+
+| Función                             | Descripción                      | Parámetros        | Retorno                                   |
+| ----------------------------------- | -------------------------------- | ----------------- | ----------------------------------------- |
+| `get_current_timestamp()`           | Timestamp actual ISO 8601 UTC    | —                 | `str` (ej: `"2026-02-15T12:00:00+00:00"`) |
+| `parse_iso_datetime(iso_string)`    | Convierte ISO 8601 a datetime    | `iso_string: str` | `datetime`                                |
+| `format_datetime_for_firestore(dt)` | Formatea datetime para Firestore | `dt: datetime`    | `str` (ISO 8601)                          |
+
+**Uso:**
+
+```python
+from utils.datetime_helper import get_current_timestamp
+
+data = {
+    "name": "Ejemplo",
+    "createdAt": get_current_timestamp(),
+    "updatedAt": get_current_timestamp(),
 }
 ```
 
-### Controller Pattern
-```dart
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:identaplusschool/features/feature_name/feature_name_export.dart';
+---
 
-part '../screens/feature_name_screen.dart';
-part '../screens/feature_name_loading_screen.dart';
-part '../screens/feature_name_error_screen.dart';
+### 5. `utils/firestore_helper.py` — Operaciones CRUD en Firestore
 
-class FeatureNameController extends ConsumerWidget { 
-  const FeatureNameController({super.key});
+Clase `FirestoreHelper` centralizada para todas las operaciones con Firestore. **NO** acceder directamente a `firestore.client()` para CRUD; usar esta clase.
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-     final state = ref.watch(featureNameProvider);
-    
-    return state.when(
-      empty: () => Container(),
-      loading: () => const FeatureNameLoadingScreen(),
-      loaded: (data) => FeatureNameScreen(data: data),
-      error: (message) => const FeatureNameErrorScreen(),
-    );  
-  }
-}
+| Método                                                        | Descripción                             | Parámetros                                                                           | Retorno                  |
+| ------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------ |
+| `get_document(collection_path, document_id)`                  | Obtiene documento por ID                | `collection_path: str`, `document_id: str`                                           | `Optional[Dict]`         |
+| `create_document(collection_path, data)`                      | Crea documento con ID autogenerado      | `collection_path: str`, `data: Dict`                                                 | `str` (ID creado)        |
+| `create_document_with_id(collection_path, document_id, data)` | Crea documento con ID específico        | `collection_path: str`, `document_id: str`, `data: Dict`                             | `str` (ID)               |
+| `update_document(collection_path, document_id, data)`         | Actualiza documento existente           | `collection_path: str`, `document_id: str`, `data: Dict`                             | `bool`                   |
+| `delete_document(collection_path, document_id)`               | Elimina documento                       | `collection_path: str`, `document_id: str`                                           | `bool`                   |
+| `query_documents(collection_path, filters, order_by, limit)`  | Query con filtros, orden y límite       | `collection_path: str`, `filters: List[Dict]`, `order_by: List[Tuple]`, `limit: int` | `List[Tuple[str, Dict]]` |
+| `batch_update(updates)`                                       | Actualiza múltiples documentos en batch | `updates: List[Tuple[str, str, Dict]]`                                               | `bool`                   |
+
+**Uso:**
+
+```python
+from utils.firestore_helper import FirestoreHelper
+
+fs = FirestoreHelper()
+
+# Obtener documento
+doc = fs.get_document("events", event_id)
+
+# Crear documento
+new_id = fs.create_document("events/abc/participants", data)
+
+# Query con filtros
+results = fs.query_documents(
+    "events",
+    filters=[{"field": "status", "operator": "==", "value": "active"}],
+    order_by=[("createdAt", "desc")],
+    limit=10,
+)
 ```
 
-### Repository Pattern
-```dart
-abstract class FeatureRepository {
-  Future<List<Data>> getData();
-}
+---
 
-class FeatureRepositoryImpl implements FeatureRepository {
-  final ApiConnect _client;
-  
-  @override
-  Future<List<Data>> getData() async {
-    return await _client.getData();
-  }
-}
+### 6. `utils/validation_helper.py` — Validaciones Comunes
+
+Funciones reutilizables de validación. **NO** escribir regex o validaciones manuales si ya existen aquí.
+
+| Función                                           | Descripción                                               | Parámetros                                 | Retorno            |
+| ------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------ | ------------------ |
+| `validate_password(password)`                     | Valida requisitos de contraseña (≥8 chars, letra, número) | `password: str`                            | `Tuple[bool, str]` |
+| `validate_phone(phone)`                           | Valida formato de teléfono (+52..., 10-15 dígitos)        | `phone: str`                               | `bool`             |
+| `validate_required_fields(data, required_fields)` | Valida campos requeridos presentes y no vacíos            | `data: Dict`, `required_fields: List[str]` | `Tuple[bool, str]` |
+| `validate_email(email)`                           | Valida formato de email                                   | `email: str`                               | `bool`             |
+
+**Uso:**
+
+```python
+from utils.validation_helper import validate_required_fields, validate_email
+
+# Validar campos requeridos del body
+is_valid, error_msg = validate_required_fields(request_data, ["name", "email", "phone"])
+if not is_valid:
+    logging.warning("function_name: %s", error_msg)
+    return https_fn.Response("", status=400, headers={"Access-Control-Allow-Origin": "*"})
+
+# Validar email
+if not validate_email(request_data["email"]):
+    return https_fn.Response("", status=400, headers={"Access-Control-Allow-Origin": "*"})
 ```
 
-### Use Case Pattern
-```dart
-abstract class FeatureUseCase {
-  Future<List<Data>> call();
-}
+---
 
-class FeatureUseCaseImpl implements FeatureUseCase {
-  final FeatureRepository _repository;
-  
-  @override
-  Future<List<Data>> call() async {
-    return await _repository.getData();
-  }
-}
+### 7. `utils/helpers.py` — Utilidades Generales
+
+Funciones de conversión y formato para datos de Firestore.
+
+| Función                                      | Descripción                                                                              | Parámetros               | Retorno                              |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------ |
+| `format_utc_to_local_datetime(utc_datetime)` | Convierte datetime UTC a ISO 8601 con Z                                                  | `utc_datetime: datetime` | `str` (ej: `"2025-10-24T19:03:35Z"`) |
+| `convert_firestore_value(value)`             | Convierte valores de Firestore a JSON serializable (timestamps, dicts, lists, recursivo) | `value: Any`             | `Any` (JSON serializable)            |
+
+**Uso:**
+
+```python
+from utils.helpers import convert_firestore_value
+
+# Convertir documento completo de Firestore a JSON serializable
+doc_data = doc.to_dict()
+serializable_data = convert_firestore_value(doc_data)
 ```
 
-## 🌐 Configuración de APIs
+---
 
-### Endpoints
-- **Base URL**: `https://seaacademic.net/`
-- **Path General**: `/services/movilservices.php`
-- **Autenticación**: Token en headers
+### ❌ Ejemplos de Duplicación Prohibida
 
-### Estructura de Request
-```json
-{
-  "OPC": "operation_code",
-  "USR": "user_id",
-  // ... otros parámetros
-}
+```python
+# ❌ INCORRECTO: Crear timestamp manualmente
+from datetime import datetime, timezone
+data["createdAt"] = datetime.now(timezone.utc).isoformat()
+
+# ✅ CORRECTO: Usar datetime_helper
+from utils.datetime_helper import get_current_timestamp
+data["createdAt"] = get_current_timestamp()
 ```
 
-## 📱 Navegación
+```python
+# ❌ INCORRECTO: Validar email con regex manual
+import re
+if not re.match(r"^[a-zA-Z0-9._%+-]+@...", email):
+    ...
 
-### Rutas
-- Definidas en `lib/core/navigation/constants/route_paths.dart`
-- Configuradas en `lib/core/navigation/router.dart`
-- Uso de `NavigationCustom` para transiciones
-
-### Ejemplo de Navegación
-```dart
-Navigator.pushNamed(
-  context, 
-  pageFeatureDetail,
-  arguments: [data],
-);
+# ✅ CORRECTO: Usar validation_helper
+from utils.validation_helper import validate_email
+if not validate_email(email):
+    ...
 ```
 
-## 🎨 UI/UX Guidelines
+```python
+# ❌ INCORRECTO: Acceder a Firestore directamente para CRUD
+db = firestore.client()
+doc = db.collection("events").document(event_id).get()
 
-### Colores
-- Definidos en `lib/resources/colors_app.dart`
-- Uso de `ColorsApp` para consistencia
-
-### Dimensiones
-- Definidas en `lib/resources/dimens_app.dart`
-- Uso de `DimensApp` para responsive design
-
-### Strings
-- Internacionalización en `lib/l10n/`
-- Uso de `context.strings()` para traducciones
-
-## 🔒 Seguridad
-
-### Almacenamiento
-- `flutter_secure_storage` para datos sensibles
-- `shared_preferences` para datos no sensibles
-- Encriptación de datos críticos
-
-### APIs
-- Validación de tokens
-- Manejo de errores de autenticación
-- Timeouts configurados
-
-## 📊 Testing
-
-### Estructura de Tests
-```
-test/
-├── unit/
-├── widget/
-└── integration/
+# ✅ CORRECTO: Usar FirestoreHelper
+from utils.firestore_helper import FirestoreHelper
+fs = FirestoreHelper()
+doc = fs.get_document(FirestoreCollections.EVENTS, event_id)
 ```
 
-### Convenciones
-- Sufijo `_test.dart` para archivos de test
-- Uso de `group()` para organizar tests
-- Mocks para dependencias externas
+```python
+# ❌ INCORRECTO: Crear usuario auth manualmente
+from firebase_admin import auth
+user = auth.create_user(email=email, password=password)
 
-## 🚀 Deployment
-
-### Build
-- `flutter build apk --debug` - APK de desarrollo
-- `flutter build apk --release` - APK de producción
-- `flutter build ios --release` - iOS de producción
-
-### Configuración
-- Firebase configurado
-- Splash screen nativo
-- Iconos de la aplicación
-
-## 📝 Notas Importantes
-
-1. **Siempre usar Provider para gestión de estado**
-2. **Seguir Clean Architecture en features**
-3. **Usar Freezed para modelos inmutables**
-4. **Implementar manejo de errores robusto**
-5. **Mantener separación de responsabilidades**
-6. **Usar internacionalización para textos**
-7. **Seguir convenciones de nomenclatura**
-8. **Implementar loading states**
-9. **Manejar estados vacíos y de error**
-10. **Usar dependency injection para testing**
-
-## 🚀 Reglas de Desarrollo y Rendimiento
-
-### Widgets con `const`
-**SIEMPRE** usar `const` cuando sea posible para widgets que no cambian:
-
-```dart
-// ✅ CORRECTO
-const ExampleWidget({
-  super.key,
-  required this.title,
-});
-
-// ❌ INCORRECTO
-ExampleWidget({
-  super.key,
-  required this.title,
-});
+# ✅ CORRECTO: Usar auth_helper
+from utils.auth_helper import create_firebase_auth_user
+uid = create_firebase_auth_user(email, password)
 ```
 
-**Condiciones para usar `const`:**
-- Todos los parámetros son `final` o `const`
-- No hay lógica dinámica en el constructor
-- El widget no cambia su estado interno
+## 📚 Referencias
 
-### Ejemplos de uso correcto:
-```dart
-// Widget simple - SIEMPRE const
-const SizedBox(height: 16),
+- `utils/helper_http.py` — `verify_bearer_token()`
+- `utils/helper_http_verb.py` — `validate_request()`, `handle_cors_preflight()`, `validate_http_method()`
+- `utils/auth_helper.py` — Funciones de Firebase Authentication
+- `utils/datetime_helper.py` — Funciones de fechas y timestamps
+- `utils/firestore_helper.py` — Clase `FirestoreHelper` para CRUD en Firestore
+- `utils/validation_helper.py` — Funciones de validación (email, teléfono, campos, contraseña)
+- `utils/helpers.py` — Utilidades generales (conversión de valores Firestore, formato de fechas)
+- `models/` — Package de modelos: `FirestoreCollections`, `EventDocument`, `EventStatus`, `EventsResponse`, `TrackingCheckpoint`, `Checkpoint`, `CheckpointType`, `CompetitorsTrackingStatus`, `Competitor`, `PaginatedResponse`, `PaginationInfo` (ver sección "Contexto de paquetes (models y utils)")
+- `models/firestore_collections.py` — Constantes de colecciones
 
-// Widget con parámetros finales - SIEMPRE const
-const Text(
-  'Hola Mundo',
-  style: TextStyle(fontSize: 16),
-),
+## 🗄️ Uso de FirestoreCollections
 
-// Widget personalizado - const si cumple condiciones
-const CustomWidget(
-  title: 'Título',
-  color: Colors.blue,
-),
+### Regla Obligatoria: Usar Constantes de FirestoreCollections
+
+**SIEMPRE** usar las constantes del archivo `FirestoreCollections` en lugar de strings hardcodeados.
+
+**✅ CORRECTO:**
+
+```python
+from models.firestore_collections import FirestoreCollections
+
+# Usar constantes
+event_ref = db.collection(FirestoreCollections.EVENTS).document(event_id)
+categories_ref = event_ref.collection(FirestoreCollections.EVENT_CATEGORIES)
+vehicles_ref = user_ref.collection(FirestoreCollections.USER_VEHICLES)
 ```
 
-### Usar `debugPrint` en lugar de `print`
-**SIEMPRE** usar `debugPrint` para logs de desarrollo:
+**❌ INCORRECTO:**
 
-```dart
-// ✅ CORRECTO
-debugPrint('Usuario logueado: ${user.name}');
-
-// ❌ INCORRECTO
-print('Usuario logueado: ${user.name}');
+```python
+# NO usar strings hardcodeados
+event_ref = db.collection("events").document(event_id)
+categories_ref = event_ref.collection("event_categories")
+vehicles_ref = user_ref.collection("vehicles")
 ```
 
-**Ventajas de `debugPrint`:**
-- Solo se ejecuta en modo debug
-- No aparece en builds de producción
-- Mejor rendimiento en producción
-- Más profesional
+### Agregar Nuevas Colecciones
 
-### Siempre incluir `super.key`
-**SIEMPRE** incluir `super.key` en constructores de widgets:
+**SIEMPRE** que se necesite una nueva colección de Firestore que no existe en `FirestoreCollections`, agregarla al archivo antes de usarla.
 
-```dart
-// ✅ CORRECTO
-class ExampleWidget extends StatelessWidget {
-  const ExampleWidget({
-    super.key,
-    required this.title,
-  });
-  
-  final String title;
-  // ... resto del código
-}
+**Proceso:**
 
-// ❌ INCORRECTO
-class ExampleWidget extends StatelessWidget {
-  const ExampleWidget({
-    required this.title,
-  });
-  
-  final String title;
-  // ... resto del código
-}
+1. Abrir `functions/models/firestore_collections.py`
+2. Identificar la sección apropiada (colecciones principales, de eventos, de usuarios, de tracking, etc.)
+3. Agregar la constante siguiendo el formato existente
+4. Usar la constante en la Cloud Function
+
+**Ejemplo:**
+
+```python
+# En FirestoreCollections
+class FirestoreCollections:
+    # Colecciones principales
+    EVENTS = "events"
+    USERS = "users"
+
+    # Colecciones de usuarios relacionados
+    USER_VEHICLES = "vehicles"  # ← Nueva colección agregada
+    USER_PROFILE = "profile"
 ```
 
-### Template de Widget StatelessWidget
-```dart
-class StudentCard extends StatelessWidget {
-  const StudentCard({
-    super.key,
-    required this.studentName,
-    required this.onTap,
-  });
+**Ubicación del archivo:** `functions/models/firestore_collections.py`
 
-  final String studentName;
-  final VoidCallback onTap;
+## 📖 Documentación en README
 
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Card(
-        child: Text(studentName),
-      ),
-    );
-  }
-}
+### Regla Obligatoria: Documentar Endpoints en README
+
+**SIEMPRE** que se finalice la creación de un endpoint (Cloud Function), agregar su documentación completa al archivo `README.md`.
+
+**Proceso de Documentación:**
+
+1. **Identificar la sección apropiada** en el README según el package:
+   - Package `events` → Sección "📦 Package: Events"
+   - Package `users` → Sección "📦 Package: Users"
+   - Package `checkpoints` → Sección "📦 Package: Checkpoints"
+   - Package `vehicles` → Sección "📦 Package: Vehicles" (crear si no existe)
+   - Package `tracking` → Sección "📦 Package: Tracking"
+
+2. **Agregar documentación completa** con:
+   - Descripción de la función
+   - Tipo de request (GET, POST, PUT, DELETE)
+   - Endpoint URL (directo y con hosting)
+   - Headers requeridos
+   - Parámetros (query, path, body)
+   - Campos retornados
+   - Ejemplos de comandos cURL
+   - Respuestas exitosas y de error
+   - Notas importantes
+
+3. **Actualizar secciones relacionadas:**
+   - Agregar función a la lista de funciones que requieren autenticación
+   - Agregar comando de deploy en la sección de despliegue
+   - Actualizar estructura del proyecto si es necesario
+
+**Ejemplo de estructura en README:**
+
+```markdown
+## 📦 Package: Vehicles
+
+Funciones relacionadas con la gestión de vehículos de competidores.
+
+### X. `function_name`
+
+Descripción breve de la función.
+
+**Tipo**: HTTP Request (GET/POST/PUT/DELETE)  
+**Endpoint**: `https://function-name-xa26lpxdea-uc.a.run.app`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/vehicles/...`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Headers Requeridos
+
+...
+
+#### Parámetros
+
+...
+
+#### Campos Retornados
+
+...
+
+#### Comandos cURL
+
+...
+
+#### Respuestas
+
+...
 ```
 
-### Template de Widget StatefulWidget
-```dart
-class StudentList extends StatefulWidget {
-  const StudentList({
-    super.key,
-    required this.students,
-  });
+**Ubicación del archivo:** `README.md` en la raíz del proyecto
 
-  final List<Student> students;
+**Checklist de Documentación:**
 
-  @override
-  State<StudentList> createState() => _StudentListState();
-}
+- [ ] Función documentada en la sección apropiada del README
+- [ ] Endpoint URL documentado (directo y con hosting)
+- [ ] Parámetros documentados (query, path, body)
+- [ ] Ejemplos de cURL incluidos
+- [ ] Respuestas documentadas (éxito y errores)
+- [ ] Función agregada a lista de funciones con autenticación
+- [ ] Comando de deploy agregado en sección de despliegue
+- [ ] Estructura del proyecto actualizada si es necesario
 
-class _StudentListState extends State<StudentList> {
-  @override
-  Widget build(BuildContext context) {
-    return ListView.builder(
-      itemCount: widget.students.length,
-      itemBuilder: (context, index) {
-        final student = widget.students[index];
-        debugPrint('Renderizando estudiante: ${student.name}');
-        
-        return StudentCard(
-          key: ValueKey(student.id),
-          studentName: student.name,
-          onTap: () => debugPrint('Estudiante seleccionado: ${student.name}'),
-        );
-      },
-    );
-  }
-}
-```
+## ✅ Resumen de Reglas
 
-### Checklist de Implementación
-Antes de crear un widget, verificar:
-
-- [ ] ¿Puede usar `const`? (parámetros finales, sin lógica dinámica)
-- [ ] ¿Incluye `super.key` en el constructor?
-- [ ] ¿Usa `debugPrint` en lugar de `print`?
-- [ ] ¿Todos los parámetros son `final`?
-- [ ] ¿El widget es inmutable?
-
-### Beneficios de las Reglas
-1. **Mejor Rendimiento**: Widgets `const` se crean una sola vez
-2. **Código Limpio**: Estructura consistente y profesional
-3. **Debugging Seguro**: `debugPrint` solo en desarrollo
-4. **Mantenibilidad**: Código más fácil de mantener y debuggear
-5. **Flutter Best Practices**: Sigue las recomendaciones oficiales
-
-## 🔄 Flujo de Desarrollo
-
-1. **Crear feature** siguiendo la estructura establecida
-2. **Implementar modelos** con Freezed
-3. **Crear datasource** para acceso a datos
-4. **Implementar repository** con patrón Repository
-5. **Crear use cases** para lógica de negocio
-6. **Implementar provider** con estado inmutable
-7. **Crear páginas** con manejo de estados
-8. **Agregar widgets** reutilizables
-9. **Configurar navegación** en router
-10. **Implementar tests** unitarios y de widget
-
-## 🔧 Dependency Injection (Riverpod)
-
-### Configuración de Providers
-```dart
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:identaplusschool/core/di/core_di.dart';
-import 'package:identaplusschool/features/feature_name/feature_name_export.dart';
-
-// Repository provider
-final featureNameRepositoryProvider = Provider<FeatureRepository>((ref) {
-  final apiConnect = ref.read(apiConnectProvider);
-  return FeatureRepository(client: apiConnect);
-});
-
-// Use case provider
-final featureNameUseCaseProvider = Provider<FeatureUseCase>((ref) {
-  final repository = ref.read(featureNameRepositoryProvider);
-  return FeatureUseCase(repository: repository);
-});
-
-// Provider (StateNotifier) provider
-final featureNameProvider = StateNotifierProvider.autoDispose<FeatureProvider, FeatureState>((ref) {  
-  return FeatureProvider(
-    useCase: ref.read(featureNameUseCaseProvider),
-  );
-});
-```
-
-## 📁 Archivo de Exportación
-
-### Estructura del archivo export
-```dart
-// Domain exports
-export 'domain/entities/feature_entity.dart';
-export 'domain/use_cases/feature_use_case.dart';
-
-// Data exports
-export 'data/repositories/feature_repository.dart';
-
-// Presentation exports
-export 'presentation/provider/feature_state.dart';
-export 'presentation/provider/feature_provider.dart';
-export 'presentation/controller/feature_controller.dart';
-
-// Dependency Injection
-export 'di/feature_di.dart';
-```
+1. **SIEMPRE** usar `validate_request()` y `verify_bearer_token()`
+2. **NUNCA** usar wrappers (`success`, `message`) en respuestas exitosas
+3. **SIEMPRE** retornar solo código HTTP en errores (sin JSON)
+4. **SIEMPRE** usar Early Return para validaciones
+5. **SIEMPRE** separar lógica en funciones auxiliares
+6. **SIEMPRE** usar logging para errores y warnings
+7. **SIEMPRE** incluir headers CORS apropiados
+8. **SIEMPRE** usar constantes de `FirestoreCollections` (nunca strings hardcodeados)
+9. **SIEMPRE** agregar nuevas colecciones a `FirestoreCollections` antes de usarlas
+10. **SIEMPRE** documentar endpoints completos en `README.md` al finalizar su creación
+11. **SIEMPRE** crear archivo de pruebas unitarias por Cloud Function; si no hay librería de tests, agregarla; cobertura mínima 90%
+12. **SIEMPRE** conocer los tipos de los parámetros antes de implementar; si no se pueden inferir, preguntar al usuario antes de continuar
+13. **SIEMPRE** incluir casos de prueba: happy path, parámetros faltantes, valor/tipo incorrecto, consultas que retornen data, operaciones de escritura que permitan validar éxito, múltiples llamadas al mismo API
+14. **SIEMPRE** diseñar consultas para que arrojen data; operaciones create/update/delete para que se pueda validar si funcionaron correctamente
+15. **SIEMPRE** tras pruebas pasando: documentar el API; luego commit con descripción de cambios y ticket de Jira si aplica; después deploy de las funciones
+16. **SIEMPRE** reutilizar funciones de los helpers existentes (`helper_http`, `helper_http_verb`, `auth_helper`, `datetime_helper`, `firestore_helper`, `validation_helper`, `helpers`). **NUNCA** duplicar lógica que ya está en estos archivos (validación request/token, timestamps, validaciones, CRUD Firestore, gestión de auth users, conversión de valores)

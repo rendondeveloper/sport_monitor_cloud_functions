@@ -1,0 +1,41 @@
+{
+    "email": "luis800@gmail.com",
+    "username": "luis800@gmail.com",
+    "personalData": {
+        "fullName": "juan perez",
+        "phone": "",
+        "dateOfBirth": "2006-03-11T00:00:00.000",
+        "address": "ssssss",
+        "city": "",
+        "state": "",
+        "country": "",
+        "postalCode": ""
+    },
+    "healthData": {
+        "bloodType": "A+",
+        "socialSecurityNumber": "1111",
+        "medications": "medicamentos",
+        "medicalConditions": "condiciones",
+        "insuranceProvider": "compañia",
+        "insuranceNumber": "11"
+    },
+    "emergencyContacts": [
+        {
+            "fullName": "contacto 1",
+            "relationship": "tNUcT2bcaTInKJxYNYZT",
+            "phone": "5516131531"
+        },
+        {
+            "fullName": "contacto 2",
+            "relationship": "7qQuGlSB0JMgJpkVdWie",
+            "phone": "5516131531"
+        }
+    ],
+    "vehicleData": {
+        "id": "",
+        "branch": "Yamaha",
+        "model": "R7",
+        "year": 2019,
+        "color": "Grafito"
+    }
+}

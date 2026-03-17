@@ -8,7 +8,7 @@ API pública: no requiere Bearer token.
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from firebase_admin import firestore
 from firebase_functions import https_fn
@@ -20,6 +20,23 @@ from utils.helpers import format_utc_to_local_datetime
 # Prefijo para filtrar logs: grep "[competitor_route]" o grep "competitor_route"
 LOG = logging.getLogger(__name__)
 LOG_PREFIX = "[competitor_route]"
+
+
+def _get_registration_category_and_pilot_number(
+    participant_data: Dict[str, Any],
+) -> Tuple[str, Any]:
+    """
+    Obtiene registrationCategory y pilotNumber del participante.
+    Soporta ambos formatos: campos en la raíz del documento o dentro de competitionCategory.
+    Returns:
+        (registration_category: str, pilot_number: Any)
+    """
+    root_reg = participant_data.get("registrationCategory", "")
+    root_pilot = participant_data.get("pilotNumber")
+    comp_cat = participant_data.get("competitionCategory") or {}
+    reg = (root_reg or comp_cat.get("registrationCategory", "") or "").strip()
+    pilot = root_pilot if root_pilot is not None else comp_cat.get("pilotNumber")
+    return reg, pilot
 
 
 def _get_participant_doc(db: firestore.Client, event_id: str, competitor_id: str):
@@ -99,9 +116,9 @@ def _build_response(
     route_doc: firestore.DocumentSnapshot,
 ) -> Dict[str, Any]:
     """Construye el JSON de respuesta según la especificación SPRTMNTRPP-74."""
-    competition_category = participant_data.get("competitionCategory") or {}
-    pilot_number = competition_category.get("pilotNumber")
-    registration_category = competition_category.get("registrationCategory", "")
+    registration_category, pilot_number = _get_registration_category_and_pilot_number(
+        participant_data
+    )
 
     # competitor.category = valor de pilotNumber (ej: "ORO"); nombre = registrationCategory (ej: "25F")
     category_str = (
@@ -152,9 +169,10 @@ def competitor_route(req: https_fn.Request) -> https_fn.Response:
     - competitorId: ID del competidor (requerido)
 
     Validaciones:
-    - events/{eventId}/participants/{competitorId} debe existir y isAvailable == True
+    - events/{eventId}/participants/{competitorId} debe existir (isAvailable opcional: si falta, se considera disponible; si está a False, 404)
     - events/{eventId}/day_of_races/{dayId} debe existir y isActivate == True
-    - Se obtiene categoryId desde event_categories donde name == competitionCategory.registrationCategory
+    - registrationCategory se lee de la raíz del participant o de competitionCategory.registrationCategory
+    - Se obtiene categoryId desde event_categories donde name == registrationCategory
     - Se busca en routes donde categoryIds contiene categoryId y dayOfRaceIds contiene dayId
 
     Returns:
@@ -214,7 +232,7 @@ def competitor_route(req: https_fn.Request) -> https_fn.Response:
 
         db = firestore.client()
 
-        # 1. Participante: debe existir y isAvailable == True
+        # 1. Participante: debe existir. isAvailable opcional (ausente = disponible).
         participant_doc = _get_participant_doc(db, event_id, competitor_id)
         if not participant_doc.exists:
             LOG.warning(
@@ -229,7 +247,8 @@ def competitor_route(req: https_fn.Request) -> https_fn.Response:
                 headers={"Access-Control-Allow-Origin": "*"},
             )
         participant_data = participant_doc.to_dict() or {}
-        if not participant_data.get("isAvailable", False):
+        # Si isAvailable está presente y es False → no disponible (404). Si falta → se considera disponible.
+        if participant_data.get("isAvailable") is False:
             LOG.warning(
                 "%s Participante no disponible (isAvailable=false) competitorId=%s",
                 LOG_PREFIX,
@@ -265,8 +284,9 @@ def competitor_route(req: https_fn.Request) -> https_fn.Response:
             )
 
         # 3. categoryId desde event_categories por name == registrationCategory
-        competition_category = participant_data.get("competitionCategory") or {}
-        registration_category = competition_category.get("registrationCategory", "")
+        registration_category, _ = _get_registration_category_and_pilot_number(
+            participant_data
+        )
         category_id = _get_category_id_by_name(db, event_id, registration_category)
         if not category_id:
             LOG.warning(

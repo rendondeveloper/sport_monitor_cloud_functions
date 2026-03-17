@@ -23,9 +23,12 @@ functions/
 │   ├── events_customer.py          # events
 │   ├── events_detail_customer.py  # event_detail
 │   └── event_categories.py        # event_categories
-├── users/               # Package: Gestión de Usuarios
-│   ├── user_create.py               # create_user
-│   └── user_profile.py              # user_profile
+├── users/               # Package: Gestión de Usuarios (una función: user_route)
+│   ├── user_route.py                # user_route (router: read/create/update/delete_section/subscribedEvents por path)
+│   ├── create.py                    # create.handle (crear/activar usuario)
+│   ├── read.py                      # read.handle (perfil por email/userId/documentId)
+│   ├── subscribed_events.py        # subscribed_events.handle (eventos suscritos del usuario, paginado)
+│   └── update.py                    # update.handle (actualizar usuario por secciones)
 ├── vehicles/            # Package: Vehículos de usuarios/competidores
 │   ├── get_vehicles.py            # get_vehicles (GET /api/vehicles + POST delega a create_vehicle)
 │   ├── create_vehicle.py          # create_vehicle_handler (POST, invocado desde get_vehicles)
@@ -97,9 +100,9 @@ Funciones relacionadas con la gestión y consulta de eventos deportivos.
 
 ### 1. `events`
 
-Obtiene una lista paginada de eventos desde Firestore. Retorna eventos en formato `EventShortDocument` (versión simplificada con campos esenciales).
+Obtiene una lista paginada de eventos desde Firestore. Retorna eventos en formato `EventShortDocument` (versión simplificada con campos esenciales). Opcionalmente indica si el usuario ya está inscrito en cada evento.
 
-**Tipo**: HTTP Request (GET)  
+**Tipo**: HTTP Request (GET)
 **Endpoint**: `https://events-xa26lpxdea-uc.a.run.app`
 
 #### Parámetros (Query Parameters)
@@ -109,6 +112,7 @@ Obtiene una lista paginada de eventos desde Firestore. Retorna eventos en format
 | `size`      | integer | No        | Número de eventos por página (default: 50, max: 100)                 |
 | `page`      | integer | No        | Número de página (default: 1)                                        |
 | `lastDocId` | string  | No        | ID del último documento para cursor-based pagination (más eficiente) |
+| `userId`    | string  | No        | ID del usuario para verificar si ya está inscrito en cada evento     |
 
 #### Campos Retornados
 
@@ -117,9 +121,31 @@ Obtiene una lista paginada de eventos desde Firestore. Retorna eventos en format
 - `subtitle`: Subtítulo (opcional)
 - `status`: Estado del evento (draft, published, inProgress, etc.)
 - `startDateTime`: Fecha y hora de inicio en formato ISO 8601
-- `timezone`: Zona horaria (opcional)
-- `locationName`: Nombre de la ubicación
-- `imageUrl`: URL de la imagen (opcional)
+- `locationName`: Dirección del evento (viene del campo `address` de `event_content`)
+- `imageUrl`: URL de la imagen principal (viene del campo `photoMain` de `event_content`)
+- `isEnrolled`: `true` si el usuario está inscrito, `false` si no, `null` si no se envió `userId` o el usuario no existe en Firestore
+
+#### Origen de `imageUrl` y `locationName`
+
+Ambos campos se obtienen del **primer documento** de la subcolección `events/{eventId}/event_content`:
+
+| Campo en respuesta | Campo en Firestore (`event_content`) |
+|---|---|
+| `imageUrl` | `photoMain` |
+| `locationName` | `address` |
+
+Si el evento no tiene documentos en `event_content`, ambos campos retornan `null`.
+
+#### Comportamiento de `isEnrolled`
+
+| Escenario | Valor de `isEnrolled` |
+|---|---|
+| No se envía `userId` | `null` |
+| `userId` no existe en `users` | `null` |
+| `userId` válido, inscrito en el evento | `true` |
+| `userId` válido, no inscrito en el evento | `false` |
+
+> La verificación usa un batch get sobre `events/{eventId}/participants/{userId}` — una sola operación para toda la página, sin N+1.
 
 #### Comandos cURL
 
@@ -147,11 +173,19 @@ curl -X GET \
   -H 'Content-Type: application/json'
 ```
 
+**Con verificación de inscripción por usuario:**
+
+```bash
+curl -X GET \
+  'https://events-xa26lpxdea-uc.a.run.app?size=20&userId=uid-del-usuario' \
+  -H 'Content-Type: application/json'
+```
+
 **Con todos los parámetros:**
 
 ```bash
 curl -X GET \
-  'https://events-xa26lpxdea-uc.a.run.app?size=20&page=1&lastDocId=id-del-ultimo-documento' \
+  'https://events-xa26lpxdea-uc.a.run.app?size=20&page=1&lastDocId=id-del-ultimo-documento&userId=uid-del-usuario' \
   -H 'Content-Type: application/json'
 ```
 
@@ -159,16 +193,16 @@ curl -X GET \
 
 ```json
 {
-  "items": [
+  "result": [
     {
       "id": "event-id-1",
       "title": "Evento Deportivo 2025",
       "subtitle": "Subtítulo del evento",
       "status": "published",
       "startDateTime": "2025-01-15T10:00:00",
-      "timezone": "America/Mexico_City",
       "locationName": "Estadio Principal",
-      "imageUrl": "https://example.com/image.jpg"
+      "imageUrl": "https://example.com/image.jpg",
+      "isEnrolled": true
     }
   ],
   "pagination": {
@@ -425,14 +459,15 @@ curl -X GET \
 
 ## 📦 Package: Users
 
-Funciones relacionadas con la gestión y consulta de perfiles de usuario.
+Una sola Cloud Function **`user_route`** atiende todas las operaciones de usuarios. El router valida CORS, método HTTP y Bearer token una vez y despacha por path a la lógica correspondiente (read, create, update, read_sections, subscribed_events, delete_section_item). Paths: `/api/users/read`, `/api/users/profile` (equivalente a read), `/api/users/personalData`, `/api/users/healthData`, `/api/users/emergencyContacts`, `/api/users/vehicles`, `/api/users/membership` (GET; DELETE solo para emergencyContacts y vehicles), `/api/users/subscribedEvents` (GET, eventos suscritos paginados), `/api/users/create`, `/api/users/update`.
 
-### 4. `user_profile`
+### 4. `read` (perfil de usuario)
 
-Obtiene el perfil completo de un usuario desde Firestore. Retorna el objeto `UserProfile` completo con todos sus campos, incluyendo eventos asignados y checkpoints filtrados según las relaciones del usuario.
+Obtiene el perfil básico de un usuario desde Firestore (solo datos directos: id, authUserId, avatarUrl, email, username). Servido por **user_route** en GET.
 
 **Tipo**: HTTP Request (GET)  
-**Endpoint**: `https://user-profile-xa26lpxdea-uc.a.run.app`
+**Paths**: `/api/users/read`, `/api/users/profile` (compatibilidad)  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/users/read` o `.../api/users/profile`
 
 **Nota**: Esta función requiere autenticación Bearer token para validar que el usuario esté autenticado. El parámetro `userId` es en realidad el `authUserId` (ID de autenticación de Firebase), no el ID del documento en Firestore. La búsqueda se realiza usando una query `where('authUserId', '==', authUserId)`.
 
@@ -442,50 +477,30 @@ Obtiene el perfil completo de un usuario desde Firestore. Retorna el objeto `Use
 | --------------- | ------ | --------- | ------------------------------------------------------- |
 | `Authorization` | string | **Sí**    | Bearer token de Firebase Auth (solo para autenticación) |
 
-#### Parámetros (Query Parameters)
+#### Parámetros (Query Parameters) — uno de los tres requerido
 
-| Parámetro | Tipo   | Requerido | Descripción                                                                        |
-| --------- | ------ | --------- | ---------------------------------------------------------------------------------- |
-| `userId`  | string | **Sí**    | `authUserId` del usuario (ID de autenticación de Firebase), no el ID del documento |
+| Parámetro    | Tipo   | Requerido | Descripción                                                                        |
+| ------------ | ------ | --------- | ---------------------------------------------------------------------------------- |
+| `userId`     | string | Opcional  | `authUserId` del usuario (ID de autenticación de Firebase)                        |
+| `documentId` | string | Opcional  | ID del documento en la colección `users` (Firestore)                                |
+| `email`      | string | Opcional  | Correo electrónico del usuario (campo `email` en el documento)                     |
 
-#### Campos Retornados (UserProfile)
-
-**Campos del Usuario:**
+#### Campos Retornados (solo datos directos del usuario)
 
 - `id`: ID del documento del usuario en Firestore
-- `authUserId`: ID de autenticación de Firebase
-- `personalData`: Objeto con:
-  - `fullName`: Nombre completo del usuario
-  - `email`: Correo electrónico
-  - `phone`: Teléfono
-- `emergencyContact`: Objeto con:
-  - `fullName`: Nombre completo del contacto de emergencia
-  - `phone`: Teléfono del contacto de emergencia
-- `userData`: Objeto con:
-  - `username`: Nombre de usuario
-- `eventStaffRelations`: Array de relaciones usuario-evento (estructura original)
-- `assignedEvents`: Array de eventos asignados con checkpoints filtrados
-- `createdAt`: Fecha de creación en formato ISO 8601
-- `updatedAt`: Fecha de actualización en formato ISO 8601
-- `avatarUrl`: URL del avatar del usuario (opcional, puede ser null)
-- `isActive`: Estado activo del usuario (boolean)
-- `deletedAt`: Fecha de eliminación en formato ISO 8601 (opcional, puede ser null)
-- `disableAt`: Fecha de deshabilitación en formato ISO 8601 (opcional, puede ser null)
-- `appVersion`: Versión de la app (default: "2.0.0")
-
-**Estructura de `assignedEvents`:**
-Cada evento en `assignedEvents` incluye:
-
-- Todos los campos del evento desde Firestore
-- `checkpoints`: Array de checkpoints filtrados según `checkpointIds` de la relación
+- `authUserId`: ID de autenticación de Firebase (puede ser null)
+- `avatarUrl`: URL del avatar (puede ser null)
+- `email`: Correo electrónico
+- `username`: Nombre de usuario
 
 #### Comandos cURL
 
 **Obtener perfil de usuario (con token Bearer y authUserId):**
 
 ```bash
+# Path recomendado: /api/users/read (también válido: /api/users/profile)
 curl -X GET \
-  'https://user-profile-xa26lpxdea-uc.a.run.app?userId=TU_AUTH_USER_ID' \
+  'https://system-track-monitor.web.app/api/users/read?userId=TU_AUTH_USER_ID' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
 ```
@@ -494,7 +509,7 @@ curl -X GET \
 
 ```bash
 curl -X GET \
-  'https://user-profile-xa26lpxdea-uc.a.run.app?userId=firebase-auth-uid-123' \
+  'https://system-track-monitor.web.app/api/users/profile?userId=firebase-auth-uid-123' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
 ```
@@ -505,7 +520,7 @@ curl -X GET \
 
 ```bash
 curl -v -X GET \
-  'https://user-profile-xa26lpxdea-uc.a.run.app?userId=firebase-auth-uid-123' \
+  'https://system-track-monitor.web.app/api/users/profile?userId=firebase-auth-uid-123' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
 ```
@@ -514,7 +529,7 @@ curl -v -X GET \
 
 ```bash
 curl -X GET \
-  'https://user-profile-xa26lpxdea-uc.a.run.app' \
+  'https://system-track-monitor.web.app/api/users/profile' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
   -w "\nHTTP Status: %{http_code}\n"
@@ -524,7 +539,7 @@ curl -X GET \
 
 ```bash
 curl -X GET \
-  'https://user-profile-xa26lpxdea-uc.a.run.app?userId=firebase-auth-uid-123' \
+  'https://system-track-monitor.web.app/api/users/profile?userId=firebase-auth-uid-123' \
   -H 'Content-Type: application/json' \
   -w "\nHTTP Status: %{http_code}\n"
 ```
@@ -533,7 +548,7 @@ curl -X GET \
 
 ```bash
 curl -X GET \
-  'https://user-profile-xa26lpxdea-uc.a.run.app?userId=auth-uid-que-no-existe' \
+  'https://system-track-monitor.web.app/api/users/profile?userId=auth-uid-que-no-existe' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
   -w "\nHTTP Status: %{http_code}\n"
@@ -545,122 +560,210 @@ curl -X GET \
 
 ```json
 {
-  "id": "user-id",
+  "id": "user-doc-id",
   "authUserId": "firebase-auth-uid",
-  "personalData": {
-    "fullName": "Nombre Completo",
-    "email": "email@example.com",
-    "phone": "+1234567890"
-  },
-  "emergencyContact": {
-    "fullName": "Contacto Emergencia",
-    "phone": "+1234567890"
-  },
-  "userData": {
-    "username": "username"
-  },
-  "eventStaffRelations": [
-    {
-      "eventId": "event-id",
-      "checkpointIds": ["cp1", "cp2"]
-    }
-  ],
-  "assignedEvents": [
-    {
-      "id": "event-id",
-      "name": "Nombre del Evento",
-      "rallySystemId": "rally-id",
-      "status": "EN_CURSO",
-      "checkpoints": [
-        {
-          "id": "cp1",
-          "name": "Inicio",
-          "type": "start",
-          "status": "active"
-        }
-      ]
-    }
-  ],
-  "createdAt": "2025-01-15T10:00:00Z",
-  "updatedAt": "2025-01-15T10:00:00Z",
   "avatarUrl": "https://example.com/avatar.jpg",
-  "isActive": true,
-  "deletedAt": null,
-  "disableAt": null,
-  "appVersion": "2.0.0"
+  "email": "usuario@example.com",
+  "username": "usuario@example.com"
 }
 ```
 
-**400 Bad Request** - Sin cuerpo (solo código HTTP) - cuando falta el parámetro `userId` (authUserId) o está vacío
+**400 Bad Request** - Sin cuerpo (solo código HTTP) - cuando faltan todos los parámetros (userId, documentId, email) o el formato de email es inválido
 
 **401 Unauthorized** - Sin cuerpo (solo código HTTP) - cuando el token Bearer es inválido, expirado o falta el header `Authorization`
 
-**404 Not Found** - Sin cuerpo (solo código HTTP) - cuando no se encuentra ningún usuario con el `authUserId` proporcionado en Firestore
+**404 Not Found** - Sin cuerpo (solo código HTTP) - cuando no se encuentra ningún usuario con los parámetros proporcionados
 
 **500 Internal Server Error** - Sin cuerpo (solo código HTTP) - errores del servidor al consultar Firestore o procesar datos
 
-### Notas Importantes
+### Notas Importantes (read)
 
-- **Autenticación**: El token Bearer solo se usa para validar que el usuario esté autenticado. No se extrae información del token para buscar el usuario.
-- **Parámetro userId**: El parámetro `userId` es en realidad el `authUserId` (ID de autenticación de Firebase), **NO** el ID del documento en Firestore. La búsqueda se realiza usando `where('authUserId', '==', authUserId).limit(1)`.
-- **Búsqueda por authUserId**: La función busca el usuario en la colección `users` usando el campo `authUserId`, no el ID del documento. Esto coincide con cómo se consulta en la app Flutter.
-- **Eventos Asignados**: Los eventos se obtienen desde `eventStaffRelations` del usuario. Solo se incluyen los checkpoints cuyo ID esté en el array `checkpointIds` de cada relación.
-- **Campos Opcionales**: Los campos `avatarUrl`, `deletedAt`, y `disableAt` pueden ser `null` si no están definidos en el documento.
-- **Compatibilidad**: La respuesta JSON es compatible con `UserProfile.fromMap()` o `UserProfile.fromJson()` en Flutter.
+- **Autenticación**: El token Bearer solo se usa para validar que el usuario esté autenticado.
+- **Parámetros**: Se puede buscar por `userId` (authUserId), `documentId` (ID del documento en Firestore) o `email`. Solo se retornan los campos directos: id, authUserId, avatarUrl, email, username.
 
-### 5. `create_user`
+### 4.1 Lectura por sección del perfil (GET /api/users/{section})
 
-Crea un nuevo documento de usuario en la colección `users`. Recibe un cuerpo JSON con estructura **UserDocument** (personalData, emergencyContact, userData, eventStaffRelations, authUserId, createdAt, updatedAt, isActive); **todos los campos son opcionales**. Requiere Bearer token. Firestore genera el ID del documento.
+Permite leer una subcolección del usuario en una petición. Servido por **user_route** en GET. El formato de cada documento es el mismo que en `get_event_competitor_by_email` (excluye `createdAt`/`updatedAt`, incluye `id`).
+
+**Paths:**
+
+- `GET /api/users/personalData` — Objeto que combina **email** (del documento `users/{userId}`) con los campos del primer documento de la subcolección (id, fullName, phone, dateOfBirth, address, etc.). Si el usuario existe pero la subcolección está vacía: 200 con **email** informado y el resto de campos en **null**. 404 solo si el usuario no existe.
+- `GET /api/users/healthData` — Primer documento de la subcolección (objeto único). 404 si no hay datos.
+- `GET /api/users/emergencyContacts` — Lista de documentos (puede ser `[]`).
+- `GET /api/users/vehicles` — Lista de documentos (puede ser `[]`).
+- `GET /api/users/membership` — Lista de documentos (puede ser `[]`).
+
+**Query params:** `userId` (requerido) — ID del documento en la colección `users`.
+
+**Importante:** La URL debe incluir el prefijo `/api`. Ejemplo: `.../api/users/personalData?userId=USER_DOC_ID`.
+
+**Ejemplo cURL (personalData):**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/users/personalData?userId=USER_DOC_ID' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Ejemplo cURL (vehicles):**
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/users/vehicles?userId=USER_DOC_ID' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Respuestas:** 200 con JSON. Para personalData: objeto con `email` (del usuario) más campos de la subcolección; si la subcolección está vacía, 200 con email y el resto en null. Para healthData: objeto único (404 si vacía). Para emergencyContacts, vehicles, membership: array. 400 si falta userId o sección inválida. 404 si el usuario no existe o, en healthData, si la subcolección está vacía. 401 si el token es inválido.
+
+### 4.1.1 `subscribedEvents` (eventos suscritos del usuario)
+
+Obtiene los eventos en los que el usuario está suscrito (documentos en `users/{userId}/membership`), con datos del evento y del primer documento de `event_content`. Respuesta paginada. **Solo la respuesta 200 retorna JSON**; los errores retornan cuerpo vacío (solo código HTTP y CORS).
+
+**Tipo**: HTTP Request (GET)  
+**Path**: `/api/users/subscribedEvents`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/users/subscribedEvents`
+
+**Nota**: Requiere autenticación Bearer token.
+
+#### Parámetros (Query)
+
+| Parámetro | Tipo    | Requerido | Descripción                                      |
+| --------- | ------- | --------- | ------------------------------------------------ |
+| `userId`  | string  | **Sí**    | ID del documento del usuario en la colección `users` |
+| `limit`   | integer | No        | Items por página (default: 50, máx: 100)         |
+| `page`    | integer | No        | Número de página (default: 1)                    |
+
+#### Respuesta 200 (única con JSON)
+
+- `result`: array de objetos, cada uno con: `id` (eventId), `name`, `description`, `status`, `startDateTime`, `endEvent`, `imageUrl` (de `event_content`: `startEvent`, `endEvent`, `photoMain`).
+- `pagination`: `limit`, `page`, `hasMore`, `count`, `lastDocId`.
+
+#### Errores (sin cuerpo JSON)
+
+- **400**: `userId` faltante o vacío.
+- **404**: Usuario no existe o colección `membership` vacía (sin eventos suscritos).
+- **500**: Error interno.
+
+#### Ejemplo cURL
+
+```bash
+curl -X GET \
+  'https://system-track-monitor.web.app/api/users/subscribedEvents?userId=USER_DOC_ID&limit=50&page=1' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Desplegar (incluye user_route con read, create, update, subscribedEvents, lectura por sección y DELETE por sección):**
+
+```bash
+firebase deploy --only functions:user_route
+```
+
+### 4.2 Eliminar contacto de emergencia o vehículo (DELETE /api/users/{section})
+
+Permite eliminar **un** documento de la subcolección `emergencyContacts` o `vehicles` del usuario. Servido por **user_route** en DELETE. Solo están permitidas las secciones `emergencyContacts` y `vehicles`.
+
+**Paths:**
+
+- `DELETE /api/users/emergencyContacts?userId={userId}&id={documentId}` — Elimina el contacto en `users/{userId}/emergencyContacts/{documentId}`.
+- `DELETE /api/users/vehicles?userId={userId}&id={vehicleId}` — Elimina el vehículo en `users/{userId}/vehicles/{vehicleId}`.
+
+**Query params:** `userId` (requerido) — ID del documento del usuario en `users`. `id` (requerido) — ID del documento a eliminar dentro de la subcolección.
+
+**Respuesta exitosa:** 204 No Content (sin cuerpo).
+
+**Errores:** 400 si falta `userId` o `id`; 401 si el token es inválido; 404 si el usuario no existe o el documento no existe en la subcolección; 405 si se usa DELETE en una sección no permitida (p. ej. personalData).
+
+**Ejemplo cURL (eliminar contacto de emergencia):**
+
+```bash
+curl -X DELETE \
+  'https://system-track-monitor.web.app/api/users/emergencyContacts?userId=USER_DOC_ID&id=DOC_ID_CONTACTO' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Ejemplo cURL (eliminar vehículo):**
+
+```bash
+curl -X DELETE \
+  'https://system-track-monitor.web.app/api/users/vehicles?userId=USER_DOC_ID&id=VEHICLE_DOC_ID' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+### 5. `create` (crear usuario)
+
+Crea o activa un usuario en la colección `users` mediante **upsert por email**. Servido por **user_route** en POST.
+
+- Si el email **ya existe** (template creado por `create_competitor_user`): actualiza `authUserId`, `avatarUrl`, `isActive=true`, `updatedAt` y `username` → retorna **200**.
+- Si el email **no existe**: crea un documento nuevo con `isActive=true` → retorna **201**.
+
+El campo `username` toma el email como valor por defecto. Solo se guardan los campos raíz limpios (sin embedding de subcolecciones).
 
 **Tipo**: HTTP Request (POST)  
-**Endpoint**: `https://create-user-....run.app`  
+**Path**: `/api/users/create`  
 **Endpoint con Hosting**: `https://system-track-monitor.web.app/api/users/create`
 
 **Nota**: Esta función requiere autenticación Bearer token.
 
 #### Headers Requeridos
 
-| Header          | Tipo   | Requerido | Descripción                                             |
-| --------------- | ------ | --------- | ------------------------------------------------------- |
-| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth (solo para autenticación) |
-| `Content-Type`  | string | **Sí**    | `application/json`                                      |
+| Header          | Tipo   | Requerido | Descripción                   |
+| --------------- | ------ | --------- | ----------------------------- |
+| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth |
+| `Content-Type`  | string | **Sí**    | `application/json`            |
 
-#### Request Body (JSON, UserDocument, todos los campos opcionales)
+#### Request Body (JSON)
 
-| Campo                 | Tipo           | Descripción                                      |
-| --------------------- | -------------- | ------------------------------------------------ |
-| `personalData`        | object         | `{ fullName, email, phone }` (UserPersonalData)  |
-| `emergencyContact`    | object         | `{ fullName, phone }` (UserEmergencyContact)     |
-| `userData`            | object         | `{ username }` (UserData)                        |
-| `eventStaffRelations` | array          | Relaciones usuario-evento (ver estructura abajo) |
-| `authUserId`          | string         | ID de autenticación Firebase                     |
-| `avatarUrl`           | string \| null | URL del avatar del usuario                       |
-| `createdAt`           | string         | Fecha de creación (ISO 8601)                     |
-| `updatedAt`           | string         | Fecha de última actualización (ISO 8601)         |
-| `isActive`            | boolean        | Indica si el usuario está activo                 |
+| Campo        | Tipo           | Requerido | Descripción                        |
+| ------------ | -------------- | --------- | ---------------------------------- |
+| `email`      | string         | **Sí**    | Email del usuario (formato válido) |
+| `authUserId` | string         | **Sí**    | UID de Firebase Auth               |
+| `avatarUrl`  | string \| null | No        | URL del avatar del usuario         |
 
-**Estructura de `eventStaffRelations` (cada elemento, UserEventStaffRelation):**  
-`eventId`, `role` (organizador | staff), `assignedAt` (ISO 8601), `checkpointIds` (array de strings).
+#### Documento resultante en `users/{userId}`
+
+```json
+{
+  "email":      "usuario@example.com",
+  "username":   "usuario@example.com",
+  "authUserId": "firebase-uid-123",
+  "avatarUrl":  "https://example.com/avatar.jpg",
+  "isActive":   true,
+  "createdAt":  "2026-03-07T12:00:00+00:00",
+  "updatedAt":  "2026-03-07T12:00:00+00:00"
+}
+```
 
 #### Comandos cURL
 
-**Crear usuario (campos opcionales):**
+**Caso CREATE — email nuevo (201):**
 
 ```bash
 curl -X POST \
   'https://system-track-monitor.web.app/api/users/create' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
-  -d '{"personalData":{"fullName":"Usuario1","email":"user1@gmail.com"},"userData":{"username":"user1@gmail.com"}}'
+  -d '{"email":"nuevo@example.com","authUserId":"firebase-uid-abc","avatarUrl":"https://example.com/av.jpg"}'
 ```
 
-**Probar error 400 (body inválido o faltante):**
+**Caso UPDATE — email ya existe, activa template (200):**
 
 ```bash
 curl -X POST \
   'https://system-track-monitor.web.app/api/users/create' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -d '{"email":"piloto_registrado@example.com","authUserId":"firebase-uid-xyz"}'
+```
+
+**Probar error 400 (sin authUserId):**
+
+```bash
+curl -X POST \
+  'https://system-track-monitor.web.app/api/users/create' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -d '{"email":"test@example.com"}' \
   -w "\nHTTP Status: %{http_code}\n"
 ```
 
@@ -670,24 +773,141 @@ curl -X POST \
 curl -X POST \
   'https://system-track-monitor.web.app/api/users/create' \
   -H 'Content-Type: application/json' \
-  -d '{"personalData":{"fullName":"Test"}}' \
+  -d '{"email":"test@example.com","authUserId":"uid1"}' \
   -w "\nHTTP Status: %{http_code}\n"
 ```
 
 #### Respuestas
 
-**201 Created** - JSON con el id del nuevo documento: `{"id": "<document_id>"}`.
+**201 Created** — Usuario nuevo creado: `{"id": "<userId>"}`.
 
-**400 Bad Request** - Sin cuerpo. Body no es un JSON válido o falta.
+**200 OK** — Template existente activado: `{"id": "<userId>"}`.
 
-**401 Unauthorized** - Sin cuerpo. Token Bearer inválido, expirado o faltante.
+**400 Bad Request** — Sin cuerpo. Body nulo/vacío, `email` faltante o inválido, `authUserId` faltante.
 
-**500 Internal Server Error** - Sin cuerpo. Error del servidor al crear en Firestore.
+**401 Unauthorized** — Sin cuerpo. Token Bearer inválido, expirado o faltante.
+
+**500 Internal Server Error** — Sin cuerpo. Error al operar Firestore.
 
 #### Notas
 
-- Solo se guardan las claves permitidas; el resto del body se ignora.
-- Body vacío `{}` es válido: crea un documento sin campos adicionales.
+- El upsert es por `email`: si existe un template previo (creado por `create_competitor_user` con `isActive: false`), se activa en lugar de crear un duplicado.
+- `username` se asigna automáticamente como el email; si el template ya tenía un `username` válido, se conserva.
+- Campos eliminados respecto a la versión anterior: `eventStaffRelations`, `userData`, `personalData` inline, `emergencyContact` inline. Las subcolecciones siguen manejándose por sus propios endpoints.
+
+### 6. `update` (actualizar usuario)
+
+Actualiza datos de un usuario existente **por secciones**. Servido por **user_route** en PUT. Solo las secciones presentes en el body se modifican; las ausentes no se tocan. El campo `competition` se ignora si se envía.
+
+**Tipo**: HTTP Request (PUT)  
+**Path**: `/api/users/update`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/users/update`
+
+**Nota**: Esta función requiere autenticación Bearer token.
+
+#### Query Parameters
+
+| Parámetro | Tipo   | Requerido | Descripción                    |
+| --------- | ------ | --------- | ------------------------------ |
+| `userId`  | string | **Sí**    | ID del usuario a actualizar    |
+
+#### Headers Requeridos
+
+| Header          | Tipo   | Requerido | Descripción                      |
+| --------------- | ------ | --------- | -------------------------------- |
+| `Authorization` | string | **Sí**    | Bearer token de Firebase Auth    |
+| `Content-Type`  | string | **Sí**    | `application/json`               |
+
+#### Request Body (JSON) — al menos una sección requerida
+
+| Campo               | Tipo   | Descripción                                                                                     |
+| ------------------- | ------ | ----------------------------------------------------------------------------------------------- |
+| `email`             | string | Nuevo email (formato válido, único entre usuarios)                                              |
+| `username`          | string | Nuevo username (mínimo 4 caracteres, único entre usuarios)                                      |
+| `personalData`      | object | Campos a actualizar: `fullName`, `phone`, `dateOfBirth`, `address`, `city`, `state`, `country`, `postalCode`. **No incluir `email`** aquí; el email se actualiza con el campo raíz `email`. Si se envía `email` dentro de `personalData`, se ignora. |
+| `healthData`        | object | Campos a actualizar: `bloodType`, `socialSecurityNumber`, `medications`, `medicalConditions`, `insuranceProvider`, `insuranceNumber` |
+| `emergencyContacts` | array  | **Replace completo**. Cada elemento requiere `fullName` y `phone`; `relationship` es opcional   |
+| `vehicleData`       | object | Si incluye `id`: actualiza ese vehículo (o lo crea si no existe). Sin `id`: crea nuevo vehículo |
+
+> `competition` se ignora aunque se envíe.
+
+#### Comportamiento de `vehicleData`
+
+| Caso | Acción |
+|------|--------|
+| `id` presente y el doc existe | Actualiza el vehículo existente |
+| `id` presente pero no existe  | Crea el vehículo con ese id     |
+| Sin `id`                      | Crea nuevo vehículo (id autogenerado) |
+
+#### Comandos cURL
+
+**Actualizar email y username:**
+
+```bash
+curl -X PUT \
+  'https://system-track-monitor.web.app/api/users/update?userId=USER_ID' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -d '{"email":"nuevo@example.com","username":"nuevousuario"}'
+```
+
+**Actualizar solo personalData:**
+
+```bash
+curl -X PUT \
+  'https://system-track-monitor.web.app/api/users/update?userId=USER_ID' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -d '{"personalData":{"fullName":"Juan Pérez","phone":"+521234567890","city":"CDMX"}}'
+```
+
+**Reemplazar emergencyContacts:**
+
+```bash
+curl -X PUT \
+  'https://system-track-monitor.web.app/api/users/update?userId=USER_ID' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -d '{"emergencyContacts":[{"fullName":"Contacto Uno","relationship":"Hermano","phone":"+529876543210"}]}'
+```
+
+**Actualizar todas las secciones:**
+
+```bash
+curl -X PUT \
+  'https://system-track-monitor.web.app/api/users/update?userId=USER_ID' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -d '{
+    "email": "nuevo@example.com",
+    "username": "nuevousuario",
+    "personalData": {"fullName": "Juan Pérez", "phone": "+521234567890"},
+    "healthData": {"bloodType": "A+", "medications": "ninguna"},
+    "emergencyContacts": [{"fullName": "Contacto", "phone": "+529876543210"}],
+    "vehicleData": {"id": "vehicle_id", "branch": "Honda", "model": "CRF", "year": 2022, "color": "Rojo"}
+  }'
+```
+
+#### Respuestas
+
+**200 OK** — `{"id": "<userId>", "updated": ["email", "personalData", ...]}` con la lista de secciones actualizadas.
+
+**400 Bad Request** — Sin cuerpo. `userId` faltante, body inválido, sin secciones reconocidas, o campo con formato incorrecto.
+
+**401 Unauthorized** — Sin cuerpo. Token Bearer inválido o faltante.
+
+**404 Not Found** — Sin cuerpo. Usuario no encontrado.
+
+**409 Conflict** — Sin cuerpo. Email o username ya en uso por otro usuario.
+
+**500 Internal Server Error** — Sin cuerpo. Error interno del servidor.
+
+#### Notas
+
+- Solo las secciones presentes en el body se procesan; las demás no se modifican.
+- `emergencyContacts` realiza un **replace completo**: elimina todos los contactos existentes y crea los nuevos.
+- `personalData` y `healthData` actualizan el primer documento existente en su subcolección; si no existe ninguno, lo crean. En el body, **no enviar `email` dentro de `personalData`**; usar el campo raíz `email` para cambiar el correo.
+- La validación de email/username solo falla si otro usuario diferente ya los usa.
 
 ---
 
@@ -3806,8 +4026,7 @@ Las siguientes funciones requieren autenticación Bearer token:
 - `events` - Lista de eventos con paginación (requiere Bearer token)
 - `event_detail` - Detalle de un evento (requiere Bearer token)
 - `event_categories` - Categorías de un evento (requiere Bearer token)
-- `user_profile` - Obtiene perfil de usuario (requiere token para identificar usuario)
-- `create_user` - Crea usuario en colección users (requiere Bearer token)
+- `user_route` - Router de usuarios: read (perfil), create (crear/activar), update (actualizar por secciones), read_sections (perfil por sección), subscribedEvents (eventos suscritos paginados), delete_section_item (eliminar contacto o vehículo); paths /api/users/read, /api/users/profile, /api/users/personalData, /api/users/healthData, /api/users/emergencyContacts, /api/users/vehicles, /api/users/membership (GET; DELETE solo emergencyContacts y vehicles), /api/users/subscribedEvents (GET), /api/users/create, /api/users/update (requiere Bearer token)
 - `get_vehicles` - Obtiene vehículos de un usuario (requiere Bearer token)
 - `update_vehicle` - Actualiza vehículo (requiere Bearer token)
 - `delete_vehicle` - Elimina vehículo (requiere Bearer token)
@@ -3916,11 +4135,8 @@ firebase deploy --only functions:event_detail
 # Desplegar solo event_categories
 firebase deploy --only functions:event_categories
 
-# Desplegar solo user_profile
-firebase deploy --only functions:user_profile
-
-# Desplegar solo create_user
-firebase deploy --only functions:create_user
+# Desplegar user_route (read, create, update, subscribedEvents, lectura y DELETE por sección: /api/users/read, /api/users/profile, /api/users/{section}, /api/users/subscribedEvents, /api/users/create, /api/users/update)
+firebase deploy --only functions:user_route
 
 # Desplegar solo get_vehicles
 firebase deploy --only functions:get_vehicles
@@ -4087,8 +4303,13 @@ Comprobar configuración: `firebase login:list` (cuenta); `functions/venv/bin/py
    http://localhost:5050/api/events
    http://localhost:5050/api/events/detail
    http://localhost:5050/api/event/event-categories/EVENT_ID
+   http://localhost:5050/api/users/read
    http://localhost:5050/api/users/profile
+   http://localhost:5050/api/users/personalData
+   http://localhost:5050/api/users/vehicles
+   http://localhost:5050/api/users/subscribedEvents
    http://localhost:5050/api/users/create
+   http://localhost:5050/api/users/update
    http://localhost:5050/api/vehicles?userId=UUID
    http://localhost:5050/api/tracking/track-event-checkpoint
    http://localhost:5050/api/tracking/track-competitors
@@ -4105,7 +4326,7 @@ Comprobar configuración: `firebase login:list` (cuenta); `functions/venv/bin/py
    http://localhost:5001/system-track-monitor/us-central1/track_competitors
    http://localhost:5001/system-track-monitor/us-central1/track_competitors_off
    http://localhost:5001/system-track-monitor/us-central1/track_competitor_position
-   http://localhost:5001/system-track-monitor/us-central1/create_user
+   http://localhost:5001/system-track-monitor/us-central1/create
    http://localhost:5001/system-track-monitor/us-central1/get_vehicles?userId=UUID
    ```
    (Para POST a competitor-position usar el mismo host con body JSON.)
@@ -4119,11 +4340,11 @@ Si solo ejecutas `firebase emulators:start --only functions` (sin hosting), solo
 
 1. **Paginación**: Para `events`, se recomienda usar `lastDocId` en lugar de `page` para mejor rendimiento con grandes volúmenes de datos.
 
-2. **Códigos HTTP**: Las funciones de eventos (`events`, `event_detail`, `event_categories`), usuarios (`user_profile`) y checkpoints (`day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `days_of_race`) retornan códigos HTTP estándar. Las funciones `update_competitor_status` y `change_competitor_status` retornan objetos JSON con `success`, `message` y `error`. Las funciones de tracking retornan objetos JSON con `success` y `message`.
+2. **Códigos HTTP**: Las funciones de eventos (`events`, `event_detail`, `event_categories`), usuarios (`read`, `create`, `update`) y checkpoints (`day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `days_of_race`) retornan códigos HTTP estándar. Las funciones `update_competitor_status` y `change_competitor_status` retornan objetos JSON con `success`, `message` y `error`. Las funciones de tracking retornan objetos JSON con `success` y `message`.
 
 3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, excepto `competitor_tracking`, `update_competitor_status` y `change_competitor_status` que retornan JSON con `success: false` en caso de error. Las funciones de tracking retornan objetos JSON con información del error.
 
-4. **Autenticación**: Las funciones `events`, `event_detail`, `event_categories`, `user_profile`, `create_user`, `get_vehicles`, `update_vehicle`, `delete_vehicle`, `search_vehicle`, `catalog_vehicle`, `catalog_year`, `catalog_color`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
+4. **Autenticación**: Las funciones `events`, `event_detail`, `event_categories`, `read`, `create`, `update`, `get_vehicles`, `update_vehicle`, `delete_vehicle`, `search_vehicle`, `catalog_vehicle`, `catalog_year`, `catalog_color`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
 
 5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
 

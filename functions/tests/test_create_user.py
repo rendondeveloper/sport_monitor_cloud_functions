@@ -1,5 +1,6 @@
 """
-Pruebas unitarias para create_user (crear usuarios en colección users).
+Pruebas unitarias para create.handle (upsert por email en users).
+La validación CORS y token la hace user_route; aquí solo se prueba la lógica de negocio.
 """
 
 import json
@@ -12,11 +13,6 @@ sys.path.insert(0, ".")
 
 
 def _make_request(method: str = "POST", body: dict | None = None):
-    """Construye un mock de Request."""
-    if body is None:
-        body = {
-            "personalData": {"fullName": "Usuario1", "email": "user1@gmail.com"},
-        }
     req = MagicMock()
     req.method = method
     req.args.get.side_effect = lambda k, default=None: None
@@ -24,140 +20,162 @@ def _make_request(method: str = "POST", body: dict | None = None):
     return req
 
 
-@patch("users.user_create.validate_request")
-@patch("users.user_create.verify_bearer_token")
-@patch("users.user_create.firestore")
-def test_create_user_happy_path(mock_firestore, mock_verify, mock_validate):
-    """Happy path: body válido → 201, documento creado con id en respuesta."""
-    mock_validate.return_value = None
-    mock_verify.return_value = True
-    mock_client = MagicMock()
-    mock_firestore.client.return_value = mock_client
-    mock_collection = MagicMock()
-    mock_doc_ref = MagicMock()
-    mock_doc_ref.id = "newDocId123"
-    mock_collection.document.return_value = mock_doc_ref
-    mock_client.collection.return_value = mock_collection
+def _valid_body(
+    email: str = "test@example.com",
+    auth_user_id: str = "firebase_uid_123",
+    avatar_url: str | None = "https://example.com/avatar.jpg",
+) -> dict:
+    return {"email": email, "authUserId": auth_user_id, "avatarUrl": avatar_url}
 
-    from users.user_create import create_user
 
-    req = _make_request()
-    response = create_user(req)
+_PATCH_HELPER = "users.create.FirestoreHelper"
+
+
+@patch(_PATCH_HELPER)
+def test_create_user_happy_path_new_user(mock_helper_cls):
+    mock_helper_cls.return_value.query_documents.return_value = []
+    mock_helper_cls.return_value.create_document.return_value = "newUserId1"
+
+    from users.create import handle as create_handle
+    response = create_handle(_make_request(body=_valid_body()))
 
     assert response.status_code == 201
     data = json.loads(response.get_data(as_text=True))
-    assert data == {"id": "newDocId123"}
-    mock_doc_ref.set.assert_called_once()
-    call_args = mock_doc_ref.set.call_args[0][0]
-    assert "personalData" in call_args
-    assert call_args["personalData"]["fullName"] == "Usuario1"
-    assert call_args["personalData"]["email"] == "user1@gmail.com"
+    assert data == {"id": "newUserId1"}
+    mock_helper_cls.return_value.create_document.assert_called_once()
+    created_doc = mock_helper_cls.return_value.create_document.call_args[0][1]
+    assert created_doc["email"] == "test@example.com"
+    assert created_doc["username"] == "test@example.com"
+    assert created_doc["authUserId"] == "firebase_uid_123"
+    assert created_doc["isActive"] is True
+    assert "createdAt" in created_doc
+    assert "updatedAt" in created_doc
 
 
-@patch("users.user_create.validate_request")
-def test_create_user_invalid_body_null(mock_validate):
-    """Body null (get_json retorna None) → 400."""
-    mock_validate.return_value = None
-    from users.user_create import create_user
+@patch(_PATCH_HELPER)
+def test_create_user_happy_path_existing_user(mock_helper_cls):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    helper.query_documents.return_value = [
+        ("existingUserId", {"email": "test@example.com", "username": "", "isActive": False})
+    ]
 
+    from users.create import handle as create_handle
+    response = create_handle(_make_request(body=_valid_body()))
+
+    assert response.status_code == 200
+    data = json.loads(response.get_data(as_text=True))
+    assert data == {"id": "existingUserId"}
+    helper.update_document.assert_called_once()
+    update_fields = helper.update_document.call_args[0][2]
+    assert update_fields["authUserId"] == "firebase_uid_123"
+    assert update_fields["isActive"] is True
+    helper.create_document.assert_not_called()
+
+
+@patch(_PATCH_HELPER)
+def test_update_preserves_existing_username(mock_helper_cls):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    helper.query_documents.return_value = [
+        ("uid99", {"email": "test@example.com", "username": "piloto_real", "isActive": False})
+    ]
+
+    from users.create import handle as create_handle
+    response = create_handle(_make_request(body=_valid_body()))
+
+    assert response.status_code == 200
+    update_fields = helper.update_document.call_args[0][2]
+    assert update_fields["username"] == "piloto_real"
+
+
+@patch(_PATCH_HELPER)
+def test_update_assigns_email_as_username_when_empty(mock_helper_cls):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    helper.query_documents.return_value = [
+        ("uid88", {"email": "test@example.com", "username": None, "isActive": False})
+    ]
+
+    from users.create import handle as create_handle
+    response = create_handle(_make_request(body=_valid_body()))
+
+    assert response.status_code == 200
+    update_fields = helper.update_document.call_args[0][2]
+    assert update_fields["username"] == "test@example.com"
+
+
+def test_create_user_body_null():
+    from users.create import handle as create_handle
     req = _make_request(body=None)
     req.get_json.side_effect = lambda silent=True: None
-    with patch("users.user_create.verify_bearer_token", return_value=True):
-        response = create_user(req)
+    response = create_handle(req)
     assert response.status_code == 400
 
 
-@patch("users.user_create.validate_request")
-@patch("users.user_create.verify_bearer_token")
-@patch("users.user_create.firestore")
-def test_create_user_body_empty_allowed(mock_firestore, mock_verify, mock_validate):
-    """Body {} (sin campos permitidos) → 201, documento creado vacío."""
-    mock_validate.return_value = None
-    mock_verify.return_value = True
-    mock_client = MagicMock()
-    mock_firestore.client.return_value = mock_client
-    mock_collection = MagicMock()
-    mock_doc_ref = MagicMock()
-    mock_doc_ref.id = "emptyDocId"
-    mock_collection.document.return_value = mock_doc_ref
-    mock_client.collection.return_value = mock_collection
-
-    from users.user_create import create_user
-
-    req = _make_request(body={})
-    response = create_user(req)
-
-    assert response.status_code == 201
-    data = json.loads(response.get_data(as_text=True))
-    assert data == {"id": "emptyDocId"}
-    mock_doc_ref.set.assert_called_once_with({})
+def test_create_user_body_empty():
+    from users.create import handle as create_handle
+    response = create_handle(_make_request(body={}))
+    assert response.status_code == 400
 
 
-@patch("users.user_create.validate_request")
-def test_create_user_unauthorized(mock_validate):
-    """Token inválido → 401."""
-    mock_validate.return_value = None
-    from users.user_create import create_user
-
-    req = _make_request()
-    with patch("users.user_create.verify_bearer_token", return_value=False):
-        response = create_user(req)
-    assert response.status_code == 401
+def test_create_user_missing_email():
+    from users.create import handle as create_handle
+    response = create_handle(_make_request(body={"authUserId": "uid1"}))
+    assert response.status_code == 400
 
 
-@patch("users.user_create.validate_request")
-@patch("users.user_create.verify_bearer_token")
-@patch("users.user_create.firestore")
-def test_create_user_only_allowed_keys(mock_firestore, mock_verify, mock_validate):
-    """Solo se guardan claves permitidas; claves extra se ignoran."""
-    mock_validate.return_value = None
-    mock_verify.return_value = True
-    mock_client = MagicMock()
-    mock_firestore.client.return_value = mock_client
-    mock_collection = MagicMock()
-    mock_doc_ref = MagicMock()
-    mock_doc_ref.id = "doc1"
-    mock_collection.document.return_value = mock_doc_ref
-    mock_client.collection.return_value = mock_collection
-
-    from users.user_create import create_user
-
-    req = _make_request(body={"authUserId": "uid1", "unknownField": "ignored"})
-    response = create_user(req)
-
-    assert response.status_code == 201
-    mock_doc_ref.set.assert_called_once()
-    call_args = mock_doc_ref.set.call_args[0][0]
-    assert "authUserId" in call_args
-    assert call_args["authUserId"] == "uid1"
-    assert "unknownField" not in call_args
+def test_create_user_invalid_email_format():
+    from users.create import handle as create_handle
+    response = create_handle(_make_request(body={"email": "not-an-email", "authUserId": "uid1"}))
+    assert response.status_code == 400
 
 
-@patch("users.user_create.validate_request")
-@patch("users.user_create.verify_bearer_token")
-@patch("users.user_create.firestore")
-def test_create_user_multiple_calls(mock_firestore, mock_verify, mock_validate):
-    """Múltiples llamadas crean documentos distintos."""
-    mock_validate.return_value = None
-    mock_verify.return_value = True
-    mock_client = MagicMock()
-    mock_firestore.client.return_value = mock_client
-    mock_collection = MagicMock()
-    ref1, ref2 = MagicMock(), MagicMock()
-    ref1.id, ref2.id = "id1", "id2"
-    mock_collection.document.side_effect = [ref1, ref2]
-    mock_client.collection.return_value = mock_collection
+def test_create_user_missing_auth_user_id():
+    from users.create import handle as create_handle
+    response = create_handle(_make_request(body={"email": "test@example.com"}))
+    assert response.status_code == 400
 
-    from users.user_create import create_user
 
-    req1 = _make_request(body={"personalData": {"fullName": "A"}})
-    req2 = _make_request(body={"avatarUrl": "https://example.com/av.jpg"})
+@patch(_PATCH_HELPER)
+def test_create_user_firestore_error(mock_helper_cls):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    helper.query_documents.return_value = []
+    helper.create_document.side_effect = RuntimeError("Firestore down")
 
-    r1 = create_user(req1)
-    r2 = create_user(req2)
+    from users.create import handle as create_handle
+    response = create_handle(_make_request(body=_valid_body()))
+    assert response.status_code == 500
 
+
+@patch(_PATCH_HELPER)
+def test_create_user_multiple_calls(mock_helper_cls):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    helper.query_documents.return_value = []
+    helper.create_document.side_effect = ["idA", "idB"]
+
+    from users.create import handle as create_handle
+
+    r1 = create_handle(_make_request(body=_valid_body(email="a@example.com", auth_user_id="uid_a")))
+    r2 = create_handle(_make_request(body=_valid_body(email="b@example.com", auth_user_id="uid_b")))
     assert r1.status_code == 201
     assert r2.status_code == 201
-    assert json.loads(r1.get_data(as_text=True))["id"] == "id1"
-    assert json.loads(r2.get_data(as_text=True))["id"] == "id2"
-    assert mock_collection.document.call_count == 2
+    assert json.loads(r1.get_data(as_text=True))["id"] == "idA"
+    assert json.loads(r2.get_data(as_text=True))["id"] == "idB"
+    assert helper.create_document.call_count == 2
+
+
+@patch(_PATCH_HELPER)
+def test_create_user_avatar_url_none(mock_helper_cls):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    helper.query_documents.return_value = []
+    helper.create_document.return_value = "uid_noavatar"
+
+    from users.create import handle as create_handle
+    response = create_handle(_make_request(body=_valid_body(avatar_url=None)))
+    assert response.status_code == 201
+    created_doc = helper.create_document.call_args[0][1]
+    assert created_doc["avatarUrl"] is None

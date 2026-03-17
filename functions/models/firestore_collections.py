@@ -36,6 +36,10 @@ class FirestoreCollections:
     EVENT_ROUTES = "routes"
     EVENT_CONTENT = "event_content"
 
+    # Subcolecciones de participantes dentro del evento
+    PARTICIPANT_EMERGENCY_CONTACTS = "emergencyContacts"
+    PARTICIPANT_VEHICLE = "vehicle"
+
     # Colecciones de tracking
     EVENT_TRACKING_COMPETITOR_TRACKING = "competitor_tracking"
     EVENT_TRACKING_COMPETITOR = "competitors"
