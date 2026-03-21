@@ -4,6 +4,7 @@ import logging
 from firebase_admin import firestore
 from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
+from utils.firestore_helper import FirestoreHelper
 from utils.helper_http_verb import validate_request
 
 
@@ -14,6 +15,7 @@ def event_detail(req: https_fn.Request) -> https_fn.Response:
 
     Query Parameters:
     - eventId: ID del evento (requerido)
+    - userId: ID del usuario autenticado (opcional) — determina isEnrolled
 
     Returns:
     - 200: Objeto EventInfo completo en formato JSON (mapeando TODOS los campos)
@@ -29,8 +31,9 @@ def event_detail(req: https_fn.Request) -> https_fn.Response:
         return validation_response
 
     try:
-        # Obtener parámetro eventId de query string
+        # Obtener parámetros de query string
         event_id = req.args.get("eventId")
+        user_id = req.args.get("userId", "").strip() or None
 
         # Validar que eventId esté presente
         if not event_id or event_id.strip() == "":
@@ -43,6 +46,13 @@ def event_detail(req: https_fn.Request) -> https_fn.Response:
 
         # Inicializar Firestore
         db = firestore.client()
+        helper = FirestoreHelper()
+
+        # Validar que el userId existe en Firestore; si no, ignorar inscripción
+        if user_id:
+            user_doc = helper.get_document(FirestoreCollections.USERS, user_id)
+            if user_doc is None:
+                user_id = None
 
         # Construir ruta: events/{eventId}/event_content
         # La subcolección event_content puede tener múltiples documentos
@@ -110,6 +120,18 @@ def event_detail(req: https_fn.Request) -> https_fn.Response:
         for key, value in event_data.items():
             if key not in event_info:
                 event_info[key] = value
+
+        # Verificar inscripción del usuario en el evento
+        if user_id:
+            participant_ref = (
+                db.collection(FirestoreCollections.EVENTS)
+                .document(event_id)
+                .collection(FirestoreCollections.EVENT_PARTICIPANTS)
+                .document(user_id)
+            )
+            event_info["isEnrolled"] = participant_ref.get().exists
+        else:
+            event_info["isEnrolled"] = None
 
         # Retornar respuesta HTTP 200 con el objeto EventInfo completo
         return https_fn.Response(
