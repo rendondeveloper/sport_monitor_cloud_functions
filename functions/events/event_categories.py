@@ -7,7 +7,6 @@ from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
 from utils.helper_http import verify_bearer_token
 from utils.helper_http_verb import validate_request
-from utils.helpers import convert_firestore_value
 
 
 @https_fn.on_request()
@@ -116,12 +115,7 @@ def event_categories(req: https_fn.Request) -> https_fn.Response:
                 category = {
                     "id": category_doc.id,
                     "name": category_data.get("name", ""),
-                    "createdAt": convert_firestore_value(
-                        category_data.get("createdAt")
-                    ),
-                    "updatedAt": convert_firestore_value(
-                        category_data.get("updatedAt")
-                    ),
+                    "description": category_data.get("description"),
                 }
 
                 categories_list.append(category)

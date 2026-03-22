@@ -50,7 +50,7 @@ _REQUIRED_TOP_FIELDS = [
     "email",
 ]
 
-_REQUIRED_COMPETITION_FIELDS = ["eventId", "number", "category"]
+_REQUIRED_COMPETITION_FIELDS = ["eventId", "category"]
 
 # Nombres de subcolecciones (fallback si no existen en FirestoreCollections)
 _USER_PERSONAL_DATA = getattr(
@@ -73,7 +73,8 @@ def _validate_request_data(request_data: Dict[str, Any]) -> Optional[str]:
     """
     Valida el request body. Requerido: email.
     Si competition no existe, se crea con valores por defecto.
-    Campos de competition: eventId, number, category (requeridos si competition está presente).
+    Campos de competition: eventId, category (requeridos); number (opcional).
+    source: campo opcional en la raíz del request (ej: "web", "mobile-ios", "mobile-android").
 
     Returns:
         None si todo es válido, string con descripción del error si falla.
@@ -700,9 +701,10 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
     Request Body (JSON):
     Requeridos:
     - email: string (raíz) - formato válido
-    - competition: object - eventId, number, category (requeridos); team (opcional).
+    - competition: object - eventId, category (requeridos); number (opcional), team (opcional).
       Si no se envía, se crea con valores por defecto.
     Opcionales:
+    - source: string - origen de la solicitud (ej: "web", "mobile-ios", "mobile-android")
     - personalData: object - fullName, phone, dateOfBirth, address, city, state, country, postalCode
     - healthData: object - bloodType, socialSecurityNumber, medications, medicalConditions, insuranceProvider, insuranceNumber
     - emergencyContacts: array - cada elemento: fullName, phone, relationship (opcional)
