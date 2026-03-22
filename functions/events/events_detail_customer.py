@@ -142,6 +142,29 @@ def event_detail(req: https_fn.Request) -> https_fn.Response:
         participants_docs = participants_ref.select([]).get()
         event_info["registeredCount"] = len(participants_docs)
 
+        # Buscar rutas visibles para pilotos (puede haber múltiples)
+        visible_routes = (
+            db.collection(FirestoreCollections.EVENTS)
+            .document(event_id)
+            .collection(FirestoreCollections.EVENT_ROUTES)
+            .where("visibleForPilots", "==", True)
+            .get()
+        )
+        if visible_routes:
+            routes_list = []
+            for r in visible_routes:
+                rd = r.to_dict() or {}
+                ts = rd.get("updatedAt")
+                routes_list.append({
+                    "name": rd.get("name", ""),
+                    "routeUrl": rd.get("routeUrl"),
+                    "colorTrack": rd.get("colorTrack"),
+                    "updatedAt": ts.isoformat() if hasattr(ts, "isoformat") else None,
+                    "trackPoints": rd.get("trackPoints", []),
+                })
+            event_info["routes"] = routes_list
+        # Si no hay rutas visibles, NO se añade "routes" al response
+
         # Retornar respuesta HTTP 200 con el objeto EventInfo completo
         return https_fn.Response(
             json.dumps(event_info, ensure_ascii=False),
