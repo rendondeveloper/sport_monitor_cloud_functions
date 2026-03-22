@@ -133,6 +133,15 @@ def event_detail(req: https_fn.Request) -> https_fn.Response:
         else:
             event_info["isEnrolled"] = None
 
+        # Contar participantes registrados en el evento
+        participants_ref = (
+            db.collection(FirestoreCollections.EVENTS)
+            .document(event_id)
+            .collection(FirestoreCollections.EVENT_PARTICIPANTS)
+        )
+        participants_docs = participants_ref.select([]).get()
+        event_info["registeredCount"] = len(participants_docs)
+
         # Retornar respuesta HTTP 200 con el objeto EventInfo completo
         return https_fn.Response(
             json.dumps(event_info, ensure_ascii=False),
