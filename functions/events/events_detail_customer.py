@@ -6,6 +6,75 @@ from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
 from utils.firestore_helper import FirestoreHelper
 from utils.helper_http_verb import validate_request
+from utils.helpers import convert_firestore_value
+
+
+def _build_name_type(checkpoint_type_data: dict) -> str:
+    """
+    Construye nameType con:
+    - Si abbreviation existe y es string no vacío: "{abbreviation} - {name}"
+    - Si abbreviation es null: "{name}"
+    """
+    if not isinstance(checkpoint_type_data, dict):
+        return ""
+
+    abbreviation = checkpoint_type_data.get("abbreviation")
+    name = checkpoint_type_data.get("name") or ""
+
+    if isinstance(abbreviation, str) and abbreviation.strip():
+        return f"{abbreviation.strip()} - {name}"
+    return name
+
+
+def _get_checkpoint_name_type(
+    db: firestore.Client,
+    checkpoint_type_id: str,
+    cache: dict,
+) -> str:
+    """Resuelve el nameType por checkpointTypeId (con cache en memoria)."""
+    if not checkpoint_type_id:
+        return ""
+
+    if checkpoint_type_id in cache:
+        return cache[checkpoint_type_id]
+
+    checkpoint_type_doc = (
+        db.collection(FirestoreCollections.CATALOGS)
+        .document(FirestoreCollections.CATALOGS_DEFAULT_DOC_ID)
+        .collection(FirestoreCollections.CATALOGS_CHECKPOINT_TYPES)
+        .document(checkpoint_type_id)
+        .get()
+    )
+
+    if not checkpoint_type_doc.exists:
+        cache[checkpoint_type_id] = checkpoint_type_id
+        return cache[checkpoint_type_id]
+
+    data = checkpoint_type_doc.to_dict() or {}
+    cache[checkpoint_type_id] = _build_name_type(data)
+    return cache[checkpoint_type_id]
+
+
+def _map_checkpoint(
+    checkpoint_doc,
+    db: firestore.Client,
+    checkpoint_type_cache: dict,
+) -> dict:
+    checkpoint_data = checkpoint_doc.to_dict() or {}
+    checkpoint_type_id = checkpoint_data.get("checkpointTypeId")
+
+    return {
+        "nameType": _get_checkpoint_name_type(
+            db=db,
+            checkpoint_type_id=checkpoint_type_id,
+            cache=checkpoint_type_cache,
+        ),
+        "checkpointTypeId": checkpoint_type_id,
+        "coordinates": convert_firestore_value(checkpoint_data.get("coordinates")),
+        "iconCustom": convert_firestore_value(checkpoint_data.get("iconCustom")),
+        "name": checkpoint_data.get("name"),
+        "order": checkpoint_data.get("order", 0),
+    }
 
 
 @https_fn.on_request()
@@ -151,17 +220,50 @@ def event_detail(req: https_fn.Request) -> https_fn.Response:
             .get()
         )
         if visible_routes:
+            checkpoint_type_cache: dict[str, str] = {}
             routes_list = []
             for r in visible_routes:
                 rd = r.to_dict() or {}
                 ts = rd.get("updatedAt")
-                routes_list.append({
-                    "name": rd.get("name", ""),
-                    "routeUrl": rd.get("routeUrl"),
-                    "colorTrack": rd.get("colorTrack"),
-                    "updatedAt": ts.isoformat() if hasattr(ts, "isoformat") else None,
-                    "trackPoints": rd.get("trackPoints", []),
-                })
+                route_id = getattr(r, "id", None)
+
+                checkpoints_docs = []
+                if route_id:
+                    checkpoints_ref = (
+                        db.collection(FirestoreCollections.EVENTS)
+                        .document(event_id)
+                        .collection(FirestoreCollections.EVENT_ROUTES)
+                        .document(route_id)
+                        .collection(FirestoreCollections.EVENT_CHECKPOINTS)
+                    )
+                    checkpoints_docs = checkpoints_ref.get() or []
+
+                # Asegura orden estable por `order` sin depender del orden de Firestore.
+                def _cp_order(cp_doc):
+                    cp_data = cp_doc.to_dict() or {}
+                    return cp_data.get("order", 0) or 0
+
+                checkpoints_docs = sorted(checkpoints_docs, key=_cp_order)
+
+                checkpoints_list = [
+                    _map_checkpoint(
+                        checkpoint_doc=cp_doc,
+                        db=db,
+                        checkpoint_type_cache=checkpoint_type_cache,
+                    )
+                    for cp_doc in checkpoints_docs
+                ]
+
+                routes_list.append(
+                    {
+                        "name": rd.get("name", ""),
+                        "routeUrl": rd.get("routeUrl"),
+                        "colorTrack": rd.get("colorTrack"),
+                        "updatedAt": ts.isoformat() if hasattr(ts, "isoformat") else None,
+                        "checkpoints": checkpoints_list,
+                    }
+                )
+
             event_info["routes"] = routes_list
         # Si no hay rutas visibles, NO se añade "routes" al response
 

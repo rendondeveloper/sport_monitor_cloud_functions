@@ -232,6 +232,8 @@ Obtiene el detalle completo de un evento específico desde Firestore. Retorna el
 #### Campos Retornados (EventInfo)
 
 - `name`: Nombre del evento
+- `isEnrolled`: `true | false | null` (null si no se envía `userId`)
+- `registeredCount`: número de participantes registrados
 - `descriptionShort`: Descripción corta
 - `description`: Descripción completa
 - `photoMain`: URL de la imagen principal
@@ -241,6 +243,15 @@ Obtiene el detalle completo de un evento específico desde Firestore. Retorna el
 - `address`: Dirección del evento
 - `historia`: Historia del evento
 - `website`: Sitio web del evento
+- `routes`: array de rutas visibles para pilotos (si existe)
+  - `name`, `routeUrl`, `colorTrack`, `updatedAt`
+  - `checkpoints`: array de checkpoints de la ruta
+    - `nameType`: si `abbreviation` existe y es string no vacío → `{abbreviation} - {name}`; si `abbreviation` es `null` → `{name}`
+    - `checkpointTypeId`: id del documento en `catalogs/default/checkpoint_types`
+    - `coordinates`: objeto con coordenadas del checkpoint
+    - `iconCustom`: ícono personalizado
+    - `name`: nombre del checkpoint
+    - `order`: orden del checkpoint
 - Y cualquier otro campo presente en el documento
 
 #### Comandos cURL
@@ -287,7 +298,25 @@ curl -v -X GET \
   "endEvent": "2025-01-16T18:00:00Z",
   "address": "Dirección del evento",
   "historia": "Historia del evento",
-  "website": "https://example.com"
+  "website": "https://example.com",
+  "routes": [
+    {
+      "name": "Ruta 1",
+      "routeUrl": "https://example.com/route",
+      "colorTrack": 123,
+      "updatedAt": "2026-03-25T00:00:00",
+      "checkpoints": [
+        {
+          "nameType": "AB - Type 1",
+          "checkpointTypeId": "type1",
+          "coordinates": { "latitude": 19.0, "longitude": 18.0 },
+          "iconCustom": "icon1",
+          "name": "Checkpoint A",
+          "order": 1
+        }
+      ]
+    }
+  ]
 }
 ```
 
