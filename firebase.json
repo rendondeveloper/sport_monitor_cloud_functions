@@ -179,22 +179,27 @@
       },
       {
         "source": "/api/catalogs/vehicle",
-        "function": "catalog_vehicle",
+        "function": "catalog_route",
         "region": "us-east4"
       },
       {
         "source": "/api/catalogs/year",
-        "function": "catalog_year",
+        "function": "catalog_route",
         "region": "us-east4"
       },
       {
         "source": "/api/catalogs/color",
-        "function": "catalog_color",
+        "function": "catalog_route",
         "region": "us-east4"
       },
       {
         "source": "/api/catalogs/relationship-type",
-        "function": "catalog_relationship_type",
+        "function": "catalog_route",
+        "region": "us-east4"
+      },
+      {
+        "source": "/api/catalogs/checkpoint-type",
+        "function": "catalog_route",
         "region": "us-east4"
       },
       {

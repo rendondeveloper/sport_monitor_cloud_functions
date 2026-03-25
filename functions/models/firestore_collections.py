@@ -18,6 +18,7 @@ class FirestoreCollections:
     CATALOGS_YEARS = "years"
     CATALOGS_COLORS = "colors"
     CATALOGS_RELATIONSHIP_TYPES = "relationship_types"
+    CATALOGS_CHECKPOINT_TYPES = "checkpoint_types"
 
     # Colecciones de usuarios relacionados (subcolecciones bajo users)
     USER_VEHICLES = "vehicles"

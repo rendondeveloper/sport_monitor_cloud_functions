@@ -57,8 +57,8 @@ from users import user_route
 # Importar funciones de vehicles
 from vehicles import delete_vehicle, get_vehicles, search_vehicle, update_vehicle
 
-# Importar funciones de catalogs
-from catalogs import catalog_vehicle, catalog_year, catalog_color, catalog_relationship_type
+# Importar funciones de catalogs (una sola función: catalog_route; despacha por path)
+from catalogs import catalog_route
 
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
@@ -96,10 +96,7 @@ initialize_app(options=_options if _options else None)
 # - get_vehicles: vehicles/get_vehicles.py
 # - update_vehicle: vehicles/update_vehicle.py
 # - delete_vehicle: vehicles/delete_vehicle.py
-# - catalog_vehicle: catalogs/catalog_vehicle.py
-# - catalog_year: catalogs/catalog_year.py
-# - catalog_color: catalogs/catalog_color.py
-# - catalog_relationship_type: catalogs/relationship_type/__init__.py
+# - catalog_route: catalogs/catalog_route.py (router: /api/catalogs/vehicle, year, color, relationship-type)
 # - create_competitor: competitors/create_competitor.py
 # - create_competitor_user: competitors/create_competitor_user.py
 # - delete_competitor_user: competitors/delete_competitor_user.py

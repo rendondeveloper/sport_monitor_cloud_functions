@@ -1,7 +1,4 @@
-# Package: Catalogs - Catálogos (vehicles, years, colors, relationship_types) SPRTMNTRPP-82
-from catalogs.color import catalog_color
-from catalogs.relationship_type import catalog_relationship_type
-from catalogs.vehicle import catalog_vehicle
-from catalogs.year import catalog_year
+# Package: Catalogs - una sola función desplegada: catalog_route (router por path)
+from .catalog_route import catalog_route
 
-__all__ = ["catalog_color", "catalog_relationship_type", "catalog_vehicle", "catalog_year"]
+__all__ = ["catalog_route"]
