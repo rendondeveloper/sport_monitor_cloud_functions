@@ -1,185 +1,248 @@
 """
 Competitor Route - SPRTMNTRPP-74
 
-Obtiene información del competidor y su ruta para un evento y día de carrera.
-API pública: no requiere Bearer token.
+Lista por usuario autenticado los eventos en los que tiene membership, con rutas
+visibles para pilotos que coincidan con su categoría y los checkpoints de cada ruta.
 """
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from firebase_admin import firestore
 from firebase_functions import https_fn
 from google.cloud.firestore_v1.base_query import FieldFilter
 from models.firestore_collections import FirestoreCollections
+from utils.helper_http import verify_bearer_token
 from utils.helper_http_verb import validate_request
-from utils.helpers import format_utc_to_local_datetime
-
-# Prefijo para filtrar logs: grep "[competitor_route]" o grep "competitor_route"
-LOG = logging.getLogger(__name__)
-LOG_PREFIX = "[competitor_route]"
+from utils.helpers import convert_firestore_value
 
 
 def _get_registration_category_and_pilot_number(
     participant_data: Dict[str, Any],
 ) -> Tuple[str, Any]:
     """
-    Obtiene registrationCategory y pilotNumber del participante.
-    Soporta ambos formatos: campos en la raíz del documento o dentro de competitionCategory.
-    Returns:
-        (registration_category: str, pilot_number: Any)
+    Obtiene registrationCategory (id del doc en event_categories) y pilotNumber.
+
+    La fuente principal es el mapa anidado del participante en Firestore::
+
+        competitionCategory: {
+            pilotNumber: null | "" | string,
+            registrationCategory: "<id documento event_categories>"
+        }
+
+    Solo si falta valor útil en `competitionCategory` se usa la raíz del documento
+    (compatibilidad con datos antiguos).
     """
+    raw = participant_data.get("competitionCategory")
+    comp_cat: Dict[str, Any] = raw if isinstance(raw, dict) else {}
+
+    # registrationCategory: primero el anidado; si vacío/ausente, raíz
+    nested_reg = comp_cat.get("registrationCategory")
     root_reg = participant_data.get("registrationCategory", "")
-    root_pilot = participant_data.get("pilotNumber")
-    comp_cat = participant_data.get("competitionCategory") or {}
-    reg = (root_reg or comp_cat.get("registrationCategory", "") or "").strip()
-    pilot = root_pilot if root_pilot is not None else comp_cat.get("pilotNumber")
-    return reg, pilot
+    reg_id = ""
+    if nested_reg is not None and str(nested_reg).strip() != "":
+        reg_id = str(nested_reg).strip()
+    elif root_reg is not None:
+        reg_id = str(root_reg).strip()
+
+    # pilotNumber: si la clave existe en competitionCategory, el valor es el del mapa
+    # (incluye "" y null); si no existe la clave, se usa la raíz del participante
+    if "pilotNumber" in comp_cat:
+        pilot = comp_cat.get("pilotNumber")
+    else:
+        pilot = participant_data.get("pilotNumber")
+
+    return reg_id, pilot
 
 
-def _get_participant_doc(db: firestore.Client, event_id: str, competitor_id: str):
-    """Obtiene el documento del participante en events/{eventId}/participants/{competitorId}."""
+def _normalize_pilot_for_display(pilot: Any) -> Any:
+    if pilot is None:
+        return None
+    if isinstance(pilot, str) and pilot.strip() == "":
+        return None
+    return pilot
+
+
+def _get_participant_doc(
+    db: firestore.Client, event_id: str, user_id: str
+):
     participant_ref = (
         db.collection(FirestoreCollections.EVENTS)
         .document(event_id)
         .collection(FirestoreCollections.EVENT_PARTICIPANTS)
-        .document(competitor_id)
+        .document(user_id)
     )
     return participant_ref.get()
 
 
-def _get_day_of_race_doc(db: firestore.Client, event_id: str, day_id: str):
-    """Obtiene el documento del día de carrera en events/{eventId}/day_of_races/{dayId}."""
-    day_ref = (
-        db.collection(FirestoreCollections.EVENTS)
-        .document(event_id)
-        .collection(FirestoreCollections.DAY_OF_RACES)
-        .document(day_id)
-    )
-    return day_ref.get()
-
-
-def _get_category_id_by_name(
-    db: firestore.Client, event_id: str, registration_category: str
-) -> Optional[str]:
+def _resolve_participant_event_category(
+    db: firestore.Client, event_id: str, category_doc_id: str
+) -> Tuple[Optional[str], str]:
     """
-    Busca en event_categories el documento cuyo campo name coincide con registration_category.
-    Retorna el id del documento o None si no existe.
+    Valida que exista `events/{eventId}/event_categories/{category_doc_id}`.
+
+    Returns:
+        (category_id o None, nombre legible desde campo `name` del doc o "")
     """
-    if not registration_category or not registration_category.strip():
-        return None
-    categories_ref = (
+    cid = (category_doc_id or "").strip()
+    if not cid:
+        return None, ""
+    ref = (
         db.collection(FirestoreCollections.EVENTS)
         .document(event_id)
         .collection(FirestoreCollections.EVENT_CATEGORIES)
+        .document(cid)
     )
-    query = categories_ref.where(
-        filter=FieldFilter("name", "==", registration_category.strip())
-    ).limit(1)
-    snapshot = query.get()
-    if not snapshot:
-        return None
-    return snapshot[0].id
+    snap = ref.get()
+    if not snap.exists:
+        return None, ""
+    data = snap.to_dict() or {}
+    display_name = (data.get("name") or "").strip()
+    return cid, display_name
 
 
-def _get_route_for_category_and_day(
-    db: firestore.Client,
-    event_id: str,
-    category_id: str,
-    day_id: str,
-) -> Optional[firestore.DocumentSnapshot]:
-    """
-    Busca en events/{eventId}/routes un documento donde categoryIds contenga category_id
-    y dayOfRaceIds contenga day_id. Firestore solo permite un array_contains por query,
-    por eso se filtra por dayOfRaceIds en la query y por categoryIds en memoria.
-    """
-    routes_ref = (
-        db.collection(FirestoreCollections.EVENTS)
-        .document(event_id)
-        .collection(FirestoreCollections.EVENT_ROUTES)
-    )
-    query = routes_ref.where(
-        filter=FieldFilter("dayOfRaceIds", "array_contains", day_id)
-    ).limit(50)
-    snapshot = query.get()
-    for doc in snapshot:
-        data = doc.to_dict() or {}
-        if category_id in data.get("categoryIds", []):
-            return doc
-    return None
-
-
-def _build_response(
+def _competitor_payload(
     participant_data: Dict[str, Any],
-    route_doc: firestore.DocumentSnapshot,
+    category_display_name: str = "",
 ) -> Dict[str, Any]:
-    """Construye el JSON de respuesta según la especificación SPRTMNTRPP-74."""
-    registration_category, pilot_number = _get_registration_category_and_pilot_number(
+    """category: dorsal si hay pilotNumber; si no, nombre de event_categories (no el id)."""
+    registration_id, pilot_raw = _get_registration_category_and_pilot_number(
         participant_data
     )
+    pilot = _normalize_pilot_for_display(pilot_raw)
+    name_str = (category_display_name or "").strip()
 
-    # competitor.category = valor de pilotNumber (ej: "ORO"); nombre = registrationCategory (ej: "25F")
-    category_str = (
-        str(pilot_number) if pilot_number is not None else registration_category or ""
-    )
-    competitor_payload = {
+    if pilot is not None:
+        category_str = str(pilot)
+    else:
+        category_str = name_str
+
+    nombre = name_str or (registration_id or "")
+    return {
         "category": category_str,
-        "nombre": registration_category or "",
+        "nombre": nombre,
     }
 
-    route_data = route_doc.to_dict() or {}
-    route_url = route_data.get("routeUrl", "")
+
+def _route_payload(route_data: Dict[str, Any]) -> Dict[str, Any]:
     total_distance = route_data.get("totalDistance")
     if total_distance is None:
         total_distance = 0
     typedistance = route_data.get("typedistance") or route_data.get(
         "typeDistance", ""
     )
-
-    route_payload = {
+    return {
         "name": route_data.get("name", ""),
-        "route": route_url,
+        "route": route_data.get("routeUrl", ""),
         "version": 1,
         "totalDistance": total_distance,
         "typedistance": typedistance,
     }
 
-    now_utc = datetime.now(timezone.utc)
-    last_update = format_utc_to_local_datetime(now_utc)
 
+def _route_updated_at_iso(route_data: Dict[str, Any]) -> str:
+    ts = route_data.get("updatedAt") or route_data.get("createdAt")
+    if ts is None:
+        return ""
+    converted = convert_firestore_value(ts)
+    return converted if isinstance(converted, str) else ""
+
+
+def _load_checkpoints_for_route(
+    db: firestore.Client, event_id: str, route_doc_id: str
+) -> List[Dict[str, Any]]:
+    checkpoints_ref = (
+        db.collection(FirestoreCollections.EVENTS)
+        .document(event_id)
+        .collection(FirestoreCollections.EVENT_ROUTES)
+        .document(route_doc_id)
+        .collection(FirestoreCollections.EVENT_CHECKPOINTS)
+    )
+    docs = checkpoints_ref.get()
+
+    def _order_key(doc: Any) -> Any:
+        data = doc.to_dict() or {}
+        o = data.get("order", 0)
+        return o if o is not None else 0
+
+    sorted_docs = sorted(docs, key=_order_key)
+    out: List[Dict[str, Any]] = []
+    for doc in sorted_docs:
+        raw = doc.to_dict() or {}
+        payload = dict(raw)
+        item = convert_firestore_value(payload)
+        if not isinstance(item, dict):
+            continue
+        if item.get("id") in (None, ""):
+            item["id"] = doc.id
+        out.append(item)
+    return out
+
+
+def _build_route_entry(
+    db: firestore.Client,
+    event_id: str,
+    participant_data: Dict[str, Any],
+    route_snap: Any,
+    category_display_name: str = "",
+) -> Dict[str, Any]:
+    route_data = route_snap.to_dict() or {}
     return {
-        "competitor": competitor_payload,
-        "route": route_payload,
-        "lastUpdate": last_update,
+        "competitor": _competitor_payload(
+            participant_data, category_display_name=category_display_name
+        ),
+        "route": _route_payload(route_data),
+        "updatedAt": _route_updated_at_iso(route_data),
+        "checkpoints": _load_checkpoints_for_route(db, event_id, route_snap.id),
     }
+
+
+def _cors_headers() -> Dict[str, str]:
+    return {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    }
+
+
+def _is_debug_request(req: https_fn.Request) -> bool:
+    raw = (req.args.get("debug") or "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def _not_found(req: https_fn.Request, error: str) -> https_fn.Response:
+    if _is_debug_request(req):
+        return https_fn.Response(
+            json.dumps(
+                {"error": error, "function": "competitor_route", "status": 404},
+                ensure_ascii=False,
+            ),
+            status=404,
+            headers={"Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*"},
+        )
+    return https_fn.Response("", status=404, headers={"Access-Control-Allow-Origin": "*"})
 
 
 @https_fn.on_request(region="us-east4")
 def competitor_route(req: https_fn.Request) -> https_fn.Response:
     """
-    Obtiene información del competidor y su ruta para un evento y día de carrera.
+    Lista eventos del usuario (membership) con rutas para pilotos visibles que
+    coincidan con categoryIds de la categoría del participante.
 
-    API pública: no requiere Authorization Bearer.
+    Headers:
+    - Authorization: Bearer {Firebase ID token} (requerido)
 
-    Query/Path Parameters:
-    - eventId: ID del evento (requerido)
-    - dayId: ID del día de carrera (requerido)
-    - competitorId: ID del competidor (requerido)
-
-    Validaciones:
-    - events/{eventId}/participants/{competitorId} debe existir (isAvailable opcional: si falta, se considera disponible; si está a False, 404)
-    - events/{eventId}/day_of_races/{dayId} debe existir y isActivate == True
-    - registrationCategory se lee de la raíz del participant o de competitionCategory.registrationCategory
-    - Se obtiene categoryId desde event_categories donde name == registrationCategory
-    - Se busca en routes donde categoryIds contiene categoryId y dayOfRaceIds contiene dayId
+    Query:
+    - userId: UID del usuario (requerido)
 
     Returns:
-    - 200: JSON con competitor, route y lastUpdate (ISO 8601)
-    - 400: Parámetros faltantes o inválidos
-    - 404: Participante no encontrado/no disponible, día no activo o ruta no encontrada
-    - 500: Internal Server Error
+    - 200: JSON array [{ eventId, eventName, routes | null }, ...]
+    - 400: userId faltante
+    - 401: Token inválido o faltante
+    - 404: Sin documentos en membership, o ningún evento aplicable tras filtros
+    - 500: Error interno
     """
     validation_response = validate_request(
         req, ["GET"], "competitor_route", return_json_error=False
@@ -188,166 +251,130 @@ def competitor_route(req: https_fn.Request) -> https_fn.Response:
         return validation_response
 
     try:
-        # Extraer parámetros: primero query, luego path si falta alguno
-        event_id = (req.args.get("eventId") or "").strip()
-        day_id = (req.args.get("dayId") or "").strip()
-        competitor_id = (req.args.get("competitorId") or "").strip()
+        user_id_param = (req.args.get("userId") or "").strip()
+        if not user_id_param:
+            logging.warning("competitor_route: userId faltante o vacío")
+            return https_fn.Response(
+                "",
+                status=400,
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
 
-        if not event_id or not day_id or not competitor_id:
-            path_parts = [p for p in (req.path or "").split("/") if p]
-            if "competitor-route" in path_parts:
-                idx = path_parts.index("competitor-route")
-                if idx + 3 <= len(path_parts):
-                    if not event_id:
-                        event_id = path_parts[idx + 1]
-                    if not day_id:
-                        day_id = path_parts[idx + 2]
-                    if not competitor_id:
-                        competitor_id = path_parts[idx + 3]
-            event_id = (event_id or "").strip()
-            day_id = (day_id or "").strip()
-            competitor_id = (competitor_id or "").strip()
-
-        if not event_id:
-            LOG.warning("%s eventId faltante o vacío", LOG_PREFIX)
-            return https_fn.Response(
-                "",
-                status=400,
-                headers={"Access-Control-Allow-Origin": "*"},
-            )
-        if not day_id:
-            LOG.warning("%s dayId faltante o vacío", LOG_PREFIX)
-            return https_fn.Response(
-                "",
-                status=400,
-                headers={"Access-Control-Allow-Origin": "*"},
-            )
-        if not competitor_id:
-            LOG.warning("%s competitorId faltante o vacío", LOG_PREFIX)
-            return https_fn.Response(
-                "",
-                status=400,
-                headers={"Access-Control-Allow-Origin": "*"},
-            )
+        # if not verify_bearer_token(req, "competitor_route"):
+        #     logging.warning("competitor_route: Token inválido o faltante")
+        #     return https_fn.Response(
+        #         "",
+        #         status=401,
+        #         headers={"Access-Control-Allow-Origin": "*"},
+        #     )
 
         db = firestore.client()
-
-        # 1. Participante: debe existir. isAvailable opcional (ausente = disponible).
-        participant_doc = _get_participant_doc(db, event_id, competitor_id)
-        if not participant_doc.exists:
-            LOG.warning(
-                "%s Participante no encontrado eventId=%s competitorId=%s",
-                LOG_PREFIX,
-                event_id,
-                competitor_id,
-            )
-            return https_fn.Response(
-                "",
-                status=404,
-                headers={"Access-Control-Allow-Origin": "*"},
-            )
-        participant_data = participant_doc.to_dict() or {}
-        # Si isAvailable está presente y es False → no disponible (404). Si falta → se considera disponible.
-        if participant_data.get("isAvailable") is False:
-            LOG.warning(
-                "%s Participante no disponible (isAvailable=false) competitorId=%s",
-                LOG_PREFIX,
-                competitor_id,
-            )
-            return https_fn.Response(
-                "",
-                status=404,
-                headers={"Access-Control-Allow-Origin": "*"},
-            )
-
-        # 2. Día de carrera: debe existir y isActivate == True
-        day_doc = _get_day_of_race_doc(db, event_id, day_id)
-        if not day_doc.exists:
-            LOG.warning(
-                "%s Día de carrera no encontrado eventId=%s dayId=%s",
-                LOG_PREFIX,
-                event_id,
-                day_id,
-            )
-            return https_fn.Response(
-                "",
-                status=404,
-                headers={"Access-Control-Allow-Origin": "*"},
-            )
-        day_data = day_doc.to_dict() or {}
-        if not day_data.get("isActivate", False):
-            LOG.warning("%s Día de carrera no activo dayId=%s", LOG_PREFIX, day_id)
-            return https_fn.Response(
-                "",
-                status=404,
-                headers={"Access-Control-Allow-Origin": "*"},
-            )
-
-        # 3. categoryId desde event_categories por name == registrationCategory
-        registration_category, _ = _get_registration_category_and_pilot_number(
-            participant_data
+        membership_ref = (
+            db.collection(FirestoreCollections.USERS)
+            .document(user_id_param)
+            .collection(FirestoreCollections.USER_MEMBERSHIP)
         )
-        category_id = _get_category_id_by_name(db, event_id, registration_category)
-        if not category_id:
-            LOG.warning(
-                "%s Categoría no encontrada name=%s eventId=%s",
-                LOG_PREFIX,
-                registration_category,
-                event_id,
+        membership_docs = list(membership_ref.stream())
+        if not membership_docs:
+            logging.warning(
+                "competitor_route: Sin membresías para userId=%s", user_id_param
             )
-            return https_fn.Response(
-                "",
-                status=404,
-                headers={"Access-Control-Allow-Origin": "*"},
+            return _not_found(req, "membership_not_found")
+
+        result: List[Dict[str, Any]] = []
+
+        for mdoc in membership_docs:
+            event_id = mdoc.id
+            event_doc = (
+                db.collection(FirestoreCollections.EVENTS).document(event_id).get()
+            )
+            if not event_doc.exists:
+                continue
+
+            event_name = (event_doc.to_dict() or {}).get("name", "")
+
+            participant_doc = _get_participant_doc(db, event_id, user_id_param)
+            if not participant_doc.exists:
+                continue
+
+            participant_data = participant_doc.to_dict() or {}
+
+            registration_category_id, _ = _get_registration_category_and_pilot_number(
+                participant_data
+            )
+            category_id, category_display_name = _resolve_participant_event_category(
+                db, event_id, registration_category_id
             )
 
-        # 4. Ruta: categoryIds contiene categoryId y dayOfRaceIds contiene dayId
-        route_doc = _get_route_for_category_and_day(
-            db, event_id, category_id, day_id
-        )
-        if not route_doc:
-            LOG.warning(
-                "%s Ruta no encontrada eventId=%s categoryId=%s dayId=%s",
-                LOG_PREFIX,
-                event_id,
-                category_id,
-                day_id,
+            routes_col = (
+                db.collection(FirestoreCollections.EVENTS)
+                .document(event_id)
+                .collection(FirestoreCollections.EVENT_ROUTES)
             )
-            return https_fn.Response(
-                "",
-                status=404,
-                headers={"Access-Control-Allow-Origin": "*"},
+            visible_query = routes_col.where(
+                filter=FieldFilter("visibleForPilots", "==", True)
             )
+            route_snapshots = visible_query.get()
 
-        # 5. Respuesta
-        result = _build_response(participant_data, route_doc)
-        LOG.info(
-            "%s OK eventId=%s competitorId=%s dayId=%s",
-            LOG_PREFIX,
-            event_id,
-            competitor_id,
-            day_id,
+            matching_routes: List[Any] = []
+            if category_id:
+                for rd in route_snapshots:
+                    rdata = rd.to_dict() or {}
+                    if category_id in (rdata.get("categoryIds") or []):
+                        matching_routes.append(rd)
+
+            if not matching_routes:
+                result.append(
+                    {
+                        "eventId": event_id,
+                        "eventName": event_name,
+                        "routes": None,
+                    }
+                )
+            else:
+                entries = [
+                    _build_route_entry(
+                        db,
+                        event_id,
+                        participant_data,
+                        rd,
+                        category_display_name=category_display_name,
+                    )
+                    for rd in matching_routes
+                ]
+                result.append(
+                    {
+                        "eventId": event_id,
+                        "eventName": event_name,
+                        "routes": entries,
+                    }
+                )
+
+        if not result:
+            logging.warning(
+                "competitor_route: Ningún evento aplicable tras procesar membership userId=%s",
+                user_id_param,
+            )
+            return _not_found(req, "no_applicable_events")
+
+        logging.info(
+            "competitor_route: OK userId=%s eventos=%s", user_id_param, len(result)
         )
         return https_fn.Response(
             json.dumps(result, ensure_ascii=False),
             status=200,
-            headers={
-                "Content-Type": "application/json; charset=utf-8",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
+            headers=_cors_headers(),
         )
 
     except ValueError as e:
-        LOG.error("%s Error de validación: %s", LOG_PREFIX, e)
+        logging.error("competitor_route: Error de validación: %s", e)
         return https_fn.Response(
             "",
             status=400,
             headers={"Access-Control-Allow-Origin": "*"},
         )
     except (AttributeError, KeyError, RuntimeError, TypeError) as e:
-        LOG.error("%s Error interno: %s", LOG_PREFIX, e, exc_info=True)
+        logging.error("competitor_route: Error interno: %s", e, exc_info=True)
         return https_fn.Response(
             "",
             status=500,

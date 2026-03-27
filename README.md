@@ -1361,89 +1361,98 @@ Errores: 400 (body/items inválido), 401 (token), 405 (p. ej. PUT), 500 (interno
 
 ## 📦 Package: Competitors
 
-Funciones relacionadas con competidores y sus rutas en eventos (API pública).
+Funciones relacionadas con competidores y sus rutas en eventos.
 
 ### 1. `competitor_route` (SPRTMNTRPP-74)
 
-Obtiene la información del competidor y su ruta para un evento y día de carrera. **API pública**: no requiere Bearer token.
+Lista los eventos en los que el usuario tiene documentos en `users/{userId}/membership`, y por cada evento devuelve las rutas con `visibleForPilots == true` cuyo `categoryIds` incluye el **id** de categoría del participante (`competitionCategory.registrationCategory` = id en `event_categories`; `pilotNumber` opcional o vacío). Incluye la subcolección `checkpoints` de cada ruta. **Requiere Bearer token** válido.
 
 **Tipo**: HTTP Request (GET)  
 **Endpoint**: `https://competitor-route-xa26lpxdea-uc.a.run.app`  
-**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/competitor-route/{eventId}/{dayId}/{competitorId}`
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/competitor-route`
 
-**Nota**: Esta función es pública y no requiere autenticación.
+#### Headers requeridos
 
-#### Parámetros (Path o Query Parameters)
+| Header          | Valor                          | Descripción           |
+| --------------- | ------------------------------ | --------------------- |
+| `Authorization` | `Bearer {Firebase ID Token}`   | Token Firebase Auth   |
 
-| Parámetro      | Tipo   | Requerido | Descripción                                                                     |
-| -------------- | ------ | --------- | ------------------------------------------------------------------------------- |
-| `eventId`      | string | **Sí**    | ID del evento                                                                   |
-| `dayId`        | string | **Sí**    | ID del día de carrera                                                           |
-| `competitorId` | string | **Sí**    | ID del competidor (documento en `events/{eventId}/participants/{competitorId}`) |
+#### Parámetros (query)
 
-Los parámetros pueden ir en el path (`/api/competitors/competitor-route/{eventId}/{dayId}/{competitorId}`) o en query (`?eventId=xxx&dayId=yyy&competitorId=zzz`).
+| Parámetro | Tipo   | Requerido | Descripción                                      |
+| --------- | ------ | --------- | ------------------------------------------------ |
+| `userId`  | string | **Sí**    | UID del usuario cuyo `membership` y participantes se consultan |
 
 #### Validaciones realizadas
 
-- El participante `events/{eventId}/participants/{competitorId}` debe existir y tener `isAvailable == true`.
-- El día de carrera `events/{eventId}/day_of_races/{dayId}` debe existir y tener `isActivate == true`.
-- Se obtiene el `categoryId` desde `event_categories` donde `name == competitionCategory.registrationCategory` del participante.
-- Se busca en `routes` un documento donde `categoryIds` contenga ese `categoryId` y `dayOfRaceIds` contenga `dayId`.
+- Membresías: `users/{userId}/membership/*` (cada id de documento es un `eventId`).
+- El evento `events/{eventId}` debe existir.
+- El participante `events/{eventId}/participants/{userId}` debe existir.
+- `competitionCategory.registrationCategory` es el **ID del documento** en `events/{eventId}/event_categories/{id}` (no el campo `name`). Se valida con `get` sobre ese documento.
+- Rutas: consulta `visibleForPilots == true` y filtra en memoria donde `categoryIds` contiene ese `categoryId`.
 
-#### Campos Retornados (200)
+#### Campos retornados (200)
 
-- `competitor`: Objeto con:
-  - `category`: Valor de `pilotNumber` del participante (ej: "ORO")
-  - `nombre`: Valor de `registrationCategory` (ej: "25F")
-- `route`: Objeto con:
-  - `name`: Nombre de la ruta
-  - `route`: URL de la ruta (campo `routeUrl` en Firestore)
-  - `version`: Siempre `1`
-  - `totalDistance`: Distancia total (numérico)
-  - `typedistance`: Unidad (ej: "km/millas")
-- `lastUpdate`: Fecha/hora del servidor en formato ISO 8601 (ej: `2026-01-13T12:52:32Z`)
+Cuerpo: **array JSON** (sin wrapper) de objetos:
+
+- `eventId`: ID del evento.
+- `eventName`: Campo `name` del evento.
+- `routes`: `null` si no hay rutas que cumplan filtros; en caso contrario array de objetos:
+  - `competitor`: `category` (si hay `pilotNumber` no vacío, el dorsal; si no, el **nombre** de la categoría del evento, campo `name` del documento en `event_categories`, sin usar el id del documento), `nombre` (mismo criterio de nombre legible; si no hay `name` en Firestore, se usa el id de registro como respaldo).
+  - `route`: `name`, `route` (URL desde `routeUrl`), `version` (1), `totalDistance`, `typedistance`.
+  - `updatedAt`: ISO desde el campo `updatedAt` (o `createdAt`) del documento de la ruta.
+  - `checkpoints`: Array de objetos de `events/{eventId}/routes/{routeId}/checkpoints`, ordenados por `order`, valores JSON-serializables.
 
 #### Comandos cURL
 
-**Con path:**
-
 ```bash
 curl -X GET \
-  'https://system-track-monitor.web.app/api/competitors/competitor-route/{eventId}/{dayId}/{competitorId}'
-```
-
-**Con query parameters:**
-
-```bash
-curl -X GET \
-  'https://system-track-monitor.web.app/api/competitors/competitor-route?eventId=EVENT_ID&dayId=DAY_ID&competitorId=COMPETITOR_ID'
+  -H 'Authorization: Bearer YOUR_ID_TOKEN' \
+  'https://system-track-monitor.web.app/api/competitors/competitor-route?userId=USER_UID'
 ```
 
 #### Respuestas
 
-- **200 OK**: JSON con `competitor`, `route` y `lastUpdate`.
-- **400 Bad Request**: Parámetros faltantes o vacíos (sin cuerpo).
-- **404 Not Found**: Participante no encontrado o no disponible, día no activo, categoría no encontrada o ruta no encontrada (sin cuerpo).
+- **200 OK**: JSON array de eventos con `routes` o `routes: null`.
+- **400 Bad Request**: `userId` faltante o vacío (sin cuerpo).
+- **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
+- **404 Not Found**: Sin membresías, o ningún evento aplicable tras omitir no inscritos / no disponibles (sin cuerpo).
 - **500 Internal Server Error**: Error interno (sin cuerpo).
 
 #### Ejemplo de respuesta exitosa
 
 ```json
-{
-  "competitor": {
-    "category": "ORO",
-    "nombre": "25F"
-  },
-  "route": {
-    "name": "Ruta Principal",
-    "route": "https://example.com/route.gpx",
-    "version": 1,
-    "totalDistance": 200,
-    "typedistance": "km/millas"
-  },
-  "lastUpdate": "2026-01-13T12:52:32Z"
-}
+[
+  {
+    "eventId": "ev123",
+    "eventName": "Rally Ejemplo",
+    "routes": [
+      {
+        "competitor": { "category": "4", "nombre": "Oro" },
+        "route": {
+          "name": "ORO D3",
+          "route": "https://example.com/route.gpx",
+          "version": 1,
+          "totalDistance": 0,
+          "typedistance": ""
+        },
+        "updatedAt": "2026-03-25T12:00:00+00:00Z",
+        "checkpoints": [
+          {
+            "checkpointTypeId": "type1",
+            "coordinates": "19.3,-97.3",
+            "name": "CP1",
+            "order": 1,
+            "id": "cpDocId"
+          }
+        ]
+      }
+    ]
+  }
+]
 ```
+
+Si el participante no tiene dorsal (`pilotNumber` vacío o ausente), `competitor.category` lleva el nombre de la categoría (igual que `nombre` cuando existe `name` en `event_categories`), no el id del documento.
 
 ### 2. `create_competitor`
 
@@ -4105,7 +4114,6 @@ curl -X POST \
 
 Las siguientes funciones pueden ser públicas y no requieren autenticación:
 
-- `competitor_route` - Obtiene competidor y ruta asignada
 - `track_competitor_position` - Registra posición y datos del competidor en tiempo real
 
 ### Funciones que Requieren Autenticación
@@ -4128,6 +4136,7 @@ Las siguientes funciones requieren autenticación Bearer token:
 - `update_competitor_status` - Actualiza el estado de un competidor en un checkpoint (requiere token para autenticación)
 - `change_competitor_status` - Cambia el estado de un competidor y actualiza checkpoints relacionados (requiere token para autenticación)
 - `days_of_race` - Obtiene todos los días de carrera (requiere token para autenticación)
+- `competitor_route` - Lista eventos del usuario (membership) con rutas visibles para pilotos y checkpoints (requiere Bearer token; query `userId` del usuario a consultar)
 - `create_competitor` - Crea competidor básico en un evento (requiere Bearer token)
 - `create_competitor_user` - Crea template de usuario competidor + membership + participante en evento, sin Firebase Auth (requiere Bearer token)
 - `get_competitor_by_email` - Obtiene usuario competidor por email con todas sus subcolecciones (requiere Bearer token)

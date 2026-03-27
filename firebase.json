@@ -203,6 +203,11 @@
         "region": "us-east4"
       },
       {
+        "source": "/api/competitors/competitor-route",
+        "function": "competitor_route",
+        "region": "us-east4"
+      },
+      {
         "source": "/api/competitors/competitor-route/**",
         "function": "competitor_route",
         "region": "us-east4"

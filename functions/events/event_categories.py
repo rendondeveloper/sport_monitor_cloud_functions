@@ -51,15 +51,13 @@ def event_categories(req: https_fn.Request) -> https_fn.Response:
             )
 
         # Obtener eventId de query parameters primero
-        event_id = req.args.get("eventId")
+        event_id = (req.args.get("eventId") or "").strip()
 
         # Si no viene en query params, intentar extraerlo del path
         # La URL será: /api/event/event_categories/{eventId}
-        if not event_id or event_id.strip() == "":
-            path = req.path
-            logging.info("event_categories: Path recibido: %s", path)
-            path_parts = [p for p in path.split("/") if p]  # Filtrar strings vacíos
-            logging.info("event_categories: Path parts: %s", path_parts)
+        if not event_id:
+            path = getattr(req, "path", "") or ""
+            path_parts = [p for p in path.split("/") if p]
 
             try:
                 # Buscar el índice de "event_categories" o "event-categories"
@@ -72,17 +70,14 @@ def event_categories(req: https_fn.Request) -> https_fn.Response:
                 if categories_key:
                     categories_index = path_parts.index(categories_key)
                     if categories_index + 1 < len(path_parts):
-                        event_id = path_parts[categories_index + 1]
-                        logging.info(
-                            "event_categories: eventId extraído del path: %s", event_id
-                        )
+                        event_id = (path_parts[categories_index + 1] or "").strip()
             except (ValueError, IndexError) as e:
                 logging.warning(
-                    "event_categories: Error extrayendo parámetros del path: %s", e
+                    "event_categories: Error extrayendo eventId del path: %s", e
                 )
 
         # Validar que eventId esté presente
-        if not event_id or event_id.strip() == "":
+        if not event_id:
             logging.warning("event_categories: eventId faltante o vacío")
             return https_fn.Response(
                 "",
@@ -99,7 +94,7 @@ def event_categories(req: https_fn.Request) -> https_fn.Response:
         categories_ref = event_ref.collection(FirestoreCollections.EVENT_CATEGORIES)
 
         # Obtener todos los documentos sin filtros
-        logging.info("event_categories: Obteniendo categorías para evento %s", event_id)
+        logging.info("event_categories: Obteniendo categorías para eventId=%s", event_id)
         categories_snapshot = categories_ref.order_by("name").get()
 
         # Mapear documentos a EventCategory

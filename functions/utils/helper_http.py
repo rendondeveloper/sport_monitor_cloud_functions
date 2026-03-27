@@ -2,6 +2,7 @@ import logging
 
 from firebase_admin import auth
 from firebase_functions import https_fn
+from typing import Optional
 
 try:
     from firebase_admin._token_gen import ExpiredIdTokenError
@@ -25,6 +26,29 @@ def verify_bearer_token(req: https_fn.Request, function_name: str = "function") 
     if not auth_header:
         logging.warning("%s: Header Authorization faltante", function_name)
         return False
+
+
+def validate_bearer_token(
+    req: https_fn.Request,
+    function_name: str = "function",
+    return_json_error: bool = False,
+) -> Optional[https_fn.Response]:
+    """
+    Valida que exista Bearer token y sea válido (Firebase Auth).
+
+    Similar a `validate_request()`: retorna Response si hay que cortar el flujo,
+    o None si la validación pasó.
+    """
+    _ = return_json_error  # mantenemos la firma consistente (por ahora no se usa)
+
+    if verify_bearer_token(req, function_name):
+        return None
+
+    return https_fn.Response(
+        "",
+        status=401,
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
 
     if not auth_header.startswith("Bearer "):
         logging.warning("%s: Formato de Authorization incorrecto", function_name)
