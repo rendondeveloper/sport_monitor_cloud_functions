@@ -1,0 +1,5 @@
+config_dir: "ai-system"
+trigger_word: "work backend"
+confirmation_word: "ok"
+setup_version: "2.1.0"
+created_at: "2026-04-14"

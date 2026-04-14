@@ -1,23 +1,29 @@
 # AI System — Sport Monitor Cloud Functions
 
-Sistema de orquestación IA para el backend Python/Firebase (Cloud Functions 2nd Gen).
+Sistema de orquestación IA v2.1 para el backend Python/Firebase (Cloud Functions 2nd Gen).
 
 ## Estructura
 
 ```
 ai-system/
-├── context/              # Conocimiento del proyecto
-│   ├── architecture.md   # Patrones Firebase, respuestas HTTP, regiones
-│   ├── coding-standards.md # Reglas obligatorias de código
-│   ├── project-structure.md # Estructura functions/, módulos, helpers
-│   └── workflow.md       # SDD fases, waves, phase decision table
-├── agents/               # Sub-agentes especializados
-│   ├── architect.md      # Coordinador (Opus)
-│   ├── functions-cross.md # main.py, modelos, utils (Haiku)
+├── .setup-config.yaml       # Config: trigger_word, confirmation_word, setup_version
+├── manifest.yaml             # Master catalog: skills + agents + integrations
+├── README.md                 # Este archivo
+├── skill-registry.md         # Tabla generada de todos los skills
+├── context/                  # Conocimiento del proyecto
+│   ├── architecture.md       # Patrones Firebase, respuestas HTTP, regiones
+│   ├── coding-standards.md   # Reglas obligatorias de código
+│   ├── project-structure.md  # Estructura functions/, módulos, helpers
+│   └── workflow.md           # SDD fases, waves, phase decision table
+├── agents/                   # Sub-agentes especializados
+│   ├── architect.md          # Main orchestrator (Opus)
+│   ├── docs-agent.md         # Senior technical writer (Opus)
+│   ├── testing-agent.md      # Senior QA engineer (Opus)
+│   ├── functions-cross.md    # main.py, modelos, utils (Haiku)
 │   ├── functions-endpoint.md # Endpoints HTTP (Haiku)
-│   ├── functions-test.md # pytest tests (Sonnet)
-│   └── functions-docs.md # README de módulos (Opus)
-├── skills/               # Operaciones atómicas
+│   ├── functions-test.md     # pytest tests (Sonnet)
+│   └── functions-docs.md     # README de módulos (Opus)
+├── skills/                   # Operaciones atómicas (13 skills)
 │   ├── plan/
 │   ├── sdd_explore/
 │   ├── sdd_design/
@@ -31,16 +37,20 @@ ai-system/
 │   ├── push/
 │   ├── update-readme/
 │   └── skill_registry/
-├── changes/              # Artefactos SDD por módulo
-├── manifest.yaml
-└── skill-registry.md
+├── hooks/
+│   └── hooks.md              # Hook definitions (Stop → skill_registry)
+├── integrations/
+│   └── mcp.md                # MCP inventory (none configured)
+└── changes/                  # Artefactos SDD por feature (en progreso)
 ```
 
 ## Agentes
 
 | Agent | Model | Responsabilidad |
 |-------|-------|-----------------|
-| architect | opus | Coordinador — planifica y delega, nunca escribe código |
+| architect | opus | Main orchestrator — planifica, valida, coordina; nunca escribe código |
+| docs-agent | opus | Senior technical writer — documentación cross-cutting |
+| testing-agent | opus | Senior QA engineer — validación profunda y auditoría |
 | functions-cross | haiku | Registro en main.py, FirestoreCollections, modelos, utils |
 | functions-endpoint | haiku | Implementación de endpoints HTTP con template obligatorio |
 | functions-test | sonnet | pytest tests — unit + integration |
@@ -48,7 +58,7 @@ ai-system/
 
 ## Skills
 
-| Categoria | Skill | Descripcion |
+| Categoría | Skill | Descripción |
 |-----------|-------|-------------|
 | Workflow | /plan | Analiza request y produce plan antes de escribir código |
 | Workflow | /sdd_explore | Exploración pre-plan para módulos existentes |
@@ -64,6 +74,11 @@ ai-system/
 | Proceso | /update-readme | Crea o actualiza README de módulo |
 | Proceso | /skill_registry | Regenera skill-registry.md |
 
+## Trigger and confirmation words
+
+- **Trigger word:** `work backend` — activa el Architect implícitamente
+- **Confirmation word:** `ok` — salta el gate de aprobación del Action plan
+
 ## Wave execution
 
 Todo cambio que involucre una nueva función sigue este orden:
@@ -76,9 +91,13 @@ Wave 1 (parallel): functions-cross + functions-endpoint
 Wave 2: functions-test
   └── tests/test_<module>_<function>.py, cobertura >= 90%
 
-Wave 3: functions-docs  (SIEMPRE OBLIGATORIO — nunca omitir)
+Wave 3: functions-docs (SIEMPRE OBLIGATORIO — nunca omitir)
   └── Actualiza README del módulo afectado
 ```
+
+## Integrations
+
+See `integrations/mcp.md` for MCP inventory (currently none configured).
 
 ## Reglas absolutas
 
@@ -88,3 +107,7 @@ Wave 3: functions-docs  (SIEMPRE OBLIGATORIO — nunca omitir)
 4. Early return — nunca anidar if/else para validaciones
 5. `FirestoreCollections` para TODOS los nombres de colecciones
 6. `FirestoreHelper` para TODO CRUD — nunca `firestore.client()` directo en endpoints
+
+## Working folders
+
+`history/` is created by the Architect on demand when work begins. Not created during setup.

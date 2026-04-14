@@ -1,81 +1,103 @@
-version: "1.0"
-project: sport_monitor_cloud_functions
+name: sport-monitor-cloud-functions-ai
+description: "AI orchestration system for Python/Firebase Cloud Functions backend (2nd Gen)"
+config_dir: ai-system
+setup_version: "2.1.0"
+
 platform: python_firebase
 python_version: "3.12"
 runtime: firebase_functions_2nd_gen
 
-context:
-  - path: ai-system/context/architecture.md
-    description: "Firebase Functions pattern, template obligatorio, regiones, flujos de competidores"
-  - path: ai-system/context/coding-standards.md
-    description: "Early return, naming, FirestoreCollections, FirestoreHelper, logging, CORS"
-  - path: ai-system/context/project-structure.md
-    description: "Estructura functions/, módulos existentes, cómo registrar en main.py"
-  - path: ai-system/context/workflow.md
-    description: "SDD fases, waves, phase decision table, hard rules"
+apps:
+  - path: .
+    history_root: history   # created by Architect on demand
 
-agents:
-  - name: architect
-    model: opus
-    path: ai-system/agents/architect.md
-    description: "Coordinador — planifica y delega, nunca implementa código"
-  - name: functions-cross
-    model: haiku
-    path: ai-system/agents/functions-cross.md
-    description: "Registro en main.py, FirestoreCollections, modelos, utils compartidos"
-  - name: functions-endpoint
-    model: haiku
-    path: ai-system/agents/functions-endpoint.md
-    description: "Implementación de endpoints con template obligatorio y FirestoreHelper"
-  - name: functions-test
-    model: sonnet
-    path: ai-system/agents/functions-test.md
-    description: "pytest tests — AAA pattern, mocks, cobertura >= 90%"
-  - name: functions-docs
-    model: opus
-    path: ai-system/agents/functions-docs.md
-    description: "README por módulo — endpoints, params, curl examples, errores"
+context:
+  - path: context/workflow.md
+    description: "SDD phases, waves, phase decision table, hard rules"
+  - path: context/architecture.md
+    description: "Firebase Functions pattern, template, regions, competitor flows"
+  - path: context/coding-standards.md
+    description: "Early return, naming, FirestoreCollections, FirestoreHelper, logging, CORS"
+  - path: context/project-structure.md
+    description: "Directory tree, modules, FirestoreHelper API, utils catalog"
+
+integrations:
+  - path: integrations/mcp.md
+    description: "MCP inventory — names, required env/config placeholders only; no secrets"
 
 skills:
   - name: plan
-    path: ai-system/skills/plan/SKILL.md
+    path: skills/plan/SKILL.md
     description: "Analiza request, lista endpoints/colecciones/helpers afectados, produce plan"
   - name: sdd_explore
-    path: ai-system/skills/sdd_explore/SKILL.md
-    description: "Exploración de módulo existente — output: ai-system/changes/<module>/explore.md"
+    path: skills/sdd_explore/SKILL.md
+    description: "Exploración de módulo existente — output: changes/<module>/explore.md"
   - name: sdd_design
-    path: ai-system/skills/sdd_design/SKILL.md
+    path: skills/sdd_design/SKILL.md
     description: "Diseño de contratos HTTP y Firestore paths — output: design.md"
   - name: sdd_verify
-    path: ai-system/skills/sdd_verify/SKILL.md
+    path: skills/sdd_verify/SKILL.md
     description: "Checklist post-implementación pre-deploy — valida template, CORS, tests, docs"
   - name: new-function
-    path: ai-system/skills/new-function/SKILL.md
+    path: skills/new-function/SKILL.md
     description: "Crea endpoint HTTP completo con template obligatorio y lo registra en main.py"
   - name: add-model
-    path: ai-system/skills/add-model/SKILL.md
+    path: skills/add-model/SKILL.md
     description: "Añade modelo Firestore en models/ con from_dict y to_dict"
   - name: add-util
-    path: ai-system/skills/add-util/SKILL.md
+    path: skills/add-util/SKILL.md
     description: "Añade helper puro en utils/ — documentado, sin side effects"
   - name: add-firestore-query
-    path: ai-system/skills/add-firestore-query/SKILL.md
+    path: skills/add-firestore-query/SKILL.md
     description: "Añade query Firestore usando FirestoreHelper (no firestore.client() directo)"
   - name: add-test
-    path: ai-system/skills/add-test/SKILL.md
+    path: skills/add-test/SKILL.md
     description: "Añade pytest tests — AAA, fixtures, mocks, casos obligatorios"
   - name: qa-ready
-    path: ai-system/skills/qa-ready/SKILL.md
+    path: skills/qa-ready/SKILL.md
     description: "Documento QA pre-deploy — endpoints, curl, casos, errores esperados"
   - name: push
-    path: ai-system/skills/push/SKILL.md
+    path: skills/push/SKILL.md
     description: "Commit + push con Conventional Commits — feat/fix/refactor/test/docs"
   - name: update-readme
-    path: ai-system/skills/update-readme/SKILL.md
+    path: skills/update-readme/SKILL.md
     description: "Crea o actualiza README de módulo con tabla de endpoints y ejemplos"
+  - name: deploy
+    path: skills/deploy/SKILL.md
+    description: "Pre-flight checks + deploy Firebase Functions + post-deploy validation"
   - name: skill_registry
-    path: ai-system/skills/skill_registry/SKILL.md
+    path: skills/skill_registry/SKILL.md
     description: "Regenera skill-registry.md con estado actual de todos los skills"
+
+agents:
+  - name: architect
+    path: agents/architect.md
+    model: opus
+    description: "Main orchestrator — validates plans, coordinates agents, enforces architecture"
+  - name: docs-agent
+    path: agents/docs-agent.md
+    model: opus
+    description: "Senior technical writer — cross-cutting documentation"
+  - name: testing-agent
+    path: agents/testing-agent.md
+    model: opus
+    description: "Senior QA engineer — deep validation and audit"
+  - name: functions-cross
+    path: agents/functions-cross.md
+    model: haiku
+    description: "Registro en main.py, FirestoreCollections, modelos, utils compartidos"
+  - name: functions-endpoint
+    path: agents/functions-endpoint.md
+    model: haiku
+    description: "Implementación de endpoints con template obligatorio y FirestoreHelper"
+  - name: functions-test
+    path: agents/functions-test.md
+    model: sonnet
+    description: "pytest tests — AAA pattern, mocks, cobertura >= 90%"
+  - name: functions-docs
+    path: agents/functions-docs.md
+    model: opus
+    description: "README por módulo — endpoints, params, curl examples, errores"
 
 execution_order:
   wave_1:
@@ -92,8 +114,8 @@ execution_order:
     description: "README del módulo — SIEMPRE obligatorio, nunca omitir"
 
 regions:
-  primary: "us-east4"        # competitors, catalogs, tracking
-  secondary: "us-central1"   # general, monitor, staff
+  primary: "us-east4"
+  secondary: "us-central1"
 
 deploy:
   single: "firebase deploy --only functions:{function_name}"

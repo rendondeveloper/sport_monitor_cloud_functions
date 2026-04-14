@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "command": "echo 'Session ended — run /skill_registry to update ai-system/skill-registry.md if skills were modified'"
+      }
+    ]
+  }
+}
