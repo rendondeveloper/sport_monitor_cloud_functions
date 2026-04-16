@@ -54,8 +54,8 @@ from tracking.tracking_competitors import track_competitors, track_competitors_o
 # Importar funciones de users (una sola función: user_route; despacha por path a read/create/update)
 from users import user_route
 
-# Importar funciones de vehicles
-from vehicles import delete_vehicle, get_vehicles, search_vehicle, update_vehicle
+# Importar funciones de vehicles (una sola funcion: vehicle_route; despacha por path+metodo)
+from vehicles import vehicle_route
 
 # Importar funciones de catalogs (una sola función: catalog_route; despacha por path)
 from catalogs import catalog_route
@@ -92,10 +92,7 @@ initialize_app(options=_options if _options else None)
 # - update_competitor_status: checkpoints/update_competitor_status.py
 # - competitor_route: competitors/competitor_route.py
 # - track_competitor_position: tracking/track_competitor_position.py
-# - search_vehicle: vehicles/search_vehicle.py
-# - get_vehicles: vehicles/get_vehicles.py
-# - update_vehicle: vehicles/update_vehicle.py
-# - delete_vehicle: vehicles/delete_vehicle.py
+# - vehicle_route: vehicles/vehicle_route.py (router: /api/vehicles, /api/vehicles/search, /api/vehicles/{id})
 # - catalog_route: catalogs/catalog_route.py (router: /api/catalogs/vehicle, year, color, relationship-type)
 # - create_competitor: competitors/create_competitor.py
 # - create_competitor_user: competitors/create_competitor_user.py

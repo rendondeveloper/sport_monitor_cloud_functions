@@ -1,8 +1,10 @@
 """
-Get Vehicles - SPRTMNTRPP-70
+List Vehicles - SPRTMNTRPP-70
 
-Cloud Function GET que obtiene todos los vehículos de un usuario/competidor desde Firestore.
-Ruta: users/{userId}/vehicles. Requiere Bearer token.
+Obtiene todos los vehiculos de un usuario/competidor desde Firestore.
+Ruta: users/{userId}/vehicles.
+
+Logica de negocio unicamente. La validacion CORS y Bearer token la realiza vehicle_route.
 """
 
 import json
@@ -12,17 +14,14 @@ from typing import Any, Dict, List
 from firebase_admin import firestore
 from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
-from utils.helper_http import verify_bearer_token
-from utils.helper_http_verb import validate_request
-from utils.helpers import convert_firestore_value
 
 LOG = logging.getLogger(__name__)
-LOG_PREFIX = "[get_vehicles]"
+LOG_PREFIX = "[list_vehicles]"
 
 
 def _get_vehicles_from_firestore(db, user_id: str):
     """
-    Obtiene la referencia a la subcolección de vehículos del usuario.
+    Obtiene la referencia a la subcoleccion de vehiculos del usuario.
     Retorna (user_exists, snapshot_vehicles).
     Si el usuario no existe, user_exists=False y snapshot_vehicles es None.
     """
@@ -36,7 +35,7 @@ def _get_vehicles_from_firestore(db, user_id: str):
 
 
 def _build_vehicle_dict(doc) -> Dict[str, Any]:
-    """Construye el diccionario de un vehículo para la respuesta JSON."""
+    """Construye el diccionario de un vehiculo para la respuesta JSON."""
     data = doc.to_dict() or {}
     result = {
         "id": doc.id,
@@ -44,46 +43,32 @@ def _build_vehicle_dict(doc) -> Dict[str, Any]:
         "year": data.get("year"),
         "model": data.get("model"),
         "color": data.get("color"),
-        "createdAt": convert_firestore_value(data.get("createdAt")),
-        "updatedAt": convert_firestore_value(data.get("updatedAt")),
     }
+    if data.get("photoUrl"):
+        result["photoUrl"] = data.get("photoUrl")
+    if data.get("mileageKm") is not None:
+        result["mileageKm"] = data.get("mileageKm")
     return result
 
 
-@https_fn.on_request()
-def get_vehicles(req: https_fn.Request) -> https_fn.Response:
+def handle(req: https_fn.Request) -> https_fn.Response:
     """
-    GET: Obtiene todos los vehículos de un usuario.
-    POST: Crea un vehículo (delega a create_vehicle_handler). Mismo path /api/vehicles.
+    Obtiene todos los vehiculos de un usuario.
+    Asume request ya validado (CORS, Bearer token) por vehicle_route.
 
-    Headers:
-    - Authorization: Bearer {Firebase Auth Token} (requerido)
+    Query Parameters:
+    - userId: string (requerido)
 
-    GET Query: userId (requerido).
-    POST Query: userId, authUserId (requeridos). Body: { branch, year, model, color }.
+    Returns:
+    - 200: Array JSON directo
+    - 400: userId faltante
+    - 404: usuario no encontrado
+    - 500: error interno
     """
-    validation_response = validate_request(
-        req, ["GET", "POST"], "get_vehicles", return_json_error=False
-    )
-    if validation_response is not None:
-        return validation_response
-
-    if req.method == "POST":
-        from vehicles.create_vehicle import create_vehicle_handler
-        return create_vehicle_handler(req)
-
     try:
-        if not verify_bearer_token(req, "get_vehicles"):
-            logging.warning("%s Token inválido o faltante", LOG_PREFIX)
-            return https_fn.Response(
-                "",
-                status=401,
-                headers={"Access-Control-Allow-Origin": "*"},
-            )
-
         user_id = (req.args.get("userId") or "").strip()
         if not user_id:
-            logging.warning("%s userId faltante o vacío", LOG_PREFIX)
+            logging.warning("%s userId faltante o vacio", LOG_PREFIX)
             return https_fn.Response(
                 "",
                 status=400,
@@ -105,7 +90,7 @@ def get_vehicles(req: https_fn.Request) -> https_fn.Response:
             _build_vehicle_dict(doc) for doc in (vehicles_docs or [])
         ]
         logging.info(
-            "%s Vehículos obtenidos para usuario %s: %d",
+            "%s Vehiculos obtenidos para usuario %s: %d",
             LOG_PREFIX,
             user_id,
             len(result),
@@ -123,7 +108,7 @@ def get_vehicles(req: https_fn.Request) -> https_fn.Response:
         )
 
     except ValueError as e:
-        logging.error("%s Error de validación: %s", LOG_PREFIX, e)
+        logging.error("%s Error de validacion: %s", LOG_PREFIX, e)
         return https_fn.Response(
             "",
             status=400,

@@ -488,7 +488,8 @@ curl -X GET \
 
 ## 📦 Package: Users
 
-Una sola Cloud Function **`user_route`** atiende todas las operaciones de usuarios. El router valida CORS, método HTTP y Bearer token una vez y despacha por path a la lógica correspondiente (read, create, update, read_sections, subscribed_events, delete_section_item). Paths: `/api/users/read`, `/api/users/profile` (equivalente a read), `/api/users/personalData`, `/api/users/healthData`, `/api/users/emergencyContacts`, `/api/users/vehicles`, `/api/users/membership` (GET; DELETE solo para emergencyContacts y vehicles), `/api/users/subscribedEvents` (GET, eventos suscritos paginados), `/api/users/create`, `/api/users/update`.
+Una sola Cloud Function **`user_route`** atiende las operaciones de usuarios. El router valida CORS, método HTTP y Bearer token una vez y despacha por path a la lógica correspondiente (read, create, update, read_sections, subscribed_events, delete_section_item). Paths: `/api/users/read`, `/api/users/profile` (equivalente a read), `/api/users/personalData`, `/api/users/healthData`, `/api/users/emergencyContacts`, `/api/users/membership` (GET; DELETE para emergencyContacts y `vehicles` legacy), `/api/users/subscribedEvents` (GET, eventos suscritos paginados), `/api/users/create`, `/api/users/update`.  
+**Importante**: el CRUD de vehículos se atiende por **`vehicle_route`** en `/api/vehicles...` (ruta oficial). Las rutas bajo `/api/users/.../vehicles` quedan como compatibilidad temporal.
 
 ### 4. `read` (perfil de usuario)
 
@@ -619,7 +620,6 @@ Permite leer una subcolección del usuario en una petición. Servido por **user_
 - `GET /api/users/personalData` — Objeto que combina **email** (del documento `users/{userId}`) con los campos del primer documento de la subcolección (id, fullName, phone, dateOfBirth, address, etc.). Si el usuario existe pero la subcolección está vacía: 200 con **email** informado y el resto de campos en **null**. 404 solo si el usuario no existe.
 - `GET /api/users/healthData` — Primer documento de la subcolección (objeto único). 404 si no hay datos.
 - `GET /api/users/emergencyContacts` — Lista de documentos (puede ser `[]`).
-- `GET /api/users/vehicles` — Lista de documentos (puede ser `[]`).
 - `GET /api/users/membership` — Lista de documentos (puede ser `[]`).
 
 **Query params:** `userId` (requerido) — ID del documento en la colección `users`.
@@ -634,15 +634,15 @@ curl -X GET \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
 ```
 
-**Ejemplo cURL (vehicles):**
+**Ejemplo cURL (vehicles, ruta oficial):**
 
 ```bash
 curl -X GET \
-  'https://system-track-monitor.web.app/api/users/vehicles?userId=USER_DOC_ID' \
+  'https://system-track-monitor.web.app/api/vehicles?userId=USER_DOC_ID' \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
 ```
 
-**Respuestas:** 200 con JSON. Para personalData: objeto con `email` (del usuario) más campos de la subcolección; si la subcolección está vacía, 200 con email y el resto en null. Para healthData: objeto único (404 si vacía). Para emergencyContacts, vehicles, membership: array. 400 si falta userId o sección inválida. 404 si el usuario no existe o, en healthData, si la subcolección está vacía. 401 si el token es inválido.
+**Respuestas:** 200 con JSON. Para personalData: objeto con `email` (del usuario) más campos de la subcolección; si la subcolección está vacía, 200 con email y el resto en null. Para healthData: objeto único (404 si vacía). Para emergencyContacts y membership: array. 400 si falta userId o sección inválida. 404 si el usuario no existe o, en healthData, si la subcolección está vacía. 401 si el token es inválido.
 
 ### 4.1.1 `subscribedEvents` (eventos suscritos del usuario)
 
@@ -688,14 +688,14 @@ curl -X GET \
 firebase deploy --only functions:user_route
 ```
 
-### 4.2 Eliminar contacto de emergencia o vehículo (DELETE /api/users/{section})
+### 4.2 Eliminar contacto de emergencia o vehículo legacy (DELETE /api/users/{section})
 
-Permite eliminar **un** documento de la subcolección `emergencyContacts` o `vehicles` del usuario. Servido por **user_route** en DELETE. Solo están permitidas las secciones `emergencyContacts` y `vehicles`.
+Permite eliminar **un** documento de la subcolección `emergencyContacts` del usuario. También mantiene compatibilidad para `vehicles` en rutas legacy. Servido por **user_route** en DELETE.
 
 **Paths:**
 
 - `DELETE /api/users/emergencyContacts?userId={userId}&id={documentId}` — Elimina el contacto en `users/{userId}/emergencyContacts/{documentId}`.
-- `DELETE /api/users/vehicles?userId={userId}&id={vehicleId}` — Elimina el vehículo en `users/{userId}/vehicles/{vehicleId}`.
+- `DELETE /api/users/vehicles?userId={userId}&id={vehicleId}` — Compatibilidad legacy. Recomendado usar `DELETE /api/vehicles/{vehicleId}?userId={userId}&authUserId={authUserId}`.
 
 **Query params:** `userId` (requerido) — ID del documento del usuario en `users`. `id` (requerido) — ID del documento a eliminar dentro de la subcolección.
 
@@ -711,13 +711,7 @@ curl -X DELETE \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
 ```
 
-**Ejemplo cURL (eliminar vehículo):**
-
-```bash
-curl -X DELETE \
-  'https://system-track-monitor.web.app/api/users/vehicles?userId=USER_DOC_ID&id=VEHICLE_DOC_ID' \
-  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
-```
+**Nota:** La eliminación de vehículos se realiza en la ruta oficial `DELETE /api/vehicles/{vehicleId}?userId={userId}&authUserId={authUserId}` en el package **Vehicles**.
 
 ### 5. `create` (crear usuario)
 
@@ -1024,17 +1018,17 @@ curl -X GET \
 
 ### 2. Crear vehículo – POST `/api/vehicles` (SPRTMNTRPP-71)
 
-Crea un vehículo para un usuario. Mismo path que GET; método **POST**. Requiere Bearer token, `userId`, `authUserId` y body con `branch`, `year`, `model`, `color`. El usuario debe existir y su campo `authUserId` debe coincidir con el enviado.
+Crea un vehículo para un usuario. Mismo path que GET; método **POST**. Requiere Bearer token, `userId` y body con `branch`, `year`, `model`, `color`. El usuario debe existir.
 
 **Tipo**: HTTP Request (POST)  
-**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/vehicles?userId={userId}&authUserId={authUserId}`
+**Endpoint con Hosting (oficial)**: `https://system-track-monitor.web.app/api/vehicles?userId={userId}`  
+**Compatibilidad temporal**: también acepta `https://system-track-monitor.web.app/api/users/profile/vehicles?userId={userId}`
 
 #### Query Parameters
 
-| Parámetro    | Tipo   | Requerido | Descripción                                                             |
-| ------------ | ------ | --------- | ----------------------------------------------------------------------- |
-| `userId`     | string | **Sí**    | UUID del usuario (documento en `users`)                                 |
-| `authUserId` | string | **Sí**    | UUID de autenticación del usuario (debe coincidir con el del documento) |
+| Parámetro | Tipo   | Requerido | Descripción                             |
+| --------- | ------ | --------- | --------------------------------------- |
+| `userId`  | string | **Sí**    | UUID del usuario (documento en `users`) |
 
 #### Request Body (JSON)
 
@@ -1049,7 +1043,7 @@ Crea un vehículo para un usuario. Mismo path que GET; método **POST**. Requier
 
 ```bash
 curl -X POST \
-  'https://system-track-monitor.web.app/api/vehicles?userId=UUID_USUARIO&authUserId=AUTH_UID' \
+  'https://system-track-monitor.web.app/api/vehicles?userId=UUID_USUARIO' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer TU_TOKEN' \
   -d '{"branch":"Toyota","year":2024,"model":"Corolla","color":"Blanco"}'
@@ -1059,28 +1053,27 @@ curl -X POST \
 
 **201 Created** – Objeto del vehículo creado: `{id, branch, year, model, color, createdAt, updatedAt}` (sin wrapper).
 
-**400** – Parámetros o body inválidos (userId/authUserId faltantes, body mal formado, year no entero).
+**400** – Parámetros o body inválidos (userId faltante, body mal formado, year no entero).
 
 **401** – Token inválido o faltante.
 
-**404** – Usuario no encontrado o `authUserId` no coincide con el documento.
+**404** – Usuario no encontrado.
 
 **500** – Error interno.
 
 ### 3. Actualizar vehículo – PUT `/api/vehicles/{vehicleId}` (SPRTMNTRPP-72)
 
-Actualiza un vehículo existente. Requiere Bearer token, `userId`, `authUserId` (query) y body con `branch`, `year`, `model`, `color`. No modifica `createdAt`.
+Actualiza un vehículo existente. Requiere Bearer token, `userId` (query) y body con `branch`, `year`, `model`, `color`. No modifica `createdAt`.
 
 **Tipo**: HTTP Request (PUT)  
-**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/vehicles/{vehicleId}?userId={userId}&authUserId={authUserId}`
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/vehicles/{vehicleId}?userId={userId}`
 
 #### Path y Query
 
-| Dónde | Parámetro    | Tipo   | Requerido | Descripción                                                |
-| ----- | ------------ | ------ | --------- | ---------------------------------------------------------- |
-| Path  | `vehicleId`  | string | **Sí**    | UUID del vehículo (documento en `users/{userId}/vehicles`) |
-| Query | `userId`     | string | **Sí**    | UUID del usuario                                           |
-| Query | `authUserId` | string | **Sí**    | UUID de autenticación (debe coincidir con el del usuario)  |
+| Dónde | Parámetro   | Tipo   | Requerido | Descripción                                                |
+| ----- | ----------- | ------ | --------- | ---------------------------------------------------------- |
+| Path  | `vehicleId` | string | **Sí**    | UUID del vehículo (documento en `users/{userId}/vehicles`) |
+| Query | `userId`    | string | **Sí**    | UUID del usuario                                           |
 
 #### Request Body (JSON)
 
@@ -1095,7 +1088,7 @@ Actualiza un vehículo existente. Requiere Bearer token, `userId`, `authUserId` 
 
 ```bash
 curl -X PUT \
-  'https://system-track-monitor.web.app/api/vehicles/VEHICLE_ID?userId=USER_ID&authUserId=AUTH_UID' \
+  'https://system-track-monitor.web.app/api/vehicles/VEHICLE_ID?userId=USER_ID' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer TU_TOKEN' \
   -d '{"branch":"Toyota","year":2025,"model":"Corolla","color":"Negro"}'
@@ -1105,7 +1098,7 @@ curl -X PUT \
 
 **200 OK** – Vehículo actualizado: `{id, branch, year, model, color, createdAt, updatedAt}` (sin wrapper).
 
-**400** – Parámetros o body inválidos. **401** – Token inválido o faltante. **404** – Usuario no encontrado, authUserId no coincide o vehículo no existe. **500** – Error interno.
+**400** – Parámetros o body inválidos. **401** – Token inválido o faltante. **404** – Usuario no encontrado o vehículo no existe. **500** – Error interno.
 
 ### 4. Eliminar vehículo – DELETE `/api/vehicles/{vehicleId}` (SPRTMNTRPP-73)
 

@@ -1,9 +1,11 @@
 """
 Delete Vehicle - SPRTMNTRPP-73
 
-Cloud Function DELETE para eliminar un vehículo de un usuario en Firestore.
+Elimina un vehiculo de un usuario en Firestore.
 Path: /api/vehicles/{vehicleId}. Query: userId, authUserId.
 Respuesta exitosa: 204 No Content.
+
+Logica de negocio unicamente. La validacion CORS y Bearer token la realiza vehicle_route.
 """
 
 import logging
@@ -12,8 +14,6 @@ from typing import TYPE_CHECKING
 from firebase_admin import firestore
 from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
-from utils.helper_http import verify_bearer_token
-from utils.helper_http_verb import validate_request
 
 if TYPE_CHECKING:
     from firebase_admin.firestore import Client as FirestoreClient
@@ -46,7 +46,7 @@ def _validate_user_and_auth(
 
 
 def _validate_vehicle(db: "FirestoreClient", user_id: str, vehicle_id: str) -> bool:
-    """Comprueba que el vehículo exista en users/{userId}/vehicles/{vehicleId}."""
+    """Comprueba que el vehiculo exista en users/{userId}/vehicles/{vehicleId}."""
     vehicle_ref = (
         db.collection(FirestoreCollections.USERS)
         .document(user_id)
@@ -59,7 +59,7 @@ def _validate_vehicle(db: "FirestoreClient", user_id: str, vehicle_id: str) -> b
 def _delete_vehicle_from_firestore(
     db: "FirestoreClient", user_id: str, vehicle_id: str
 ) -> None:
-    """Elimina el documento del vehículo en Firestore."""
+    """Elimina el documento del vehiculo en Firestore."""
     vehicle_ref = (
         db.collection(FirestoreCollections.USERS)
         .document(user_id)
@@ -78,27 +78,21 @@ def _cors_headers_204() -> dict:
     }
 
 
-@https_fn.on_request()
-def delete_vehicle(req: https_fn.Request) -> https_fn.Response:
+def handle(req: https_fn.Request) -> https_fn.Response:
     """
-    Elimina un vehículo. Path: /api/vehicles/{vehicleId}. Query: userId, authUserId.
-    Retorna 204 No Content en éxito.
-    """
-    validation_response = validate_request(
-        req, ["DELETE"], "delete_vehicle", return_json_error=False
-    )
-    if validation_response is not None:
-        return validation_response
+    Elimina un vehiculo.
+    Asume request ya validado (CORS, Bearer token) por vehicle_route.
 
+    Path: /api/vehicles/{vehicleId}
+    Query: userId, authUserId
+
+    Returns:
+    - 204: eliminado correctamente
+    - 400: parametros faltantes
+    - 404: usuario/vehiculo no encontrado
+    - 500: error interno
+    """
     try:
-        if not verify_bearer_token(req, "delete_vehicle"):
-            logging.warning("%s Token inválido o faltante", LOG_PREFIX)
-            return https_fn.Response(
-                "",
-                status=401,
-                headers=_cors_headers_204(),
-            )
-
         vehicle_id = _vehicle_id_from_path(getattr(req, "path", "") or "")
         if not vehicle_id:
             vehicle_id = (req.args.get("vehicleId") or "").strip()
@@ -114,14 +108,14 @@ def delete_vehicle(req: https_fn.Request) -> https_fn.Response:
         auth_user_id = (req.args.get("authUserId") or "").strip()
 
         if not user_id:
-            logging.warning("%s userId faltante o vacío", LOG_PREFIX)
+            logging.warning("%s userId faltante o vacio", LOG_PREFIX)
             return https_fn.Response(
                 "",
                 status=400,
                 headers=_cors_headers_204(),
             )
         if not auth_user_id:
-            logging.warning("%s authUserId faltante o vacío", LOG_PREFIX)
+            logging.warning("%s authUserId faltante o vacio", LOG_PREFIX)
             return https_fn.Response(
                 "",
                 status=400,
@@ -143,7 +137,7 @@ def delete_vehicle(req: https_fn.Request) -> https_fn.Response:
 
         if not _validate_vehicle(db, user_id, vehicle_id):
             logging.warning(
-                "%s Vehículo no encontrado: userId=%s, vehicleId=%s",
+                "%s Vehiculo no encontrado: userId=%s, vehicleId=%s",
                 LOG_PREFIX,
                 user_id,
                 vehicle_id,
@@ -157,7 +151,7 @@ def delete_vehicle(req: https_fn.Request) -> https_fn.Response:
         _delete_vehicle_from_firestore(db, user_id, vehicle_id)
 
         logging.info(
-            "%s Vehículo eliminado: userId=%s, vehicleId=%s",
+            "%s Vehiculo eliminado: userId=%s, vehicleId=%s",
             LOG_PREFIX,
             user_id,
             vehicle_id,

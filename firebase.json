@@ -83,6 +83,16 @@
         "region": "us-central1"
       },
       {
+        "source": "/api/users/profile/vehicles",
+        "function": "vehicle_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/users/profile/vehicles/**",
+        "function": "vehicle_route",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/users/profile",
         "function": "user_route",
         "region": "us-central1"
@@ -164,17 +174,17 @@
       },
       {
         "source": "/api/vehicles",
-        "function": "get_vehicles",
+        "function": "vehicle_route",
         "region": "us-central1"
       },
       {
         "source": "/api/vehicles/search",
-        "function": "search_vehicle",
+        "function": "vehicle_route",
         "region": "us-central1"
       },
       {
         "source": "/api/vehicles/**",
-        "function": "update_vehicle",
+        "function": "vehicle_route",
         "region": "us-central1"
       },
       {
@@ -313,7 +323,7 @@
           },
           {
             "key": "Access-Control-Allow-Methods",
-            "value": "GET, POST, PUT, OPTIONS"
+            "value": "GET, POST, PUT, DELETE, OPTIONS"
           },
           {
             "key": "Access-Control-Allow-Headers",

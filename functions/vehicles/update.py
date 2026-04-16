@@ -1,8 +1,10 @@
 """
 Update Vehicle - SPRTMNTRPP-72
 
-Cloud Function PUT para actualizar un vehículo de un usuario en Firestore.
-Path: /api/vehicles/{vehicleId}. Query: userId, authUserId. Body: branch, year, model, color.
+Actualiza un vehiculo de un usuario en Firestore.
+Path: /api/vehicles/{vehicleId}. Query: userId. Body: branch, year, model, color.
+
+Logica de negocio unicamente. La validacion CORS y Bearer token la realiza vehicle_route.
 """
 
 import json
@@ -13,11 +15,6 @@ from typing import Any, Dict
 from firebase_admin import firestore
 from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
-from utils.helper_http import verify_bearer_token
-from utils.helper_http_verb import validate_request
-from utils.helpers import convert_firestore_value
-
-from vehicles.delete_vehicle import delete_vehicle as delete_vehicle_handler
 
 LOG = logging.getLogger(__name__)
 LOG_PREFIX = "[update_vehicle]"
@@ -28,27 +25,22 @@ def _vehicle_id_from_path(path: str) -> str | None:
     if not path:
         return None
     parts = [p for p in path.rstrip("/").split("/") if p]
-    # ["api", "vehicles", "vehicleId"] -> vehicleId
     if len(parts) >= 3 and parts[0] == "api" and parts[1] == "vehicles":
         return parts[2] if len(parts) > 2 else None
     return None
 
 
-def _validate_user_and_auth(db, user_id: str, auth_user_id: str) -> bool:
-    """Comprueba que el usuario exista y que authUserId coincida."""
+def _validate_user_exists(db, user_id: str) -> bool:
+    """Comprueba que el usuario exista."""
     user_ref = db.collection(FirestoreCollections.USERS).document(user_id)
     user_doc = user_ref.get()
-    if not user_doc.exists:
-        return False
-    data = user_doc.to_dict() or {}
-    doc_auth_uid = (data.get("authUserId") or "").strip()
-    return doc_auth_uid == auth_user_id.strip()
+    return user_doc.exists
 
 
 def _validate_body(body: Dict[str, Any]) -> str | None:
-    """Valida el body. Retorna None si es válido, o mensaje de error."""
+    """Valida el body. Retorna None si es valido, o mensaje de error."""
     if not body or not isinstance(body, dict):
-        return "Request body inválido o faltante"
+        return "Request body invalido o faltante"
     if not body.get("branch") or not isinstance(body.get("branch"), str):
         return "branch es requerido y debe ser string"
     if not body.get("model") or not isinstance(body.get("model"), str):
@@ -61,36 +53,36 @@ def _validate_body(body: Dict[str, Any]) -> str | None:
     try:
         y = int(year)
         if y < 1900 or y > 2100:
-            return "year debe ser un año válido (1900-2100)"
+            return "year debe ser un ano valido (1900-2100)"
     except (TypeError, ValueError):
         return "year debe ser un entero"
+    photo_url = body.get("photoUrl")
+    if photo_url is not None:
+        if not isinstance(photo_url, str) or not photo_url.strip():
+            return "photoUrl debe ser un string no vacio"
+    mileage_km = body.get("mileageKm")
+    if mileage_km is not None:
+        if not isinstance(mileage_km, int) or isinstance(mileage_km, bool) or mileage_km < 0:
+            return "mileageKm debe ser un entero >= 0"
     return None
 
 
-@https_fn.on_request()
-def update_vehicle(req: https_fn.Request) -> https_fn.Response:
+def handle(req: https_fn.Request) -> https_fn.Response:
     """
-    Actualiza un vehículo. Path: /api/vehicles/{vehicleId}. Query: userId, authUserId.
-    Body: { branch, year, model, color }. No modifica createdAt.
+    Actualiza un vehiculo.
+    Asume request ya validado (CORS, Bearer token) por vehicle_route.
+
+    Path: /api/vehicles/{vehicleId}
+    Query: userId
+    Body: { branch, year, model, color, photoUrl?, mileageKm? }
+
+    Returns:
+    - 200: JSON con vehiculo actualizado
+    - 400: parametros faltantes o body invalido
+    - 404: usuario/vehiculo no encontrado
+    - 500: error interno
     """
-    validation_response = validate_request(
-        req, ["PUT", "DELETE"], "update_vehicle", return_json_error=False
-    )
-    if validation_response is not None:
-        return validation_response
-
-    if req.method == "DELETE":
-        return delete_vehicle_handler(req)
-
     try:
-        if not verify_bearer_token(req, "update_vehicle"):
-            logging.warning("%s Token inválido o faltante", LOG_PREFIX)
-            return https_fn.Response(
-                "",
-                status=401,
-                headers={"Access-Control-Allow-Origin": "*"},
-            )
-
         vehicle_id = _vehicle_id_from_path(getattr(req, "path", "") or "")
         if not vehicle_id:
             vehicle_id = (req.args.get("vehicleId") or "").strip()
@@ -103,17 +95,8 @@ def update_vehicle(req: https_fn.Request) -> https_fn.Response:
             )
 
         user_id = (req.args.get("userId") or "").strip()
-        auth_user_id = (req.args.get("authUserId") or "").strip()
-
         if not user_id:
-            logging.warning("%s userId faltante o vacío", LOG_PREFIX)
-            return https_fn.Response(
-                "",
-                status=400,
-                headers={"Access-Control-Allow-Origin": "*"},
-            )
-        if not auth_user_id:
-            logging.warning("%s authUserId faltante o vacío", LOG_PREFIX)
+            logging.warning("%s userId faltante o vacio", LOG_PREFIX)
             return https_fn.Response(
                 "",
                 status=400,
@@ -141,9 +124,9 @@ def update_vehicle(req: https_fn.Request) -> https_fn.Response:
             )
 
         db = firestore.client()
-        if not _validate_user_and_auth(db, user_id, auth_user_id):
+        if not _validate_user_exists(db, user_id):
             logging.warning(
-                "%s Usuario no encontrado o authUserId no coincide: userId=%s",
+                "%s Usuario no encontrado: userId=%s",
                 LOG_PREFIX,
                 user_id,
             )
@@ -162,7 +145,7 @@ def update_vehicle(req: https_fn.Request) -> https_fn.Response:
         vehicle_doc = vehicle_ref.get()
         if not vehicle_doc.exists:
             logging.warning(
-                "%s Vehículo no encontrado: userId=%s, vehicleId=%s",
+                "%s Vehiculo no encontrado: userId=%s, vehicleId=%s",
                 LOG_PREFIX,
                 user_id,
                 vehicle_id,
@@ -176,7 +159,6 @@ def update_vehicle(req: https_fn.Request) -> https_fn.Response:
         existing = vehicle_doc.to_dict() or {}
         year_val = int(body["year"])
         now = datetime.now(timezone.utc)
-        iso_now = now.isoformat().replace("+00:00", "Z")
 
         update_data = {
             "branch": str(body["branch"]).strip(),
@@ -185,9 +167,11 @@ def update_vehicle(req: https_fn.Request) -> https_fn.Response:
             "color": str(body["color"]).strip(),
             "updatedAt": now,
         }
+        if body.get("photoUrl") is not None:
+            update_data["photoUrl"] = str(body["photoUrl"]).strip()
+        if body.get("mileageKm") is not None:
+            update_data["mileageKm"] = int(body["mileageKm"])
         vehicle_ref.update(update_data)
-
-        created_iso = convert_firestore_value(existing.get("createdAt")) or iso_now
 
         result = {
             "id": vehicle_id,
@@ -195,12 +179,18 @@ def update_vehicle(req: https_fn.Request) -> https_fn.Response:
             "year": update_data["year"],
             "model": update_data["model"],
             "color": update_data["color"],
-            "createdAt": created_iso,
-            "updatedAt": iso_now,
         }
+        if "photoUrl" in update_data:
+            result["photoUrl"] = update_data["photoUrl"]
+        elif existing.get("photoUrl"):
+            result["photoUrl"] = existing["photoUrl"]
+        if "mileageKm" in update_data:
+            result["mileageKm"] = update_data["mileageKm"]
+        elif existing.get("mileageKm") is not None:
+            result["mileageKm"] = existing["mileageKm"]
 
         logging.info(
-            "%s Vehículo actualizado: userId=%s, vehicleId=%s",
+            "%s Vehiculo actualizado: userId=%s, vehicleId=%s",
             LOG_PREFIX,
             user_id,
             vehicle_id,
@@ -218,7 +208,7 @@ def update_vehicle(req: https_fn.Request) -> https_fn.Response:
         )
 
     except ValueError as e:
-        logging.error("%s Error de validación: %s", LOG_PREFIX, e)
+        logging.error("%s Error de validacion: %s", LOG_PREFIX, e)
         return https_fn.Response(
             "",
             status=400,
