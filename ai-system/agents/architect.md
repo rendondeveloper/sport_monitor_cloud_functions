@@ -34,6 +34,7 @@ Antes de responder cualquier request, lee:
 - **Nunca** escribir, editar o refactorizar código de aplicación (source bajo `functions/`). Ese trabajo pertenece a los agentes especialistas.
 - **Permitido** editar solo artefactos bajo `ai-system/` que pertenecen a coordinación — típicamente `changes/` tracking files (`handoff.md`, opcional `progress.md`) y apuntar a especialistas a rutas; **no** usar esta excepción para parchear código de producto "solo una vez."
 - **Skills** (`sdd_explore`, `sdd_design`, `sdd_verify`) son dueños de sus outputs (`explore.md`, `design.md`, `verify-report.md`). El Architect no reescribe esos archivos para bypasear el skill; invocar o re-invocar el skill en su lugar.
+- Para **cualquier cambio en una función** (crear, modificar, eliminar), el Architect debe **delegar** la implementación a un agente especialista y esperar resultado; no puede ejecutar cambios de aplicación directamente.
 
 ---
 
@@ -133,6 +134,7 @@ Wave 1 (parallel):
     [4. Crear helper utils/nuevo_helper.py si aplica]
 
   functions-endpoint:
+    0. Leer y resumir la docstring/descripcion actual de la función objetivo (si existe) antes de editar
     1. Crear functions/competitors/nueva_funcion.py
     2. Template: region=us-east4, método GET, params: eventId (requerido)
     3. Query: helper.query_documents(path, filters=[...])
@@ -146,8 +148,16 @@ Wave 2:
 
 Wave 3 (OBLIGATORIO):
   functions-docs:
+    - Actualizar docstring/descripcion de cada función creada o modificada (mandatorio)
     - Actualizar functions/competitors/README.md
+    - Actualizar README.md del proyecto cuando cambie endpoint/path/contrato
+    - Si cambia path, se crea endpoint o se elimina endpoint: sincronizar firebase.json + README.md
     - Añadir: método, URL, params, response shape, curl example, errores
+
+Wave 4 (OBLIGATORIO cuando tests pasan):
+  deploy-firebase-functions (skill):
+    - Delegar deploy de la(s) función(es) afectada(s)
+    - Reportar estado final de despliegue y validación básica post-deploy
 ```
 
 ### 7. Skills a invocar
@@ -173,8 +183,10 @@ Si no hay preguntas, omitir esta sección.
 Completar al final cuando todo esté listo:
 - Funciones creadas/modificadas
 - Tests pasando con cobertura
-- README actualizado
-- Comando de deploy
+- Docstring/descripcion de función actualizada (si aplica)
+- README de módulo y README del proyecto actualizados (si aplica)
+- firebase.json sincronizado para altas/bajas/cambio de path de endpoint (si aplica)
+- Deploy delegado ejecutado y estado final reportado
 
 ---
 
@@ -213,6 +225,10 @@ Actualizar `handoff.md` cuando una wave completa, una fase cambia, o antes de te
 11. Si un agente reporta una violación que no puede resolver autónomamente → rechazar y explicar antes de proceder
 12. Si scope es ambiguo → surfacear la ambigüedad y resolverla antes de delegar
 13. Si un cambio propuesto toca archivos fuera del scope planeado → detenerse y alertar al usuario
+14. Para cualquier función a crear/modificar/eliminar, **leer primero** su docstring/descripcion actual para contexto y reflejarlo en el plan delegado
+15. Para cualquier función modificada o creada, **actualizar siempre** su docstring/descripcion como salida obligatoria de la wave de documentación
+16. Si hay cambio de path, alta o baja de endpoint, **actualizar obligatoriamente** `firebase.json` y `README.md` del proyecto en la misma ejecución
+17. Si los tests de la función cambian y pasan, el Architect **debe delegar** deploy usando el skill de deploy y **reportar** el resultado final de despliegue
 
 ---
 
