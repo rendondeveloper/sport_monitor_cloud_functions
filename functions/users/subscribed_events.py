@@ -3,6 +3,7 @@ Eventos suscritos del usuario - Obtiene los eventos en los que el userId está s
 
 Lógica de negocio únicamente. La validación CORS y Bearer token la realiza user_route.
 Lee users/{userId}/membership, resuelve cada evento y su event_content, devuelve respuesta paginada.
+Cada ítem de evento usa el mismo shape que GET /api/events (EventShortDocument + overrides de event_content).
 Solo la respuesta 200 retorna JSON; errores retornan cuerpo vacío.
 """
 
@@ -10,11 +11,11 @@ import json
 import logging
 from typing import Any, Dict, List
 
+from events.event_short_document import EventShortDocument
 from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
 from models.paginated_response import PaginatedResponse
 from utils.firestore_helper import FirestoreHelper
-from utils.helpers import convert_firestore_value
 
 _CORS_HEADERS = {"Access-Control-Allow-Origin": "*"}
 _JSON_HEADERS = {
@@ -34,33 +35,27 @@ def _resolve_user_id(helper: FirestoreHelper, user_id: str) -> str | None:
     return user_id if doc is not None else None
 
 
-def _build_event_item(
+def _build_event_short_for_subscribed(
     event_id: str,
     event_doc: Dict[str, Any],
     event_content_doc: Dict[str, Any] | None,
 ) -> Dict[str, Any]:
-    """Construye un ítem de evento para la respuesta: id, name, description, status, startDateTime, endEvent, imageUrl."""
-    name = event_doc.get("name")
-    description = event_doc.get("description")
-    status = event_doc.get("status")
-
-    start_date_time = None
-    end_event = None
-    image_url = None
+    """
+    Misma forma que GET /api/events: EventShortDocument desde el doc del evento,
+    imageUrl y locationName desde event_content si existen (photoMain, address).
+    isEnrolled siempre true (lista de eventos en los que el usuario está suscrito).
+    """
+    event = EventShortDocument.from_firestore_data(event_doc, event_id)
+    event_dict = event.to_dict()
+    event_dict["isEnrolled"] = True
     if event_content_doc:
-        start_date_time = event_content_doc.get("startEvent")
-        end_event = event_content_doc.get("endEvent")
-        image_url = event_content_doc.get("photoMain")
-
-    return {
-        "id": event_id,
-        "name": convert_firestore_value(name),
-        "description": convert_firestore_value(description),
-        "status": convert_firestore_value(status),
-        "startDateTime": convert_firestore_value(start_date_time),
-        "endEvent": convert_firestore_value(end_event),
-        "imageUrl": convert_firestore_value(image_url),
-    }
+        photo_main = event_content_doc.get("photoMain")
+        address = event_content_doc.get("address")
+        if photo_main:
+            event_dict["imageUrl"] = photo_main
+        if address:
+            event_dict["locationName"] = address
+    return event_dict
 
 
 def handle(req: https_fn.Request) -> https_fn.Response:
@@ -68,6 +63,8 @@ def handle(req: https_fn.Request) -> https_fn.Response:
     GET /api/users/subscribedEvents?userId=xxx&limit=50&page=1
 
     Retorna eventos en los que el usuario está suscrito (membership), paginados.
+    Cada elemento de result coincide con el listado GET /api/events (title, subtitle,
+    status, startDateTime, locationName, imageUrl, isEnrolled siempre true).
     - 200: JSON con result (lista de eventos) y pagination. Única respuesta con cuerpo JSON.
     - 400: userId faltante o vacío (sin cuerpo).
     - 404: usuario no existe o membership vacío (sin cuerpo).
@@ -137,7 +134,11 @@ def handle(req: https_fn.Request) -> https_fn.Response:
             event_content_path = f"{FirestoreCollections.EVENTS}/{event_id}/{FirestoreCollections.EVENT_CONTENT}"
             event_content_results = helper.query_documents(event_content_path, limit=1)
             event_content_doc = event_content_results[0][1] if event_content_results else None
-            items.append(_build_event_item(event_id, event_doc, event_content_doc))
+            items.append(
+                _build_event_short_for_subscribed(
+                    event_id, event_doc, event_content_doc
+                )
+            )
 
         paginated = PaginatedResponse.create(
             items=items,

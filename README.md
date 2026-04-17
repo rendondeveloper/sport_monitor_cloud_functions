@@ -664,7 +664,7 @@ Obtiene los eventos en los que el usuario está suscrito (documentos en `users/{
 
 #### Respuesta 200 (única con JSON)
 
-- `result`: array de objetos, cada uno con: `id` (eventId), `name`, `description`, `status`, `startDateTime`, `endEvent`, `imageUrl` (de `event_content`: `startEvent`, `endEvent`, `photoMain`).
+- `result`: array de objetos con el **mismo shape** que cada evento en `GET /api/events` (listado corto): `id`, `title`, `subtitle`, `status`, `startDateTime`, `locationName`, `imageUrl`, `isEnrolled` (siempre `true` en esta ruta, el usuario está suscrito). Los datos base salen del documento del evento (`events/{eventId}`) vía `EventShortDocument`; `imageUrl` y `locationName` se sobrescriben desde el primer documento de `event_content` si existen `photoMain` y `address` (igual que en `/api/events`).
 - `pagination`: `limit`, `page`, `hasMore`, `count`, `lastDocId`.
 
 #### Errores (sin cuerpo JSON)
@@ -682,10 +682,10 @@ curl -X GET \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
 ```
 
-**Desplegar (incluye user_route con read, create, update, subscribedEvents, lectura por sección y DELETE por sección):**
+**Desplegar** (`user_route` tiene rewrites en Hosting; incluir `hosting` para que las rutas `/api/users/...` sigan apuntando a la función desplegada):
 
 ```bash
-firebase deploy --only functions:user_route
+firebase deploy --only functions:user_route,hosting
 ```
 
 ### 4.2 Eliminar contacto de emergencia o vehículo legacy (DELETE /api/users/{section})
@@ -4223,8 +4223,8 @@ firebase deploy --only functions:event_detail
 # Desplegar solo event_categories
 firebase deploy --only functions:event_categories
 
-# Desplegar user_route (read, create, update, subscribedEvents, lectura y DELETE por sección: /api/users/read, /api/users/profile, /api/users/{section}, /api/users/subscribedEvents, /api/users/create, /api/users/update)
-firebase deploy --only functions:user_route
+# Desplegar user_route + hosting (rewrites /api/users/... → user_route)
+firebase deploy --only functions:user_route,hosting
 
 # Desplegar solo get_vehicles
 firebase deploy --only functions:get_vehicles
