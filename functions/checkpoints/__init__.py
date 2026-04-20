@@ -2,6 +2,7 @@
 from .all_competitor_tracking import all_competitor_tracking
 from .change_competitor_status import change_competitor_status
 from .checkpoint import checkpoint
+from .checkpoint_route import checkpoint_route
 from .competitor_tracking import competitor_tracking
 from .day_of_race_active import day_of_race_active
 from .days_of_race import days_of_race
@@ -12,6 +13,7 @@ __all__ = [
     "change_competitor_status",
     "day_of_race_active",
     "checkpoint",
+    "checkpoint_route",
     "competitor_tracking",
     "days_of_race",
     "update_competitor_status",

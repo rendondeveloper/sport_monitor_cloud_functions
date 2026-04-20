@@ -113,8 +113,9 @@ def _build_historial_value(
     }
 
 
-@https_fn.on_request()
-def track_competitor_position(req: https_fn.Request) -> https_fn.Response:
+def _handle_track_competitor_position(
+    req: https_fn.Request, skip_request_validation: bool = False
+) -> https_fn.Response:
     """
     Recibe posición y datos del competidor en tiempo real y los guarda en Realtime Database.
 
@@ -142,11 +143,12 @@ def track_competitor_position(req: https_fn.Request) -> https_fn.Response:
     - 400: Parámetros o body inválidos
     - 500: Error interno
     """
-    validation_response = validate_request(
-        req, ["POST"], "track_competitor_position", return_json_error=False
-    )
-    if validation_response is not None:
-        return validation_response
+    if not skip_request_validation:
+        validation_response = validate_request(
+            req, ["POST"], "track_competitor_position", return_json_error=False
+        )
+        if validation_response is not None:
+            return validation_response
 
     try:
         event_id = (req.args.get("eventId") or "").strip()
@@ -292,3 +294,11 @@ def track_competitor_position(req: https_fn.Request) -> https_fn.Response:
             status=500,
             headers={"Access-Control-Allow-Origin": "*"},
         )
+
+
+@https_fn.on_request()
+def track_competitor_position(req: https_fn.Request) -> https_fn.Response:
+    """
+    Wrapper HTTP público para track_competitor_position.
+    """
+    return _handle_track_competitor_position(req, skip_request_validation=False)

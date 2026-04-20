@@ -1,5 +1,6 @@
 # Package: competitors - Funciones relacionadas con competidores y rutas
 from .competitor_route import competitor_route
+from .competitor_api_route import competitor_api_route
 from .create_competitor import create_competitor
 from .create_competitor_user import create_competitor_user
 from .delete_competitor import delete_competitor
@@ -13,6 +14,7 @@ from .list_competitors_by_event import list_competitors_by_event
 
 __all__ = [
     "competitor_route",
+    "competitor_api_route",
     "create_competitor",
     "create_competitor_user",
     "delete_competitor",

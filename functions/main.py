@@ -13,6 +13,7 @@ logging.basicConfig(
 
 # Importar funciones de competitors
 from competitors import (
+    competitor_api_route,
     competitor_route,
     create_competitor,
     create_competitor_user,
@@ -27,13 +28,14 @@ from competitors import (
 )
 
 # Importar funciones de staff
-from staff import create_staff_user
+from staff import create_staff_user, staff_route
 
 # Importar funciones de checkpoints
 from checkpoints import (
     all_competitor_tracking,
     change_competitor_status,
     checkpoint,
+    checkpoint_route,
     competitor_tracking,
     day_of_race_active,
     days_of_race,
@@ -41,13 +43,13 @@ from checkpoints import (
 )
 
 # Importar funciones de events
-from events import event_categories, event_detail, events
+from events import event_categories, event_detail, event_route, events
 import os
 from firebase_admin import initialize_app
 from firebase_functions.options import set_global_options
 
 # Importar funciones de tracking
-from tracking.track_competitor_position import track_competitor_position
+from tracking import tracking_route
 from tracking.tracking_checkpoint import track_event_checkpoint
 from tracking.tracking_competitors import track_competitors, track_competitors_off
 
@@ -82,6 +84,7 @@ initialize_app(options=_options if _options else None)
 # - events: events/events_customer.py
 # - event_detail: events/events_detail_customer.py
 # - event_categories: events/event_categories.py
+# - event_route: events/event_route.py (router: /api/events, /api/events/detail, /api/event/event-categories/**)
 # - user_route: users/user_route.py (router: /api/users/read, /api/users/profile, /api/users/create, /api/users/update)
 # - day_of_race_active: checkpoints/day_of_race_active.py
 # - checkpoint: checkpoints/checkpoint.py
@@ -101,3 +104,4 @@ initialize_app(options=_options if _options else None)
 # - get_competitor_by_id: competitors/get_competitor_by_id.py
 # - get_competitors_by_event: competitors/get_competitors_by_event.py
 # - create_staff_user: staff/create_staff_user.py
+# - staff_route: staff/staff_route.py (router: /api/create_staff_user)
