@@ -50,7 +50,7 @@ _REQUIRED_TOP_FIELDS = [
     "email",
 ]
 
-_REQUIRED_COMPETITION_FIELDS = ["eventId", "category"]
+_REQUIRED_COMPETITION_FIELDS = ["eventId"]
 
 # Nombres de subcolecciones (fallback si no existen en FirestoreCollections)
 _USER_PERSONAL_DATA = getattr(
@@ -73,8 +73,9 @@ def _validate_request_data(request_data: Dict[str, Any]) -> Optional[str]:
     """
     Valida el request body. Requerido: email.
     Si competition no existe, se crea con valores por defecto.
-    Campos de competition: eventId, category (requeridos); number (opcional).
+    Campos de competition: eventId (requerido); category y number (opcionales).
     source: campo opcional en la raíz del request (ej: "web", "mobile-ios", "mobile-android").
+    system: campo opcional en la raíz del request (ej: "rally-app", "backoffice").
 
     Returns:
         None si todo es válido, string con descripción del error si falla.
@@ -146,6 +147,67 @@ def _validate_request_data(request_data: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _event_has_categories(helper: FirestoreHelper, event_id: str) -> bool:
+    """
+    Retorna True si el evento tiene al menos una categoría en
+    events/{eventId}/event_categories.
+    """
+    categories_path = (
+        f"{FirestoreCollections.EVENTS}/{event_id}"
+        f"/{FirestoreCollections.EVENT_CATEGORIES}"
+    )
+    categories = helper.query_documents(categories_path, limit=1)
+    return len(categories) > 0
+
+
+def _validate_competition_category_requirement(
+    helper: FirestoreHelper,
+    request_data: Dict[str, Any],
+) -> Optional[https_fn.Response]:
+    """
+    Valida de forma condicional competition.category:
+    - Si el evento no existe -> 404.
+    - Si el evento tiene categorías -> category es obligatoria (400 si falta/vacía).
+    - Si el evento no tiene categorías -> category puede omitirse o ir vacía.
+    """
+    competition = request_data.get("competition") or {}
+    event_id = (competition.get("eventId") or "").strip()
+
+    # eventId se valida previamente en _validate_request_data, pero proteger por robustez.
+    if not event_id:
+        return https_fn.Response(
+            "",
+            status=400,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    if not _validate_event_exists(helper, event_id):
+        LOG.warning("%s Evento no encontrado: %s", LOG_PREFIX, event_id)
+        return https_fn.Response(
+            "",
+            status=404,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    if not _event_has_categories(helper, event_id):
+        return None
+
+    category = (competition.get("category") or "").strip()
+    if not category:
+        LOG.warning(
+            "%s competition.category es obligatorio para eventos con categorías: %s",
+            LOG_PREFIX,
+            event_id,
+        )
+        return https_fn.Response(
+            "",
+            status=400,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    return None
+
+
 def _validate_unique_email(helper: FirestoreHelper, email: str) -> bool:
     """Verifica si el email ya está registrado. Retorna True si existe."""
     results = helper.query_documents(
@@ -181,6 +243,26 @@ def _build_user_document(request_data: Dict[str, Any]) -> Dict[str, Any]:
         "createdAt": now,
         "updatedAt": now,
     }
+
+
+def _apply_source_and_system_fields(
+    competitor_doc: Dict[str, Any], request_data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Agrega campos opcionales de tracking de origen en el documento del participante.
+    Se persisten exactamente como llegan en el payload raíz:
+    - source
+    - system
+    """
+    source = request_data.get("source")
+    if source is not None:
+        competitor_doc["source"] = source
+
+    system = request_data.get("system")
+    if system is not None:
+        competitor_doc["system"] = system
+
+    return competitor_doc
 
 
 def _build_vehicle_document(request_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -585,13 +667,6 @@ def _create_competitor_for_existing_user(
     competition = request_data.get("competition", {})
     event_id = competition.get("eventId", "")
 
-    # Verificar que el evento exista
-    if not _validate_event_exists(helper, event_id):
-        LOG.warning("%s [FlujoB] Evento no encontrado: %s", LOG_PREFIX, event_id)
-        return https_fn.Response(
-            "", status=404, headers={"Access-Control-Allow-Origin": "*"}
-        )
-
     # Verificar que NO sea ya participante del evento → 409
     collection_path = _get_collection_path(event_id)
     if helper.get_document(collection_path, user_id) is not None:
@@ -656,6 +731,7 @@ def _create_competitor_for_existing_user(
 
     # Crear participante en el evento
     competitor_doc = _build_competitor_document(request_data, user_id)
+    competitor_doc = _apply_source_and_system_fields(competitor_doc, request_data)
     helper.create_document_with_id(collection_path, user_id, competitor_doc)
     LOG.info(
         "%s [FlujoB] Participante creado: userId=%s eventId=%s",
@@ -701,10 +777,13 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
     Request Body (JSON):
     Requeridos:
     - email: string (raíz) - formato válido
-    - competition: object - eventId, category (requeridos); number (opcional), team (opcional).
+    - competition: object - eventId (requerido), number/team (opcionales) y
+      category condicional (obligatorio solo si el evento tiene categorías en
+      events/{eventId}/event_categories).
       Si no se envía, se crea con valores por defecto.
     Opcionales:
     - source: string - origen de la solicitud (ej: "web", "mobile-ios", "mobile-android")
+    - system: string - sistema origen de la solicitud (ej: "rally-app", "backoffice")
     - personalData: object - fullName, phone, dateOfBirth, address, city, state, country, postalCode
     - healthData: object - bloodType, socialSecurityNumber, medications, medicalConditions, insuranceProvider, insuranceNumber
     - emergencyContacts: array - cada elemento: fullName, phone, relationship (opcional)
@@ -768,6 +847,14 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
         helper = FirestoreHelper()
         email = request_data.get("email", "")
         username = request_data.get("username", "")
+        event_id = (request_data.get("competition", {}).get("eventId", "") or "").strip()
+
+        # Validación condicional única para category y existencia de evento
+        competition_validation_response = _validate_competition_category_requirement(
+            helper, request_data
+        )
+        if competition_validation_response is not None:
+            return competition_validation_response
 
         # Verificar si el usuario ya existe → Flujo B
         existing_user = _find_existing_user_by_email(helper, email)
@@ -798,7 +885,6 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
         except Exception:
             raise
 
-        event_id = request_data.get("competition", {}).get("eventId", "")
         emergency_contacts = request_data.get("emergencyContacts") or []
         if not isinstance(emergency_contacts, list):
             emergency_contacts = []
@@ -966,26 +1052,6 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
 
         # PASO 4: Crear participante en events/{eventId}/participants (mismo id que users)
         collection_path = _get_collection_path(event_id)
-        if not _validate_event_exists(helper, event_id):
-            LOG.warning("%s Evento no encontrado: %s", LOG_PREFIX, event_id)
-            _rollback_user_creation(
-                helper,
-                user_id,
-                event_id,
-                rollback_subcollections=True,
-                created_personal_data_id=created_personal_data_id,
-                created_health_data_id=created_health_data_id,
-                created_emergency_contact_ids=created_emergency_contact_ids,
-                created_vehicle_id=created_vehicle_id,
-                created_event_ec_ids=created_emergency_contact_ids,
-                created_event_vehicle_id=created_vehicle_id,
-            )
-            return https_fn.Response(
-                "",
-                status=404,
-                headers={"Access-Control-Allow-Origin": "*"},
-            )
-
         existing_participant = helper.get_document(collection_path, user_id)
         if existing_participant is not None:
             LOG.warning(
@@ -1041,6 +1107,9 @@ def create_competitor_user(req: https_fn.Request) -> https_fn.Response:
 
         try:
             competitor_doc = _build_competitor_document(request_data, user_id)
+            competitor_doc = _apply_source_and_system_fields(
+                competitor_doc, request_data
+            )
             helper.create_document_with_id(collection_path, user_id, competitor_doc)
         except Exception:
             _rollback_user_creation(

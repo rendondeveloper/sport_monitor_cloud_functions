@@ -83,6 +83,8 @@ def valid_request_body():
             "category": "Pro",
             "team": "Team Red Bull",
         },
+        "source": "mobile-ios",
+        "system": "rally-app",
     }
 
 
@@ -134,6 +136,9 @@ class TestCreateCompetitorUserHappyPath:
         data = json.loads(response.response[0])
         assert data["id"] == "user_abc"
         assert data["membershipId"] == "event456"
+        participant_doc = mock_firestore_helper.create_document_with_id.call_args_list[-1].args[2]
+        assert participant_doc["source"] == "mobile-ios"
+        assert participant_doc["system"] == "rally-app"
 
     def test_create_user_without_optional_fields(
         self,
@@ -258,8 +263,12 @@ class TestCreateCompetitorUserDuplicate:
     ):
         from competitors.create_competitor_user import create_competitor_user
 
-        # Primera query (email) no tiene resultados, segunda (username) sí
+        # Orden de queries:
+        # 1) event_categories (validación condicional category)
+        # 2) email existente
+        # 3) username duplicado
         mock_firestore_helper.query_documents.side_effect = [
+            [],
             [],
             [("existing_user", {"username": "juanperez"})],
         ]
@@ -476,13 +485,13 @@ class TestCreateCompetitorUserEventValidation:
     ):
         from competitors.create_competitor_user import create_competitor_user
 
-        self._setup_until_step4(mock_firestore_helper)
+        mock_firestore_helper.query_documents.return_value = []
         mock_firestore_helper.get_document.return_value = None
 
         req = _make_request(body=valid_request_body)
         response = create_competitor_user(req)
         assert response.status_code == 404
-        mock_firestore_helper.delete_document.assert_called()
+        mock_firestore_helper.delete_document.assert_not_called()
 
     def test_existing_participant_returns_409(
         self,
@@ -518,8 +527,10 @@ class TestCreateCompetitorUserEventValidation:
         mock_firestore_helper.get_document.side_effect = [{"name": "Event"}, None]
         # piloto duplicado
         mock_firestore_helper.query_documents.side_effect = [
-            [], [],
-            [("dup_id", {"competitionCategory": {"pilotNumber": "42"}})],
+            [],  # event_categories -> no categories
+            [],  # find existing by email
+            [],  # validate unique username
+            [("dup_id", {"competitionCategory": {"pilotNumber": "42"}})],  # pilot duplicate
         ]
 
         req = _make_request(body=valid_request_body)
@@ -715,3 +726,87 @@ class TestCreateCompetitorUserMultipleCalls:
             req = _make_request(body=valid_request_body)
             response = create_competitor_user(req)
             assert response.status_code == 201
+
+
+class TestCreateCompetitorUserConditionalCategory:
+    """Regla condicional de competition.category según categorías del evento."""
+
+    def test_event_with_categories_and_missing_category_returns_400(
+        self,
+        mock_validate_request,
+        mock_verify_bearer_token,
+        mock_firestore_helper,
+        valid_request_body,
+    ):
+        from competitors.create_competitor_user import create_competitor_user
+
+        body = dict(valid_request_body)
+        body["competition"] = dict(valid_request_body["competition"])
+        body["competition"].pop("category", None)
+
+        mock_firestore_helper.get_document.return_value = {"name": "Event"}
+        mock_firestore_helper.query_documents.return_value = [("cat_1", {"name": "Pro"})]
+
+        req = _make_request(body=body)
+        response = create_competitor_user(req)
+
+        assert response.status_code == 400
+
+    def test_event_without_categories_and_missing_category_returns_201(
+        self,
+        mock_validate_request,
+        mock_verify_bearer_token,
+        mock_firestore_helper,
+        valid_request_body,
+    ):
+        from competitors.create_competitor_user import create_competitor_user
+
+        body = dict(valid_request_body)
+        body["competition"] = dict(valid_request_body["competition"])
+        body["competition"].pop("category", None)
+
+        mock_firestore_helper.get_document.side_effect = [{"name": "Event"}, None]
+        mock_firestore_helper.query_documents.return_value = []
+        mock_firestore_helper.create_document.side_effect = [
+            "user_abc",
+            "personal_1",
+            "health_1",
+            "ec_1",
+            "vehicle_1",
+        ]
+        mock_firestore_helper.create_document_with_id.return_value = "event456"
+
+        req = _make_request(body=body)
+        response = create_competitor_user(req)
+
+        assert response.status_code == 201
+
+    def test_event_with_categories_and_category_present_returns_201(
+        self,
+        mock_validate_request,
+        mock_verify_bearer_token,
+        mock_firestore_helper,
+        valid_request_body,
+    ):
+        from competitors.create_competitor_user import create_competitor_user
+
+        mock_firestore_helper.get_document.side_effect = [{"name": "Event"}, None]
+        mock_firestore_helper.query_documents.side_effect = [
+            [("cat_1", {"name": "Pro"})],  # event_categories
+            [],  # find existing by email
+            [],  # validate unique username
+            [],  # check duplicate pilot number
+        ]
+        mock_firestore_helper.create_document.side_effect = [
+            "user_abc",
+            "personal_1",
+            "health_1",
+            "ec_1",
+            "vehicle_1",
+        ]
+        mock_firestore_helper.create_document_with_id.return_value = "event456"
+
+        req = _make_request(body=valid_request_body)
+        response = create_competitor_user(req)
+
+        assert response.status_code == 201
