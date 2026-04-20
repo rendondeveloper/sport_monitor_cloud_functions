@@ -1541,6 +1541,8 @@ Crea en una sola llamada: template de usuario (sin Firebase Auth), subcoleccione
 | ---------------------- | ------ | --------- | ----------------------------------- |
 | `email`                | string | **Sí**    | Email (formato válido)              |
 | `username`             | string | No        | Username (si se envía, mínimo 4 caracteres y único) |
+| `source`               | string | No        | Origen de la solicitud (ej: `web`, `mobile-ios`, `mobile-android`) |
+| `system`               | string | No        | Sistema origen de la solicitud (ej: `rally-app`, `backoffice`) |
 | `personalData`         | object | No        | Datos personales                    |
 | `personalData.fullName` | string | No       | Nombre completo                     |
 | `personalData.phone`   | string | No        | Teléfono (+52..., 10-15 dígitos). Si se envía, se valida formato |
@@ -1569,7 +1571,7 @@ Crea en una sola llamada: template de usuario (sin Firebase Auth), subcoleccione
 | `competition`          | object | No        | Datos de competición. Si no se envía, se crea con valores por defecto            |
 | `competition.eventId`  | string | **Sí**    | ID del evento                                                                   |
 | `competition.number`   | string | **Sí**    | Número de piloto                                                                |
-| `competition.category` | string | **Sí**    | Categoría de registro                                                           |
+| `competition.category` | string | Condicional | Obligatoria solo si el evento tiene categorías en `events/{eventId}/event_categories`; si no hay categorías, puede omitirse o enviarse vacía |
 | `competition.team`     | string | No        | Nombre del equipo                                                               |
 
 #### Campos Retornados (201)
@@ -1589,6 +1591,8 @@ curl -X POST \
   -d '{
     "email": "piloto@example.com",
     "username": "piloto01",
+    "source": "mobile-ios",
+    "system": "rally-app",
     "personalData": {
       "fullName": "Luis Enrique",
       "phone": "",
@@ -1638,6 +1642,7 @@ curl -X POST \
 - No se crea usuario en Firebase Auth. El documento en `users` tiene `isActive: false` y `authUserId: null`.
 - `registrationDate` se asigna automáticamente por la función (timestamp actual); no se envía en el request.
 - Los campos `number` y `category` del request se almacenan como `pilotNumber` y `registrationCategory` en Firestore.
+- Si se envían `source` y/o `system`, se guardan directamente en `events/{eventId}/participants/{userId}`.
 - Si `competition` no se envía en el request, se crea con valores por defecto (vacíos) y la validación de sus campos internos aplicará.
 - Todos los campos excepto `email` y `competition` (con `eventId`, `number`, `category`) son opcionales. Los valores pueden ser vacíos (`""`) o `null`.
 - Estructura Firestore creada:

@@ -1,5 +1,9 @@
 # Coding Standards — Sport Monitor Cloud Functions
 
+## Human readability (mandatory)
+
+All implementations must follow the readability standard defined in `ai-system/context/readability.md`.
+
 ## Regla 1 — validate_request + verify_bearer_token en TODA función
 
 Sin excepción. Primero CORS/método, luego token:

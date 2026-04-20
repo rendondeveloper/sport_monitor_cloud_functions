@@ -1,5 +1,16 @@
 # Sport Monitor Cloud Functions — Firebase (Python)
 
+@../ai-system/context/architecture.md
+@../ai-system/context/coding-standards.md
+@../ai-system/context/readability.md
+@../ai-system/context/project-structure.md
+@../ai-system/context/workflow.md
+@../ai-system/rules/readability-rule.md
+
+## Regla global de legibilidad
+
+Priorizar legibilidad humana sobre soluciones complejas. Si dos soluciones son correctas, elegir la mas simple y explicita.
+
 ## Propósito
 Backend REST API basado en Firebase Cloud Functions (2nd Gen). Gestión de eventos, usuarios, competidores, staff, checkpoints, tracking, vehículos y catálogos.
 
