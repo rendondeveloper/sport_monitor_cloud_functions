@@ -51,6 +51,41 @@ def verify_bearer_token(req: https_fn.Request, function_name: str = "function") 
         return False
 
 
+def get_bearer_uid(
+    req: https_fn.Request, function_name: str = "function"
+) -> Optional[str]:
+    """
+    Retorna el UID autenticado desde Authorization Bearer token.
+
+    Args:
+        req: Request HTTP de Firebase Functions
+        function_name: Nombre de la función que llama (para logging)
+
+    Returns:
+        str | None: UID autenticado, o None si el token es inválido/faltante.
+    """
+    auth_header = req.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        logging.warning("%s: Authorization faltante o inválido para UID", function_name)
+        return None
+
+    token = auth_header.split("Bearer ", 1)[1].strip()
+    if not token:
+        logging.warning("%s: Token vacío para UID", function_name)
+        return None
+
+    try:
+        decoded = auth.verify_id_token(token)
+        uid = decoded.get("uid")
+        if not uid:
+            logging.warning("%s: Token sin uid", function_name)
+            return None
+        return uid
+    except Exception as e:
+        logging.warning("%s: Error extrayendo UID del token: %s", function_name, e)
+        return None
+
+
 def validate_bearer_token(
     req: https_fn.Request,
     function_name: str = "function",

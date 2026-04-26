@@ -68,8 +68,83 @@
         "region": "us-central1"
       },
       {
+        "source": "/api/events/create",
+        "function": "event_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/events/update",
+        "function": "event_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/events/get",
+        "function": "event_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/events/*/list",
+        "function": "event_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/events/delete",
+        "function": "event_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/events/get-info",
+        "function": "event_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/events/save-info",
+        "function": "event_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/event-management/**",
+        "function": "event_management_route",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/event/event-categories/**",
         "function": "event_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/routes/create",
+        "function": "route_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/routes/update",
+        "function": "route_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/routes/get",
+        "function": "route_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/routes/list",
+        "function": "route_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/routes/delete",
+        "function": "route_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/routes/event-categories",
+        "function": "route_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/routes/event-days",
+        "function": "route_route",
         "region": "us-central1"
       },
       {
@@ -215,12 +290,12 @@
       {
         "source": "/api/competitors/competitor-route",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/competitors/competitor-route/**",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/users/update",
@@ -235,67 +310,67 @@
       {
         "source": "/api/competitors/create-user",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/competitors/delete-competitor",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/competitors/delete-user",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/competitors/get-competitor-by-email",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/competitors/get-event-competitor-by-email",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/competitors/get-event-competitor-by-id",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/competitors/get-competitor-by-id",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/competitors/get-competitor-by-id/**",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/competitors/get-competitors-by-event",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/competitors/get-competitors-by-event/**",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/competitors/list-competitors-by-event",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/competitors/list-competitors-by-event/**",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/create_competitor",
         "function": "competitor_api_route",
-        "region": "us-east4"
+        "region": "us-central1"
       },
       {
         "source": "/api/tracking/track-event-checkpoint",

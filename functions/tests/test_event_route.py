@@ -128,3 +128,35 @@ def test_event_route_event_categories_dispatches(mock_handlers, mock_validate, m
     assert response.status_code == 200
     mock_handlers.__getitem__.assert_called_once_with(_ACTION_EVENT_CATEGORIES)
     mock_handlers.__getitem__.return_value.assert_called_once_with(req)
+
+
+@patch("events.event_route.handle_list")
+@patch("events.event_route.verify_bearer_token", return_value=True)
+@patch("events.event_route.validate_request", return_value=None)
+def test_event_route_events_list_dispatches_with_path_user_id(
+    mock_validate, mock_verify, mock_handle_list
+):
+    from events.event_route import event_route
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_handle_list.return_value = mock_response
+
+    req = _make_request(path="/api/events/uid-1/list", method="GET", args={"status": "draft"})
+    response = event_route(req)
+
+    assert response.status_code == 200
+    mock_handle_list.assert_called_once_with(req, "uid-1")
+
+
+@patch("events.event_route.verify_bearer_token", return_value=True)
+@patch("events.event_route.validate_request", return_value=None)
+def test_event_route_events_list_legacy_path_without_user_id_returns_404(
+    mock_validate, mock_verify
+):
+    from events.event_route import event_route
+
+    req = _make_request(path="/api/events/list", method="GET")
+    response = event_route(req)
+
+    assert response.status_code == 404

@@ -118,7 +118,7 @@ Obtiene una lista paginada de eventos desde Firestore. Retorna eventos en format
 
 - `id`: ID del evento
 - `title`: Título del evento
-- `subtitle`: Subtítulo (opcional)
+- `descriptionShort`: Descripción corta (opcional; prioriza `event_content.descriptionShort`)
 - `status`: Estado del evento (draft, published, inProgress, etc.)
 - `startDateTime`: Fecha y hora de inicio en formato ISO 8601
 - `locationName`: Dirección del evento (viene del campo `address` de `event_content`)
@@ -197,7 +197,7 @@ curl -X GET \
     {
       "id": "event-id-1",
       "title": "Evento Deportivo 2025",
-      "subtitle": "Subtítulo del evento",
+      "descriptionShort": "Descripción corta del evento",
       "status": "published",
       "startDateTime": "2025-01-15T10:00:00",
       "locationName": "Estadio Principal",
@@ -486,6 +486,91 @@ curl -X GET \
 
 ---
 
+### 4. `event_route` (Event Management API)
+
+Router central de eventos para operaciones de administración. Valida CORS, método HTTP y Bearer token una sola vez, extrae `uid` del token y aplica autorización por ownership (`events/{eventId}.creator`).
+
+**Tipo**: HTTP Request (`GET`, `POST`, `PUT`, `DELETE`)  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/events/...`
+
+#### Endpoints soportados
+
+| Método | Path | Descripción |
+|---|---|---|
+| `POST` | `/api/events/create` | Crea evento y persiste `creator = uid` autenticado |
+| `PUT` | `/api/events/update` | Actualiza evento existente del owner |
+| `GET` | `/api/event-management/{userId}/get?eventId=` | Obtiene evento del owner incluyendo `eventContent` |
+| `GET` | `/api/events/{userId}/list?status=` | Lista eventos con `creator == userId`; el `userId` va en la URL (no se toma del token). Filtro opcional `status` |
+| `DELETE` | `/api/event-management/{userId}/delete?eventId=` | Elimina evento del owner (incluye limpieza de content y rutas) |
+| `GET` | `/api/events/get-info?eventId=` | Obtiene `event_content` (primer doc) del evento del owner |
+| `POST` | `/api/events/save-info` | Upsert de `event_content` del evento del owner |
+
+#### Reglas de autorización
+
+- Todas las operaciones requieren `Authorization: Bearer <Firebase ID Token>`.
+- La identidad del usuario se obtiene del token (`uid`), salvo en **`GET /api/events/{userId}/list`**: ahí el criterio de filtro es el **`userId` del path** (no el del token).
+- En el resto de rutas de gestión, solo se opera sobre eventos donde `creator == uid` del token.
+- El campo `creator` es controlado por backend (no editable por cliente).
+
+#### Ejemplos cURL
+
+```bash
+curl -X POST 'https://system-track-monitor.web.app/api/events/create' \
+  -H 'Authorization: Bearer TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Rally Demo","status":"draft"}'
+```
+
+```bash
+curl -X GET 'https://system-track-monitor.web.app/api/events/USER_ID/list?status=draft' \
+  -H 'Authorization: Bearer TOKEN'
+```
+
+```bash
+curl -X POST 'https://system-track-monitor.web.app/api/events/save-info' \
+  -H 'Authorization: Bearer TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"eventId":"EVENT_ID","description":"Info extendida"}'
+```
+
+#### Respuestas
+
+- `200`: JSON directo (objeto o lista, según endpoint).
+- `400`: parámetros/body inválidos.
+- `401`: token inválido o faltante.
+- `404`: recurso no encontrado o sin ownership.
+- `500`: error interno.
+
+---
+
+## 📦 Package: Routes
+
+Una sola Cloud Function **`route_route`** atiende CRUD de rutas y waypoints por evento. El router valida CORS/método/token una vez y aplica ownership del evento antes de cualquier operación.
+
+**Tipo**: HTTP Request (`GET`, `POST`, `PUT`, `DELETE`)  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/routes/...`
+
+### Endpoints
+
+| Método | Path | Descripción |
+|---|---|---|
+| `POST` | `/api/routes/create` | Crea ruta y checkpoint(s) en subcolección |
+| `PUT` | `/api/routes/update` | Actualiza ruta y reemplaza checkpoints |
+| `GET` | `/api/routes/get?eventId=&routeId=` | Retorna ruta + checkpoints |
+| `GET` | `/api/routes/list?eventId=` | Lista rutas del evento |
+| `DELETE` | `/api/routes/delete?eventId=&routeId=` | Elimina ruta y limpia checkpoints |
+| `GET` | `/api/routes/event-categories?eventId=` | Retorna categorías del evento |
+| `GET` | `/api/routes/event-days?eventId=` | Retorna días de carrera del evento |
+
+### Notas de persistencia
+
+- Rutas: `events/{eventId}/routes/{routeId}`.
+- Waypoints: `events/{eventId}/routes/{routeId}/checkpoints/{checkpointId}`.
+- `update` hace reemplazo de checkpoints para mantener consistencia.
+- `delete` limpia primero checkpoints, luego elimina la ruta.
+
+---
+
 ## 📦 Package: Users
 
 Una sola Cloud Function **`user_route`** atiende las operaciones de usuarios. El router valida CORS, método HTTP y Bearer token una vez y despacha por path a la lógica correspondiente (read, create, update, read_sections, subscribed_events, delete_section_item). Paths: `/api/users/read`, `/api/users/profile` (equivalente a read), `/api/users/personalData`, `/api/users/healthData`, `/api/users/emergencyContacts`, `/api/users/membership` (GET; DELETE para emergencyContacts y `vehicles` legacy), `/api/users/subscribedEvents` (GET, eventos suscritos paginados), `/api/users/create`, `/api/users/update`.  
@@ -664,7 +749,7 @@ Obtiene los eventos en los que el usuario está suscrito (documentos en `users/{
 
 #### Respuesta 200 (única con JSON)
 
-- `result`: array de objetos con el **mismo shape** que cada evento en `GET /api/events` (listado corto): `id`, `title`, `subtitle`, `status`, `startDateTime`, `locationName`, `imageUrl`, `isEnrolled` (siempre `true` en esta ruta, el usuario está suscrito). Los datos base salen del documento del evento (`events/{eventId}`) vía `EventShortDocument`; `imageUrl` y `locationName` se sobrescriben desde el primer documento de `event_content` si existen `photoMain` y `address` (igual que en `/api/events`).
+- `result`: array de objetos con el **mismo shape** que cada evento en `GET /api/events` (listado corto): `id`, `title`, `descriptionShort`, `status`, `startDateTime`, `locationName`, `imageUrl`, `isEnrolled` (siempre `true` en esta ruta, el usuario está suscrito). Los datos base salen del documento del evento (`events/{eventId}`) vía `EventShortDocument`; `imageUrl` y `locationName` se sobrescriben desde el primer documento de `event_content` si existen `photoMain` y `address`; `descriptionShort` prioriza `event_content.descriptionShort`.
 - `pagination`: `limit`, `page`, `hasMore`, `count`, `lastDocId`.
 
 #### Errores (sin cuerpo JSON)
@@ -4392,7 +4477,21 @@ Comprobar configuración: `firebase login:list` (cuenta); `functions/venv/bin/py
    http://localhost:5050/api/checkpoint/update-competitor-status/...
    http://localhost:5050/api/events
    http://localhost:5050/api/events/detail
+   http://localhost:5050/api/events/create
+   http://localhost:5050/api/events/update
+   http://localhost:5050/api/events/get
+   http://localhost:5050/api/events/USER_ID/list
+  http://localhost:5050/api/event-management/USER_ID/delete?eventId=EVENT_ID
+   http://localhost:5050/api/events/get-info
+   http://localhost:5050/api/events/save-info
    http://localhost:5050/api/event/event-categories/EVENT_ID
+   http://localhost:5050/api/routes/create
+   http://localhost:5050/api/routes/update
+   http://localhost:5050/api/routes/get?eventId=EVENT_ID&routeId=ROUTE_ID
+   http://localhost:5050/api/routes/list?eventId=EVENT_ID
+   http://localhost:5050/api/routes/delete?eventId=EVENT_ID&routeId=ROUTE_ID
+   http://localhost:5050/api/routes/event-categories?eventId=EVENT_ID
+   http://localhost:5050/api/routes/event-days?eventId=EVENT_ID
    http://localhost:5050/api/users/read
    http://localhost:5050/api/users/profile
    http://localhost:5050/api/users/personalData
@@ -4434,9 +4533,69 @@ Si solo ejecutas `firebase emulators:start --only functions` (sin hosting), solo
 
 3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, excepto `competitor_tracking`, `update_competitor_status` y `change_competitor_status` que retornan JSON con `success: false` en caso de error. Las funciones de tracking retornan objetos JSON con información del error.
 
-4. **Autenticación**: Las funciones `events`, `event_detail`, `event_categories`, `read`, `create`, `update`, `get_vehicles`, `update_vehicle`, `delete_vehicle`, `search_vehicle`, `catalog_route`, `day_of_race_active`, `checkpoint`, `competitor_tracking`, `all_competitor_tracking`, `update_competitor_status`, `change_competitor_status` y `days_of_race` requieren Bearer token válido de Firebase Auth solo para autenticación. Los parámetros se reciben como parámetros query, path o request body, no se extraen del token. El token solo valida que el usuario esté autenticado.
+4. **Autenticación**: Las funciones protegidas requieren Bearer token válido de Firebase Auth.  
+   **Event Management / listado**: en `GET /api/events/{userId}/list` (y en `GET /api/event-management/{userId}/list`) el **`userId` va en la URL**; no se obtiene del token. El listado filtra Firestore con `creator == userId` del path.  
+   **Autorización** en el resto de rutas de eventos (`/api/events/create|update|get|get-info|save-info`, `/api/event-management/{userId}/delete` y `/api/routes/*`): el backend usa el `uid` del token donde aplique ownership sobre `events/{eventId}.creator`.
 
 5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
+
+---
+
+## ✅ Smoke tests manuales (Event Management)
+
+Usar estos comandos para validar flujo mínimo antes de deploy. Reemplaza `TOKEN`, `EVENT_ID` y `ROUTE_ID`.
+
+```bash
+# 1) Crear evento
+curl -X POST 'http://localhost:5050/api/events/create' \
+  -H 'Authorization: Bearer TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Rally Smoke","status":"draft"}'
+
+# 2) Listar eventos (userId en la URL, no del token)
+curl -X GET 'http://localhost:5050/api/events/USER_ID/list?status=draft' \
+  -H 'Authorization: Bearer TOKEN'
+
+# 3) Obtener evento
+curl -X GET "http://localhost:5050/api/event-management/USER_ID/get?eventId=EVENT_ID" \
+  -H 'Authorization: Bearer TOKEN'
+
+# 4) Actualizar evento
+curl -X PUT 'http://localhost:5050/api/events/update' \
+  -H 'Authorization: Bearer TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"eventId":"EVENT_ID","status":"published"}'
+
+# 5) Guardar info del evento (upsert)
+curl -X POST 'http://localhost:5050/api/events/save-info' \
+  -H 'Authorization: Bearer TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"eventId":"EVENT_ID","description":"Info smoke"}'
+
+# 6) Obtener info del evento
+curl -X GET "http://localhost:5050/api/events/get-info?eventId=EVENT_ID" \
+  -H 'Authorization: Bearer TOKEN'
+
+# 7) Crear ruta con checkpoints
+curl -X POST 'http://localhost:5050/api/routes/create' \
+  -H 'Authorization: Bearer TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"eventId":"EVENT_ID","name":"Ruta 1","checkpoints":[{"name":"CP1","order":1}]}'
+
+# 8) Listar rutas del evento
+curl -X GET "http://localhost:5050/api/routes/list?eventId=EVENT_ID" \
+  -H 'Authorization: Bearer TOKEN'
+
+# 9) Obtener detalle de ruta
+curl -X GET "http://localhost:5050/api/routes/get?eventId=EVENT_ID&routeId=ROUTE_ID" \
+  -H 'Authorization: Bearer TOKEN'
+
+# 10) Eliminar ruta y luego evento
+curl -X DELETE "http://localhost:5050/api/routes/delete?eventId=EVENT_ID&routeId=ROUTE_ID" \
+  -H 'Authorization: Bearer TOKEN'
+curl -X DELETE "http://localhost:5050/api/event-management/USER_ID/delete?eventId=EVENT_ID" \
+  -H 'Authorization: Bearer TOKEN'
+```
 
 ---
 

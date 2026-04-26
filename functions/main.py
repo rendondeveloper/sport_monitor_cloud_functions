@@ -44,6 +44,10 @@ from checkpoints import (
 
 # Importar funciones de events
 from events import event_categories, event_detail, event_route, events
+
+# Importar funciones de event_management (CRUD de eventos por propietario)
+from event_management import event_management_route
+from routes import route_route
 import os
 from firebase_admin import initialize_app
 from firebase_functions.options import set_global_options
@@ -85,6 +89,8 @@ initialize_app(options=_options if _options else None)
 # - event_detail: events/events_detail_customer.py
 # - event_categories: events/event_categories.py
 # - event_route: events/event_route.py (router: /api/events, /api/events/detail, /api/event/event-categories/**)
+# - event_management_route: event_management/event_management_route.py (router: /api/event-management/*)
+# - route_route: routes/route_route.py (router: /api/routes/create, update, get, list, delete, event-categories, event-days)
 # - user_route: users/user_route.py (router: /api/users/read, /api/users/profile, /api/users/create, /api/users/update)
 # - day_of_race_active: checkpoints/day_of_race_active.py
 # - checkpoint: checkpoints/checkpoint.py
