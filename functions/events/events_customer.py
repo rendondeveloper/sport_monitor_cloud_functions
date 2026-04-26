@@ -186,15 +186,23 @@ def events(req: https_fn.Request) -> https_fn.Response:
                 event_dict = event.to_dict()
                 event_dict["isEnrolled"] = is_enrolled
 
+                # Estandarizar salida corta: usar descriptionShort y no subtitle.
+                description_short_value = event_dict.pop("subtitle", None)
+
                 # Sobrescribir imageUrl y locationName desde event_content
                 content = event_content_map.get(doc.id)
                 if content:
                     photo_main = content.get("photoMain")
                     address = content.get("address")
+                    description_short = content.get("descriptionShort")
                     if photo_main:
                         event_dict["imageUrl"] = photo_main
                     if address:
                         event_dict["locationName"] = address
+                    if isinstance(description_short, str) and description_short.strip():
+                        description_short_value = description_short.strip()
+
+                event_dict["descriptionShort"] = description_short_value
 
                 events_data.append(event_dict)
                 last_document_id = doc.id
