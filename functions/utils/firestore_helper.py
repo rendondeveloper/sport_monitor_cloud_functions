@@ -245,3 +245,46 @@ class FirestoreHelper:
         except Exception as e:
             LOG.error("FirestoreHelper.batch_update error: %s", e, exc_info=True)
             raise
+
+    def new_document_id(self, collection_path: str) -> str:
+        """
+        Pre-genera un ID de documento sin escribirlo en Firestore.
+
+        Útil para conocer el ID antes de un batch_set, por ejemplo cuando
+        los paths de subdocumentos dependen del ID del documento padre.
+
+        Args:
+            collection_path: Ruta de la colección.
+
+        Returns:
+            ID generado por Firestore (string).
+        """
+        return self.db.collection(collection_path).document().id
+
+    def batch_set(
+        self,
+        operations: List[Tuple[str, Optional[str], Dict[str, Any]]],
+    ) -> List[str]:
+        """
+        Crea múltiples documentos en un único batch atómico.
+
+        Args:
+            operations: Lista de tuplas (collection_path, doc_id_or_none, data).
+                        Si doc_id es None, Firestore auto-genera el ID.
+
+        Returns:
+            Lista de IDs de documentos en el mismo orden que operations.
+        """
+        try:
+            batch = self.db.batch()
+            doc_refs = []
+            for collection_path, doc_id, data in operations:
+                col_ref = self.db.collection(collection_path)
+                doc_ref = col_ref.document(doc_id) if doc_id else col_ref.document()
+                batch.set(doc_ref, data)
+                doc_refs.append(doc_ref)
+            batch.commit()
+            return [ref.id for ref in doc_refs]
+        except Exception as e:
+            LOG.error("FirestoreHelper.batch_set error: %s", e, exc_info=True)
+            raise
