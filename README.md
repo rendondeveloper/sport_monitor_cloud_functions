@@ -24,7 +24,7 @@ functions/
 │   ├── events_detail_customer.py  # event_detail
 │   └── event_categories.py        # event_categories
 ├── users/               # Package: Gestión de Usuarios (una función: user_route)
-│   ├── user_route.py                # user_route (router: read/create/update/delete_section/subscribedEvents por path)
+│   ├── user_route.py                # user_route (router: read/create/update/delete_section/subscribedEvents/my-routes por path)
 │   ├── create.py                    # create.handle (crear/activar usuario)
 │   ├── read.py                      # read.handle (perfil por email/userId/documentId)
 │   ├── subscribed_events.py        # subscribed_events.handle (eventos suscritos del usuario, paginado)
@@ -573,7 +573,7 @@ Una sola Cloud Function **`route_route`** atiende CRUD de rutas y waypoints por 
 
 ## 📦 Package: Users
 
-Una sola Cloud Function **`user_route`** atiende las operaciones de usuarios. El router valida CORS, método HTTP y Bearer token una vez y despacha por path a la lógica correspondiente (read, create, update, read_sections, subscribed_events, delete_section_item). Paths: `/api/users/read`, `/api/users/profile` (equivalente a read), `/api/users/personalData`, `/api/users/healthData`, `/api/users/emergencyContacts`, `/api/users/membership` (GET; DELETE para emergencyContacts y `vehicles` legacy), `/api/users/subscribedEvents` (GET, eventos suscritos paginados), `/api/users/create`, `/api/users/update`.  
+Una sola Cloud Function **`user_route`** atiende las operaciones de usuarios. El router valida CORS, método HTTP y Bearer token una vez y despacha por path a la lógica correspondiente (read, create, update, read_sections, subscribed_events, delete_section_item, my_routes). Paths: `/api/users/read`, `/api/users/profile` (equivalente a read), `/api/users/personalData`, `/api/users/healthData`, `/api/users/emergencyContacts`, `/api/users/membership` (GET; DELETE para emergencyContacts y `vehicles` legacy), `/api/users/subscribedEvents` (GET, eventos suscritos paginados), `/api/users/create`, `/api/users/update`, `/api/users/my-routes` (POST create + GET list/detail).  
 **Importante**: el CRUD de vehículos se atiende por **`vehicle_route`** en `/api/vehicles...` (ruta oficial). Las rutas bajo `/api/users/.../vehicles` quedan como compatibilidad temporal.
 
 ### 4. `read` (perfil de usuario)
@@ -772,6 +772,122 @@ curl -X GET \
 ```bash
 firebase deploy --only functions:user_route,hosting
 ```
+
+### 4.1.2 `my-routes` (rutas personales del usuario)
+
+Crea y consulta rutas personales del usuario en Firestore usando estructura de subcolecciones:
+
+- `users/{userId}/myRoutes/{routeId}`
+- `users/{userId}/myRoutes/{routeId}/points/{pointId}`
+- `users/{userId}/myRoutes/{routeId}/notes/{noteId}`
+
+**Tipo**: HTTP Request (POST, GET)  
+**Path**: `/api/users/my-routes`  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/users/my-routes`
+
+#### POST /api/users/my-routes
+
+Recibe la ruta completa (metadata + arrays `points` y `notes`) y persiste:
+
+- Documento padre en `myRoutes` con ID autogenerado por Firebase.
+- Subdocumentos de `points` con IDs autogenerados por Firebase.
+- Subdocumentos de `notes` con IDs autogenerados por Firebase.
+
+Reglas de payload:
+
+- `eventId` puede ser `null`.
+- `points` puede ser `null`.
+- `notes` puede ser `null`.
+- `notes[].photos` es opcional (si no viaja, se guarda `[]`).
+
+**Body mínimo:**
+
+```json
+{
+  "userId": "USER_DOC_ID",
+  "identifier": 16,
+  "name": "test fotos",
+  "description": "test fotos",
+  "eventId": null,
+  "points": null,
+  "notes": null
+}
+```
+
+**Respuesta 201:**
+
+```json
+{
+  "id": "AUTO_ROUTE_ID_FIREBASE"
+}
+```
+
+#### GET /api/users/my-routes
+
+Usa un solo endpoint para dos modos:
+
+- **Lista**: `GET /api/users/my-routes?userId=USER_DOC_ID`
+- **Detalle**: `GET /api/users/my-routes?userId=USER_DOC_ID&routeId=AUTO_ROUTE_ID_FIREBASE`
+
+En modo detalle, retorna metadata de la ruta + arrays `points` y `notes`.
+
+#### cURL
+
+```bash
+# Crear ruta
+curl -X POST \
+  'https://system-track-monitor.web.app/api/users/my-routes' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -d '{
+    "userId": "USER_DOC_ID",
+    "identifier": 16,
+    "name": "test fotos",
+    "description": "test fotos",
+    "eventId": null,
+    "points": [
+      {
+        "altitudeMeters": 2348.5,
+        "date": "2026-04-16T16:06:03.393809Z",
+        "identifierParent": 16,
+        "isUploaded": false,
+        "latitude": 19.2435863,
+        "longitude": -99.0167349,
+        "source": "LocationAccuracy.high",
+        "speedKmh": 1.80,
+        "timeCurrent": "00:01:51"
+      }
+    ],
+    "notes": [
+      {
+        "identifier": 7,
+        "trackId": 16,
+        "latitude": 19.2435642,
+        "longitude": -99.0168343,
+        "message": "primer check",
+        "photos": ["http://gggg.jpg"],
+        "timestamp": "2026-04-16T16:06:42.510681Z"
+      }
+    ]
+  }'
+
+# Listar rutas del usuario
+curl -X GET \
+  'https://system-track-monitor.web.app/api/users/my-routes?userId=USER_DOC_ID' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+
+# Obtener detalle de una ruta
+curl -X GET \
+  'https://system-track-monitor.web.app/api/users/my-routes?userId=USER_DOC_ID&routeId=AUTO_ROUTE_ID_FIREBASE' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+```
+
+**Errores (sin body JSON):**
+
+- `400`: body inválido o faltan campos requeridos.
+- `401`: token inválido/faltante.
+- `404`: usuario o ruta no encontrada.
+- `500`: error interno.
 
 ### 4.2 Eliminar contacto de emergencia o vehículo legacy (DELETE /api/users/{section})
 
@@ -4206,7 +4322,7 @@ Las siguientes funciones requieren autenticación Bearer token:
 - `events` - Lista de eventos con paginación (requiere Bearer token)
 - `event_detail` - Detalle de un evento (requiere Bearer token)
 - `event_categories` - Categorías de un evento (requiere Bearer token)
-- `user_route` - Router de usuarios: read (perfil), create (crear/activar), update (actualizar por secciones), read_sections (perfil por sección), subscribedEvents (eventos suscritos paginados), delete_section_item (eliminar contacto o vehículo); paths /api/users/read, /api/users/profile, /api/users/personalData, /api/users/healthData, /api/users/emergencyContacts, /api/users/vehicles, /api/users/membership (GET; DELETE solo emergencyContacts y vehicles), /api/users/subscribedEvents (GET), /api/users/create, /api/users/update (requiere Bearer token)
+- `user_route` - Router de usuarios: read (perfil), create (crear/activar), update (actualizar por secciones), read_sections (perfil por sección), subscribedEvents (eventos suscritos paginados), delete_section_item (eliminar contacto o vehículo), my-routes (crear/listar/detalle de rutas personales); paths /api/users/read, /api/users/profile, /api/users/personalData, /api/users/healthData, /api/users/emergencyContacts, /api/users/vehicles, /api/users/membership (GET; DELETE solo emergencyContacts y vehicles), /api/users/subscribedEvents (GET), /api/users/create, /api/users/update, /api/users/my-routes (GET/POST) (requiere Bearer token)
 - `get_vehicles` - Obtiene vehículos de un usuario (requiere Bearer token)
 - `update_vehicle` - Actualiza vehículo (requiere Bearer token)
 - `delete_vehicle` - Elimina vehículo (requiere Bearer token)
@@ -4499,6 +4615,7 @@ Comprobar configuración: `firebase login:list` (cuenta); `functions/venv/bin/py
    http://localhost:5050/api/users/subscribedEvents
    http://localhost:5050/api/users/create
    http://localhost:5050/api/users/update
+   http://localhost:5050/api/users/my-routes
    http://localhost:5050/api/vehicles?userId=UUID
    http://localhost:5050/api/tracking/track-event-checkpoint
    http://localhost:5050/api/tracking/track-competitors

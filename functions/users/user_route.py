@@ -1,9 +1,9 @@
 """
-Router central para API de usuarios: /api/users/read, /api/users/profile, /api/users/{section}, /api/users/subscribedEvents, /api/users/create, /api/users/update.
+Router central para API de usuarios: /api/users/read, /api/users/profile, /api/users/{section}, /api/users/subscribedEvents, /api/users/create, /api/users/update, /api/users/my-routes.
 
 Secciones: personalData, healthData, emergencyContacts, vehicles, membership (GET /api/users/{section}).
 DELETE solo para emergencyContacts y vehicles (/api/users/{section}?userId=xxx&id=docId).
-Valida CORS, método HTTP y Bearer token una vez; despacha por path a create.handle, read.handle, read_sections.handle, delete_section_item.handle o update.handle.
+Valida CORS, método HTTP y Bearer token una vez; despacha por path a create.handle, read.handle, read_sections.handle, delete_section_item.handle, update.handle, create_my_route.handle o get_my_routes.handle.
 """
 
 import logging
@@ -14,7 +14,9 @@ from utils.helper_http import verify_bearer_token
 from utils.helper_http_verb import validate_request
 
 from .create import handle as create_handle
+from .create_my_route import handle as create_my_route_handle
 from .delete_section_item import DELETE_ALLOWED_SECTIONS, handle as delete_section_item_handle
+from .get_my_routes import handle as get_my_routes_handle
 from .read import handle as read_handle
 from .read_sections import ALLOWED_SECTIONS, handle as read_sections_handle
 from .subscribed_events import handle as subscribed_events_handle
@@ -25,6 +27,7 @@ _ACTION_READ_SECTION = "read_section"
 _ACTION_SUBSCRIBED_EVENTS = "subscribedevents"
 _ACTION_CREATE = "create"
 _ACTION_UPDATE = "update"
+_ACTION_MY_ROUTES = "my-routes"
 
 # path segment -> (allowed_method, handler)
 _ROUTES = {
@@ -32,6 +35,7 @@ _ROUTES = {
     _ACTION_SUBSCRIBED_EVENTS: ("GET", subscribed_events_handle),
     _ACTION_CREATE: ("POST", create_handle),
     _ACTION_UPDATE: ("PUT", update_handle),
+    _ACTION_MY_ROUTES: ("GET_OR_POST", None),
 }
 
 
@@ -40,7 +44,7 @@ def _action_from_path(path: str) -> Tuple[str | None, str | None]:
     Extrae (acción, sección) del path.
     - /api/users/{section} (section en ALLOWED_SECTIONS) -> ("read_section", section)
     - read, profile -> ("read", None)
-    - create, update -> (acción, None)
+    - create, update, my-routes -> (acción, None)
     Rutas de sección: /api/users/personalData, /api/users/healthData, etc.
     """
     if not path:
@@ -126,6 +130,20 @@ def user_route(req: https_fn.Request) -> https_fn.Response:
             "",
             status=405,
             headers={"Allow": "GET, DELETE", "Access-Control-Allow-Origin": "*"},
+        )
+
+    if action == _ACTION_MY_ROUTES:
+        if req.method == "POST":
+            return create_my_route_handle(req)
+        if req.method == "GET":
+            return get_my_routes_handle(req)
+        return https_fn.Response(
+            "",
+            status=405,
+            headers={
+                "Allow": "GET, POST",
+                "Access-Control-Allow-Origin": "*",
+            },
         )
 
     allowed_method, handler = _ROUTES[action]

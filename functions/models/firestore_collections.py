@@ -26,6 +26,7 @@ class FirestoreCollections:
     USER_EMERGENCY_CONTACT = "emergencyContacts"
     USER_HEALTH_DATA = "healthData"
     USER_PERSONAL_DATA = "personalData"
+    USER_MY_ROUTES = "myRoutes"
 
     # Colecciones de eventos relacionados
     EVENT_CHECKPOINTS = "checkpoints"
@@ -45,3 +46,7 @@ class FirestoreCollections:
     EVENT_TRACKING_COMPETITOR_TRACKING = "competitor_tracking"
     EVENT_TRACKING_COMPETITOR = "competitors"
     EVENT_TRACKING_CHECKPOINTS = "checkpoints"
+
+    # Subcolecciones de rutas del usuario
+    MY_ROUTE_POINTS = "points"
+    MY_ROUTE_NOTES = "notes"
