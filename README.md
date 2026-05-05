@@ -779,7 +779,7 @@ Crea y consulta rutas personales del usuario en Firestore usando estructura de s
 
 - `users/{userId}/myRoutes/{routeId}`
 - `users/{userId}/myRoutes/{routeId}/points/{pointId}`
-- `users/{userId}/myRoutes/{routeId}/notes/{noteId}`
+- `users/{userId}/myRoutes/{routeId}/notes/{identifier}`
 
 **Tipo**: HTTP Request (POST, GET)  
 **Path**: `/api/users/my-routes`  
@@ -791,14 +791,16 @@ Recibe la ruta completa (metadata + arrays `points` y `notes`) y persiste:
 
 - Documento padre en `myRoutes` con ID autogenerado por Firebase.
 - Subdocumentos de `points` con IDs autogenerados por Firebase.
-- Subdocumentos de `notes` con IDs autogenerados por Firebase.
+- Subdocumentos de `notes` con ID tomado de `notes[].identifier` enviado por frontend.
 
 Reglas de payload:
 
 - `eventId` puede ser `null`.
 - `points` puede ser `null`.
 - `notes` puede ser `null`.
+- `notes[].identifier` es requerido (int) y se usa como docId.
 - `notes[].photos` es opcional (si no viaja, se guarda `[]`).
+  Si llega el mismo `identifier` en notas repetidas, la ultima sobrescribe la anterior (`set`).
 
 **Body mínimo:**
 

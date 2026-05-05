@@ -28,13 +28,13 @@ Gestiona rutas personales del usuario con subcolecciones para puntos y notas.
 
 - `users/{userId}/myRoutes/{routeId}`
 - `users/{userId}/myRoutes/{routeId}/points/{pointId}`
-- `users/{userId}/myRoutes/{routeId}/notes/{noteId}`
+- `users/{userId}/myRoutes/{routeId}/notes/{identifier}`
 
 IDs autogenerados por Firebase:
 
 - Rutas: auto ID (ej. `aBcD123...`)
 - Points: auto ID (ej. `xYz987...`)
-- Notes: auto ID (ej. `kLm456...`)
+- Notes: ID = `identifier` enviado por frontend (ej. `7`, `8`)
 
 ### POST `/api/users/my-routes`
 
@@ -49,7 +49,9 @@ Crea una ruta y, en la misma operación, crea los subdocumentos de `points` y `n
 - `eventId` puede ser `null`.
 - `points` puede ser `null` o array.
 - `notes` puede ser `null` o array.
+- `notes[].identifier` requerido (int). Se usa como ID del documento en Firestore.
 - `notes[].photos` es opcional (si no viene, se normaliza a `[]`).
+  Si llegan dos notas con el mismo `identifier`, la ultima sobrescribe la anterior (`set`).
 
 #### Ejemplo request
 

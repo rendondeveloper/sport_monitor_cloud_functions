@@ -44,6 +44,12 @@ def _validate_request_data(data: Any) -> Optional[str]:
         return "points debe ser list o null"
     if notes is not None and not isinstance(notes, list):
         return "notes debe ser list o null"
+    if isinstance(notes, list):
+        for note in notes:
+            if not isinstance(note, dict):
+                continue
+            if "identifier" not in note or not isinstance(note.get("identifier"), int):
+                return "notes[].identifier requerido (int)"
     return None
 
 
@@ -119,7 +125,8 @@ def handle(req: https_fn.Request) -> https_fn.Response:
             helper.create_document(points_path, point)
 
         for note in _normalize_notes(payload.get("notes")):
-            helper.create_document(notes_path, note)
+            note_id = str(note["identifier"])
+            helper.create_document_with_id(notes_path, note_id, note)
 
         return https_fn.Response(
             json.dumps({"id": route_id}, ensure_ascii=False),

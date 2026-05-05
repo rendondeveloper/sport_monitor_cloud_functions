@@ -29,12 +29,19 @@ def test_create_my_route_happy_path(mock_helper_cls):
         "description": "desc",
         "eventId": None,
         "points": [{"a": 1}, {"a": 2}],
-        "notes": [{"message": "m1"}, {"message": "m2", "photos": ["http://a"]}],
+        "notes": [
+            {"identifier": 7, "message": "m1"},
+            {"identifier": 8, "message": "m2", "photos": ["http://a"]},
+        ],
     }
     resp = handle(_make_request(payload))
     assert resp.status_code == 201
     assert json.loads(resp.get_data(as_text=True)) == {"id": "route_auto_1"}
-    assert helper.create_document.call_count == 5
+    assert helper.create_document.call_count == 3
+    assert helper.create_document_with_id.call_count == 2
+    call_args = helper.create_document_with_id.call_args_list
+    assert call_args[0][0][1] == "7"
+    assert call_args[1][0][1] == "8"
 
 
 @patch("users.create_my_route.FirestoreHelper")
@@ -69,6 +76,23 @@ def test_create_my_route_missing_user_id():
                 "identifier": 16,
                 "name": "test",
                 "description": "desc",
+            }
+        )
+    )
+    assert resp.status_code == 400
+
+
+def test_create_my_route_note_identifier_required_int():
+    from users.create_my_route import handle
+
+    resp = handle(
+        _make_request(
+            {
+                "userId": "u1",
+                "identifier": 16,
+                "name": "test",
+                "description": "desc",
+                "notes": [{"message": "sin identifier"}],
             }
         )
     )
