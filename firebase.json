@@ -113,37 +113,7 @@
         "region": "us-central1"
       },
       {
-        "source": "/api/routes/create",
-        "function": "route_route",
-        "region": "us-central1"
-      },
-      {
-        "source": "/api/routes/update",
-        "function": "route_route",
-        "region": "us-central1"
-      },
-      {
-        "source": "/api/routes/get",
-        "function": "route_route",
-        "region": "us-central1"
-      },
-      {
-        "source": "/api/routes/list",
-        "function": "route_route",
-        "region": "us-central1"
-      },
-      {
-        "source": "/api/routes/delete",
-        "function": "route_route",
-        "region": "us-central1"
-      },
-      {
-        "source": "/api/routes/event-categories",
-        "function": "route_route",
-        "region": "us-central1"
-      },
-      {
-        "source": "/api/routes/event-days",
+        "source": "/api/routes/**",
         "function": "route_route",
         "region": "us-central1"
       },
