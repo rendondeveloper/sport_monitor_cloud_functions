@@ -6,7 +6,8 @@ Lógica de negocio únicamente. La validación CORS y Bearer token la realiza us
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+import math
+from typing import Any, Dict, List, Optional, Tuple
 
 from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
@@ -53,6 +54,55 @@ def _validate_request_data(data: Any) -> Optional[str]:
     return None
 
 
+def _extract_valid_lat_lon(points: Any) -> List[Tuple[float, float]]:
+    if not isinstance(points, list):
+        return []
+
+    valid: List[Tuple[float, float]] = []
+    for point in points:
+        if not isinstance(point, dict):
+            continue
+        lat = point.get("latitude")
+        lon = point.get("longitude")
+        if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+            continue
+        valid.append((float(lat), float(lon)))
+    return valid
+
+
+def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    # Radio medio de la Tierra (m)
+    r = 6371000.0
+
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+
+    a = (
+        math.sin(dlat / 2.0) ** 2
+        + math.cos(lat1_rad) * math.cos(lat2_rad) * (math.sin(dlon / 2.0) ** 2)
+    )
+    c = 2.0 * math.asin(math.sqrt(a))
+    return r * c
+
+
+def _compute_distance(points: Any) -> float:
+    valid = _extract_valid_lat_lon(points)
+    if len(valid) < 2:
+        return 0.0
+
+    total_meters = 0.0
+    for (lat1, lon1), (lat2, lon2) in zip(valid, valid[1:]):
+        total_meters += _haversine_meters(lat1, lon1, lat2, lon2)
+
+    km = total_meters / 1000.0
+    return math.ceil(km * 10.0) / 10.0
+
+
 def _build_route_doc(data: Dict[str, Any], now: str) -> Dict[str, Any]:
     points = data.get("points")
     notes = data.get("notes")
@@ -63,6 +113,7 @@ def _build_route_doc(data: Dict[str, Any], now: str) -> Dict[str, Any]:
         "name": str(data.get("name", "")).strip(),
         "description": str(data.get("description", "")).strip(),
         "eventId": data.get("eventId"),
+        "distance": _compute_distance(points),
         "pointsCount": points_count,
         "notesCount": notes_count,
         "createdAt": now,

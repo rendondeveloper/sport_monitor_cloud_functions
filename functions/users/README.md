@@ -41,6 +41,12 @@ IDs autogenerados por Firebase:
 
 Crea una ruta y, en la misma operación, crea los subdocumentos de `points` y `notes`.
 
+#### Documento de ruta (Firestore)
+
+El documento `users/{userId}/myRoutes/{routeId}` incluye el campo:
+
+- `distance`: float en **kilómetros** calculado desde `points` (suma de distancias entre puntos consecutivos válidos en el orden recibido). El resultado se **redondea hacia arriba a 1 decimal (###.#)**. Si `points` es `null` o no hay suficientes puntos válidos, se guarda `0.0`.
+
 #### Reglas del payload
 
 - `userId` requerido.
@@ -105,7 +111,7 @@ Crea una ruta y, en la misma operación, crea los subdocumentos de `points` y `n
 Un solo endpoint con dos modos:
 
 - Lista: `GET /api/users/my-routes?userId=USER_DOC_ID` (cada ítem **no** incluye `description`, `createdAt` ni `updatedAt`).
-- Detalle: `GET /api/users/my-routes?userId=USER_DOC_ID&routeId=AUTO_ROUTE_ID_FIREBASE` (incluye `description` y el resto de campos de la ruta).
+- Detalle: `GET /api/users/my-routes?userId=USER_DOC_ID&routeId=AUTO_ROUTE_ID_FIREBASE` (incluye `description` y el resto de campos de la ruta, incluyendo `distance`).
 
 ### PUT `/api/users/my-routes/{routeId}/notes`
 
