@@ -13,7 +13,7 @@ from models.firestore_collections import FirestoreCollections
 from utils.firestore_helper import FirestoreHelper
 from utils.helpers import convert_firestore_value
 
-_EXCLUDED_LIST_FIELDS = {"createdAt", "updatedAt"}
+_EXCLUDED_LIST_FIELDS = {"createdAt", "updatedAt", "description"}
 
 
 def _cors_headers() -> Dict[str, str]:

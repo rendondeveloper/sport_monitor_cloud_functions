@@ -287,3 +287,25 @@ def test_user_route_get_my_routes_dispatches_to_get_my_routes(
     response = user_route(req)
     assert response.status_code == 200
     mock_get_my_routes.assert_called_once_with(req)
+
+
+@patch("users.user_route.verify_bearer_token", return_value=True)
+@patch("users.user_route.validate_request", return_value=None)
+@patch("users.user_route.update_my_route_notes_handle")
+def test_user_route_put_my_route_notes_dispatches_to_update_notes(
+    mock_update_notes, mock_validate, mock_verify
+):
+    from users.user_route import user_route
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_update_notes.return_value = mock_resp
+
+    req = _make_request(
+        path="/api/users/my-routes/route_1/notes",
+        method="PUT",
+        args={"userId": "u1"},
+    )
+    response = user_route(req)
+    assert response.status_code == 200
+    mock_update_notes.assert_called_once_with(req, "route_1")

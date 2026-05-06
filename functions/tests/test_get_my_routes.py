@@ -22,6 +22,7 @@ def test_get_my_routes_list(mock_helper_cls):
             "r_001",
             {
                 "name": "ruta",
+                "description": "no debe aparecer en lista",
                 "createdAt": "2026-05-05T00:00:00+00:00",
                 "updatedAt": "2026-05-05T00:00:00+00:00",
             },
@@ -36,6 +37,7 @@ def test_get_my_routes_list(mock_helper_cls):
     assert data[0]["id"] == "r_001"
     assert "createdAt" not in data[0]
     assert "updatedAt" not in data[0]
+    assert "description" not in data[0]
 
 
 @patch("users.get_my_routes.FirestoreHelper")
@@ -44,7 +46,7 @@ def test_get_my_routes_detail(mock_helper_cls):
     mock_helper_cls.return_value = helper
     helper.get_document.side_effect = [
         {"email": "x@y.com"},
-        {"name": "ruta"},
+        {"name": "ruta", "description": "detalle sí incluye description"},
     ]
     helper.query_documents.side_effect = [
         [("p_001", {"lat": 1})],
@@ -57,6 +59,7 @@ def test_get_my_routes_detail(mock_helper_cls):
     assert resp.status_code == 200
     data = json.loads(resp.get_data(as_text=True))
     assert data["id"] == "r_001"
+    assert data["description"] == "detalle sí incluye description"
     assert data["points"][0]["id"] == "p_001"
     assert data["notes"][0]["id"] == "n_001"
 

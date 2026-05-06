@@ -21,6 +21,7 @@ from .read import handle as read_handle
 from .read_sections import ALLOWED_SECTIONS, handle as read_sections_handle
 from .subscribed_events import handle as subscribed_events_handle
 from .update import handle as update_handle
+from .update_my_route_notes import handle as update_my_route_notes_handle
 
 _ACTION_READ = "read"
 _ACTION_READ_SECTION = "read_section"
@@ -71,6 +72,17 @@ def _action_from_path(path: str) -> Tuple[str | None, str | None]:
     return (None, None)
 
 
+def _extract_my_route_notes_route_id(path: str) -> str | None:
+    """
+    Extrae routeId de /api/users/my-routes/{routeId}/notes.
+    """
+    parts = [p for p in (path or "").strip("/").split("/") if p]
+    # Esperado: ["api", "users", "my-routes", "{routeId}", "notes"]
+    if len(parts) >= 5 and parts[1] == "users" and parts[2] == "my-routes" and parts[4] == "notes":
+        return parts[3].strip() or None
+    return None
+
+
 @https_fn.on_request()
 def user_route(req: https_fn.Request) -> https_fn.Response:
     """
@@ -93,6 +105,20 @@ def user_route(req: https_fn.Request) -> https_fn.Response:
 
     path = getattr(req, "path", "") or ""
     logging.info("user_route: Path recibido: %r", path)
+
+    route_id_for_notes = _extract_my_route_notes_route_id(path)
+    if route_id_for_notes is not None:
+        if req.method != "PUT":
+            return https_fn.Response(
+                "",
+                status=405,
+                headers={
+                    "Allow": "PUT",
+                    "Access-Control-Allow-Origin": "*",
+                },
+            )
+        return update_my_route_notes_handle(req, route_id_for_notes)
+
     action, section = _action_from_path(path)
     if action is None:
         logging.warning("user_route: Path no reconocido: %s", path)

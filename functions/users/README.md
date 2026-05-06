@@ -19,6 +19,7 @@ Este package expone una sola Cloud Function: `user_route`.
 - `DELETE /api/users/vehicles` (legacy)
 - `POST /api/users/my-routes`
 - `GET /api/users/my-routes`
+- `PUT /api/users/my-routes/{routeId}/notes`
 
 ## `my-routes`
 
@@ -103,8 +104,18 @@ Crea una ruta y, en la misma operación, crea los subdocumentos de `points` y `n
 
 Un solo endpoint con dos modos:
 
-- Lista: `GET /api/users/my-routes?userId=USER_DOC_ID`
-- Detalle: `GET /api/users/my-routes?userId=USER_DOC_ID&routeId=AUTO_ROUTE_ID_FIREBASE`
+- Lista: `GET /api/users/my-routes?userId=USER_DOC_ID` (cada ítem **no** incluye `description`, `createdAt` ni `updatedAt`).
+- Detalle: `GET /api/users/my-routes?userId=USER_DOC_ID&routeId=AUTO_ROUTE_ID_FIREBASE` (incluye `description` y el resto de campos de la ruta).
+
+### PUT `/api/users/my-routes/{routeId}/notes`
+
+Actualiza todas las notas de una ruta en una sola llamada.
+
+- Query param requerido: `userId`
+- Body requerido: `{ "notes": [...] }`
+- Cada nota requiere `identifier` (int), que se usa como docId.
+- Si `notes` llega vacío (`[]`), se limpian todas las notas de la ruta.
+- Respuesta 200: sin body (solo código HTTP).
 
 ### cURL
 
@@ -178,6 +189,26 @@ curl -X GET \
 curl -X GET \
   'https://system-track-monitor.web.app/api/users/my-routes?userId=USER_DOC_ID&routeId=AUTO_ROUTE_ID_FIREBASE' \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+
+# Reemplazar todas las notas de una ruta (si notes=[] limpia notas)
+curl -X PUT \
+  'https://system-track-monitor.web.app/api/users/my-routes/AUTO_ROUTE_ID_FIREBASE/notes?userId=USER_DOC_ID' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -d '{
+    "notes": [
+      {
+        "identifier": 7,
+        "trackId": 16,
+        "latitude": 19.2435642,
+        "longitude": -99.0168343,
+        "message": "primer check actualizado",
+        "photoPath": "/data/user/0/app_flutter/photo_1.jpg",
+        "photoPaths": ["/data/user/0/app_flutter/photo_1.jpg"],
+        "timestamp": "2026-04-16T16:06:42.510681Z"
+      }
+    ]
+  }'
 ```
 
 ## Códigos de respuesta (my-routes)

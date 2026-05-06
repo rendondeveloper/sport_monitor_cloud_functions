@@ -573,7 +573,7 @@ Una sola Cloud Function **`route_route`** atiende CRUD de rutas y waypoints por 
 
 ## 📦 Package: Users
 
-Una sola Cloud Function **`user_route`** atiende las operaciones de usuarios. El router valida CORS, método HTTP y Bearer token una vez y despacha por path a la lógica correspondiente (read, create, update, read_sections, subscribed_events, delete_section_item, my_routes). Paths: `/api/users/read`, `/api/users/profile` (equivalente a read), `/api/users/personalData`, `/api/users/healthData`, `/api/users/emergencyContacts`, `/api/users/membership` (GET; DELETE para emergencyContacts y `vehicles` legacy), `/api/users/subscribedEvents` (GET, eventos suscritos paginados), `/api/users/create`, `/api/users/update`, `/api/users/my-routes` (POST create + GET list/detail).  
+Una sola Cloud Function **`user_route`** atiende las operaciones de usuarios. El router valida CORS, método HTTP y Bearer token una vez y despacha por path a la lógica correspondiente (read, create, update, read_sections, subscribed_events, delete_section_item, my_routes). Paths: `/api/users/read`, `/api/users/profile` (equivalente a read), `/api/users/personalData`, `/api/users/healthData`, `/api/users/emergencyContacts`, `/api/users/membership` (GET; DELETE para emergencyContacts y `vehicles` legacy), `/api/users/subscribedEvents` (GET, eventos suscritos paginados), `/api/users/create`, `/api/users/update`, `/api/users/my-routes` (POST create + GET list/detail), `/api/users/my-routes/{routeId}/notes` (PUT reemplazo de notas).  
 **Importante**: el CRUD de vehículos se atiende por **`vehicle_route`** en `/api/vehicles...` (ruta oficial). Las rutas bajo `/api/users/.../vehicles` quedan como compatibilidad temporal.
 
 ### 4. `read` (perfil de usuario)
@@ -828,10 +828,20 @@ Reglas de payload:
 
 Usa un solo endpoint para dos modos:
 
-- **Lista**: `GET /api/users/my-routes?userId=USER_DOC_ID`
+- **Lista**: `GET /api/users/my-routes?userId=USER_DOC_ID` (cada ítem **no** incluye `description`, `createdAt` ni `updatedAt`).
 - **Detalle**: `GET /api/users/my-routes?userId=USER_DOC_ID&routeId=AUTO_ROUTE_ID_FIREBASE`
 
-En modo detalle, retorna metadata de la ruta + arrays `points` y `notes`.
+En modo detalle, retorna metadata de la ruta + arrays `points` y `notes` (sí incluye `description`).
+
+#### PUT /api/users/my-routes/{routeId}/notes
+
+Actualiza/reemplaza todas las notas de la ruta indicada.
+
+- Query requerido: `userId`
+- Body requerido: `{"notes":[...]}` (cada nota con `identifier` int)
+- `identifier` se usa como docId (`notes/{identifier}`)
+- Si `notes` viene `[]`, se limpian todas las notas de la ruta
+- Respuesta 200: sin body (solo código HTTP)
 
 #### cURL
 
@@ -882,6 +892,38 @@ curl -X GET \
 curl -X GET \
   'https://system-track-monitor.web.app/api/users/my-routes?userId=USER_DOC_ID&routeId=AUTO_ROUTE_ID_FIREBASE' \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+
+# Reemplazar todas las notas de una ruta (si notes=[] limpia todas)
+curl -X PUT \
+  'https://system-track-monitor.web.app/api/users/my-routes/AUTO_ROUTE_ID_FIREBASE/notes?userId=USER_DOC_ID' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI' \
+  -d '{
+    "notes": [
+      {
+        "identifier": 7,
+        "trackId": 16,
+        "latitude": 19.2435642,
+        "longitude": -99.0168343,
+        "message": "primer check actualizado",
+        "photoPath": "/data/user/0/com.kikeridersoft.rally_system_deluxe/app_flutter/photo_1.jpg",
+        "photoPaths": [
+          "/data/user/0/com.kikeridersoft.rally_system_deluxe/app_flutter/photo_1.jpg"
+        ],
+        "timestamp": "2026-04-16T16:06:42.510681Z"
+      },
+      {
+        "identifier": 8,
+        "trackId": 16,
+        "latitude": 19.2434215,
+        "longitude": -99.0168844,
+        "message": "segunda nota",
+        "photoPath": "",
+        "photoPaths": [],
+        "timestamp": "2026-04-16T16:08:42.510681Z"
+      }
+    ]
+  }'
 ```
 
 **Errores (sin body JSON):**
