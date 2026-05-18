@@ -65,6 +65,42 @@ def test_competitor_api_route_invalid_method_returns_405_from_validate_request(m
     mock_verify.assert_not_called()
 
 
+def test_competitor_api_route_competitor_route_module_is_py_module():
+    """Evita regresión: el dispatch debe parchear validate_request en el módulo .py."""
+    import importlib
+
+    api = importlib.import_module("competitors.competitor_api_route")
+    mod = api.competitor_route_module
+    assert hasattr(mod, "validate_request")
+    assert callable(getattr(mod, "competitor_route", None))
+    assert mod.competitor_route is not mod
+
+
+@patch("competitors.competitor_api_route.verify_bearer_token", return_value=True)
+@patch("competitors.competitor_api_route.validate_request", return_value=None)
+@patch("competitors.competitor_route.firestore.client")
+def test_competitor_api_route_dispatch_competitor_route_integration(
+    mock_fs, mock_validate, mock_verify
+):
+    """Dispatch real a competitor_route (sin mockear _HANDLERS)."""
+    from competitors.competitor_api_route import competitor_api_route
+
+    mem = MagicMock()
+    mem.stream.return_value = []
+    usr = MagicMock()
+    usr.collection.return_value = mem
+    db = MagicMock()
+    db.collection.return_value.document.return_value = usr
+    mock_fs.return_value = db
+
+    req = _make_request(
+        path="/api/competitors/competitor-route", args={"userId": "uid-test"}
+    )
+    response = competitor_api_route(req)
+    assert response.status_code == 404
+    assert response.get_data(as_text=True) == ""
+
+
 @patch("competitors.competitor_api_route.verify_bearer_token", return_value=True)
 @patch("competitors.competitor_api_route.validate_request", return_value=None)
 @patch("competitors.competitor_api_route._HANDLERS")

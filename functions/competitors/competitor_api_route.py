@@ -22,7 +22,9 @@ Valida CORS, método HTTP y Bearer token una sola vez; luego despacha por path
 y método reutilizando los handlers existentes de competitors sin duplicar lógica.
 """
 
+import importlib
 import logging
+import sys
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -30,7 +32,10 @@ from firebase_functions import https_fn
 from utils.helper_http import verify_bearer_token
 from utils.helper_http_verb import validate_request
 
-from . import competitor_route as competitor_route_module
+# `from . import competitor_route` y `import competitors.competitor_route` resuelven
+# la función exportada en competitors/__init__.py; sys.modules conserva el módulo .py.
+importlib.import_module("competitors.competitor_route")
+competitor_route_module = sys.modules["competitors.competitor_route"]
 from . import create_competitor as create_competitor_module
 from . import create_competitor_user as create_competitor_user_module
 from . import delete_competitor as delete_competitor_module
