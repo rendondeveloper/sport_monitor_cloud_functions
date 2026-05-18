@@ -50,3 +50,4 @@ class FirestoreCollections:
     # Subcolecciones de rutas del usuario
     MY_ROUTE_POINTS = "points"
     MY_ROUTE_NOTES = "notes"
+    MY_ROUTE_TRACK_STYLES = "trackStyles"

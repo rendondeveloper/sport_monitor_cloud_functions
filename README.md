@@ -573,7 +573,7 @@ Una sola Cloud Function **`route_route`** atiende CRUD de rutas y waypoints por 
 
 ## 📦 Package: Users
 
-Una sola Cloud Function **`user_route`** atiende las operaciones de usuarios. El router valida CORS, método HTTP y Bearer token una vez y despacha por path a la lógica correspondiente (read, create, update, read_sections, subscribed_events, delete_section_item, my_routes). Paths: `/api/users/read`, `/api/users/profile` (equivalente a read), `/api/users/personalData`, `/api/users/healthData`, `/api/users/emergencyContacts`, `/api/users/membership` (GET; DELETE para emergencyContacts y `vehicles` legacy), `/api/users/subscribedEvents` (GET, eventos suscritos paginados), `/api/users/create`, `/api/users/update`, `/api/users/my-routes` (POST create + GET list/detail), `/api/users/my-routes/{routeId}/notes` (PUT reemplazo de notas).  
+Una sola Cloud Function **`user_route`** atiende las operaciones de usuarios. El router valida CORS, método HTTP y Bearer token una vez y despacha por path a la lógica correspondiente (read, create, update, read_sections, subscribed_events, delete_section_item, my_routes). Paths: `/api/users/read`, `/api/users/profile` (equivalente a read), `/api/users/personalData`, `/api/users/healthData`, `/api/users/emergencyContacts`, `/api/users/membership` (GET; DELETE para emergencyContacts y `vehicles` legacy), `/api/users/subscribedEvents` (GET, eventos suscritos paginados), `/api/users/create`, `/api/users/update`, `/api/users/my-routes` (POST create + GET list/detail), `/api/users/my-routes/{routeId}` (DELETE elimina la ruta completa), `/api/users/my-routes/{routeId}/notes` (PUT reemplazo de notas; DELETE solo borra notas y pone `notesCount` en 0).  
 **Importante**: el CRUD de vehículos se atiende por **`vehicle_route`** en `/api/vehicles...` (ruta oficial). Las rutas bajo `/api/users/.../vehicles` quedan como compatibilidad temporal.
 
 ### 4. `read` (perfil de usuario)
@@ -781,9 +781,10 @@ Crea y consulta rutas personales del usuario en Firestore usando estructura de s
 - `users/{userId}/myRoutes/{routeId}/points/{pointId}`
 - `users/{userId}/myRoutes/{routeId}/notes/{identifier}`
 
-**Tipo**: HTTP Request (POST, GET)  
-**Path**: `/api/users/my-routes`  
-**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/users/my-routes`
+**Tipo**: HTTP Request (POST, GET, DELETE)  
+**Path**: `/api/users/my-routes` (crear/listar/detalle); `/api/users/my-routes/{routeId}` (DELETE ruta); `/api/users/my-routes/{routeId}/notes` (PUT / DELETE notas)  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/users/my-routes`  
+**Endpoint directo (Cloud Function `user_route`, 2nd gen)**: `https://user-route-xa26lpxdea-uc.a.run.app` (mismas rutas bajo `/api/users/...`; confirmar en Firebase Console si el proyecto cambió de región o se redeployó con otra URL)
 
 #### POST /api/users/my-routes
 
@@ -828,10 +829,60 @@ Reglas de payload:
 
 Usa un solo endpoint para dos modos:
 
-- **Lista**: `GET /api/users/my-routes?userId=USER_DOC_ID` (cada ítem **no** incluye `description`, `createdAt` ni `updatedAt`).
-- **Detalle**: `GET /api/users/my-routes?userId=USER_DOC_ID&routeId=AUTO_ROUTE_ID_FIREBASE`
+- **Detalle (sin cambios)**: `GET /api/users/my-routes?userId=USER_DOC_ID&routeId=AUTO_ROUTE_ID_FIREBASE`
+- **Lista (compatibilidad legacy + paginación opcional)**: `GET /api/users/my-routes?userId=USER_DOC_ID` (cada ítem **no** incluye `description`, `createdAt` ni `updatedAt`).
 
 En modo detalle, retorna metadata de la ruta + arrays `points` y `notes` (sí incluye `description`).
+
+##### Query params (GET)
+
+- `userId`: string (**requerido**)
+- `routeId`: string (opcional) — activa modo detalle (sin cambios de contrato)
+
+**Paginación (solo modo lista):**
+
+- `limit`: int (opcional)
+  - Default: `50`
+  - Máximo: `100`
+- `startAfterDocId`: string (opcional) — cursor basado en **docId**
+
+##### Respuesta 200 (compatibilidad)
+
+Para mantener compatibilidad con clientes legacy:
+
+- **Sin `limit` y sin `startAfterDocId`** → retorna **array JSON** (legacy).
+- **Con `limit` o con `startAfterDocId`** → retorna **objeto JSON** con `result` y `pagination`.
+
+En **modo lista**, cada item incluye:
+
+- `distance`: float en kilómetros de esa ruta.
+- `distanceTotal`: float en kilómetros con **la suma de `distance` de todas las rutas del usuario**, **redondeada hacia arriba a 1 decimal (###.#)**.
+
+**Ejemplo (paginada):**
+
+```json
+{
+  "result": [
+    {
+      "id": "ROUTE_ID",
+      "identifier": 16,
+      "name": "Ruta 1",
+      "eventId": null,
+      "distance": 0.0,
+      "distanceTotal": 12.3,
+      "pointsCount": 0,
+      "notesCount": 0
+    }
+  ],
+  "pagination": {
+    "limit": 50,
+    "page": 1,
+    "hasMore": true,
+    "count": 1,
+    "lastDocId": "ROUTE_ID"
+  }
+}
+```
 
 #### PUT /api/users/my-routes/{routeId}/notes
 
@@ -842,6 +893,20 @@ Actualiza/reemplaza todas las notas de la ruta indicada.
 - `identifier` se usa como docId (`notes/{identifier}`)
 - Si `notes` viene `[]`, se limpian todas las notas de la ruta
 - Respuesta 200: sin body (solo código HTTP)
+
+#### DELETE `/api/users/my-routes/{routeId}`
+
+Elimina la ruta completa: borra todos los docs en `notes`, luego en `points`, y el documento de `myRoutes`.
+
+- Query requerido: `userId` (ID del documento usuario en Firestore)
+- Respuesta 200: sin body
+
+#### DELETE `/api/users/my-routes/{routeId}/notes`
+
+Elimina solo las notas de la ruta y actualiza el doc padre (`notesCount: 0`, `updatedAt`).
+
+- Query requerido: `userId`
+- Respuesta 200: sin body
 
 #### cURL
 
@@ -888,6 +953,16 @@ curl -X GET \
   'https://system-track-monitor.web.app/api/users/my-routes?userId=USER_DOC_ID' \
   -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
 
+# Listar rutas del usuario (paginado) — primera página
+curl -X GET \
+  'https://system-track-monitor.web.app/api/users/my-routes?userId=USER_DOC_ID&limit=50' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+
+# Listar rutas del usuario (paginado) — segunda página usando cursor (startAfterDocId = pagination.lastDocId)
+curl -X GET \
+  'https://system-track-monitor.web.app/api/users/my-routes?userId=USER_DOC_ID&limit=50&startAfterDocId=ROUTE_ID' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+
 # Obtener detalle de una ruta
 curl -X GET \
   'https://system-track-monitor.web.app/api/users/my-routes?userId=USER_DOC_ID&routeId=AUTO_ROUTE_ID_FIREBASE' \
@@ -924,11 +999,31 @@ curl -X PUT \
       }
     ]
   }'
+
+# Eliminar solo las notas de una ruta (Hosting)
+curl -X DELETE \
+  'https://system-track-monitor.web.app/api/users/my-routes/AUTO_ROUTE_ID_FIREBASE/notes?userId=USER_DOC_ID' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+
+# Eliminar solo las notas (URL directa Cloud Run `user_route`)
+curl -X DELETE \
+  'https://user-route-xa26lpxdea-uc.a.run.app/api/users/my-routes/AUTO_ROUTE_ID_FIREBASE/notes?userId=USER_DOC_ID' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+
+# Eliminar la ruta completa: notas, puntos y documento de ruta (Hosting)
+curl -X DELETE \
+  'https://system-track-monitor.web.app/api/users/my-routes/AUTO_ROUTE_ID_FIREBASE?userId=USER_DOC_ID' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
+
+# Eliminar la ruta completa (URL directa Cloud Run `user_route`)
+curl -X DELETE \
+  'https://user-route-xa26lpxdea-uc.a.run.app/api/users/my-routes/AUTO_ROUTE_ID_FIREBASE?userId=USER_DOC_ID' \
+  -H 'Authorization: Bearer TU_TOKEN_FIREBASE_AQUI'
 ```
 
 **Errores (sin body JSON):**
 
-- `400`: body inválido o faltan campos requeridos.
+- `400`: en PUT, body inválido o faltan campos; en DELETE de ruta o notas, `userId` faltante o vacío.
 - `401`: token inválido/faltante.
 - `404`: usuario o ruta no encontrada.
 - `500`: error interno.
@@ -4366,7 +4461,7 @@ Las siguientes funciones requieren autenticación Bearer token:
 - `events` - Lista de eventos con paginación (requiere Bearer token)
 - `event_detail` - Detalle de un evento (requiere Bearer token)
 - `event_categories` - Categorías de un evento (requiere Bearer token)
-- `user_route` - Router de usuarios: read (perfil), create (crear/activar), update (actualizar por secciones), read_sections (perfil por sección), subscribedEvents (eventos suscritos paginados), delete_section_item (eliminar contacto o vehículo), my-routes (crear/listar/detalle de rutas personales); paths /api/users/read, /api/users/profile, /api/users/personalData, /api/users/healthData, /api/users/emergencyContacts, /api/users/vehicles, /api/users/membership (GET; DELETE solo emergencyContacts y vehicles), /api/users/subscribedEvents (GET), /api/users/create, /api/users/update, /api/users/my-routes (GET/POST) (requiere Bearer token)
+- `user_route` - Router de usuarios: read (perfil), create (crear/activar), update (actualizar por secciones), read_sections (perfil por sección), subscribedEvents (eventos suscritos paginados), delete_section_item (eliminar contacto o vehículo), my-routes (crear/listar/detalle, DELETE ruta, PUT/DELETE notas); paths /api/users/read, /api/users/profile, /api/users/personalData, /api/users/healthData, /api/users/emergencyContacts, /api/users/vehicles, /api/users/membership (GET; DELETE solo emergencyContacts y vehicles), /api/users/subscribedEvents (GET), /api/users/create, /api/users/update, /api/users/my-routes (GET/POST), /api/users/my-routes/{routeId} (DELETE), /api/users/my-routes/{routeId}/notes (PUT/DELETE) (requiere Bearer token)
 - `get_vehicles` - Obtiene vehículos de un usuario (requiere Bearer token)
 - `update_vehicle` - Actualiza vehículo (requiere Bearer token)
 - `delete_vehicle` - Elimina vehículo (requiere Bearer token)

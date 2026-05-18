@@ -3,7 +3,8 @@ Router central para API de usuarios: /api/users/read, /api/users/profile, /api/u
 
 Secciones: personalData, healthData, emergencyContacts, vehicles, membership (GET /api/users/{section}).
 DELETE solo para emergencyContacts y vehicles (/api/users/{section}?userId=xxx&id=docId).
-Valida CORS, método HTTP y Bearer token una vez; despacha por path a create.handle, read.handle, read_sections.handle, delete_section_item.handle, update.handle, create_my_route.handle o get_my_routes.handle.
+Rutas my-routes: POST/GET en /api/users/my-routes; PUT/DELETE en /api/users/my-routes/{routeId}/notes; DELETE en /api/users/my-routes/{routeId}.
+Valida CORS, método HTTP y Bearer token una vez; despacha por path a create.handle, read.handle, read_sections.handle, delete_section_item.handle, update.handle, create_my_route.handle, get_my_routes.handle (detalle con points, notes y trackStyles), update_my_route_notes, delete_my_route_notes o delete_my_route.
 """
 
 import logging
@@ -15,6 +16,8 @@ from utils.helper_http_verb import validate_request
 
 from .create import handle as create_handle
 from .create_my_route import handle as create_my_route_handle
+from .delete_my_route import handle as delete_my_route_handle
+from .delete_my_route_notes import handle as delete_my_route_notes_handle
 from .delete_section_item import DELETE_ALLOWED_SECTIONS, handle as delete_section_item_handle
 from .get_my_routes import handle as get_my_routes_handle
 from .read import handle as read_handle
@@ -83,11 +86,24 @@ def _extract_my_route_notes_route_id(path: str) -> str | None:
     return None
 
 
+def _extract_my_route_delete_route_id(path: str) -> str | None:
+    """
+    Extrae routeId de DELETE /api/users/my-routes/{routeId} (exactamente 4 segmentos).
+    No debe coincidir con paths que tengan más segmentos (p. ej. .../notes).
+    """
+    parts = [p for p in (path or "").strip("/").split("/") if p]
+    if len(parts) != 4:
+        return None
+    if parts[0] != "api" or parts[1] != "users" or parts[2] != "my-routes":
+        return None
+    return parts[3].strip() or None
+
+
 @https_fn.on_request()
 def user_route(req: https_fn.Request) -> https_fn.Response:
     """
     Una sola Cloud Function para users: valida token y despacha por path.
-    Paths: /api/users/read, /api/users/profile (GET), /api/users/{section} (GET o DELETE), /api/users/subscribedEvents (GET), /api/users/create (POST), /api/users/update (PUT).
+    Paths: /api/users/read, /api/users/profile (GET), /api/users/{section} (GET o DELETE), /api/users/subscribedEvents (GET), /api/users/create (POST), /api/users/update (PUT), /api/users/my-routes (GET/POST), /api/users/my-routes/{routeId} (DELETE), /api/users/my-routes/{routeId}/notes (PUT/DELETE).
     """
     validation_response = validate_request(
         req, ["GET", "POST", "PUT", "DELETE"], "user_route", return_json_error=False
@@ -108,16 +124,31 @@ def user_route(req: https_fn.Request) -> https_fn.Response:
 
     route_id_for_notes = _extract_my_route_notes_route_id(path)
     if route_id_for_notes is not None:
-        if req.method != "PUT":
-            return https_fn.Response(
-                "",
-                status=405,
-                headers={
-                    "Allow": "PUT",
-                    "Access-Control-Allow-Origin": "*",
-                },
-            )
-        return update_my_route_notes_handle(req, route_id_for_notes)
+        if req.method == "DELETE":
+            return delete_my_route_notes_handle(req, route_id_for_notes)
+        if req.method == "PUT":
+            return update_my_route_notes_handle(req, route_id_for_notes)
+        return https_fn.Response(
+            "",
+            status=405,
+            headers={
+                "Allow": "PUT, DELETE",
+                "Access-Control-Allow-Origin": "*",
+            },
+        )
+
+    route_id_for_delete_route = _extract_my_route_delete_route_id(path)
+    if route_id_for_delete_route is not None:
+        if req.method == "DELETE":
+            return delete_my_route_handle(req, route_id_for_delete_route)
+        return https_fn.Response(
+            "",
+            status=405,
+            headers={
+                "Allow": "DELETE",
+                "Access-Control-Allow-Origin": "*",
+            },
+        )
 
     action, section = _action_from_path(path)
     if action is None:

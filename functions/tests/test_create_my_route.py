@@ -50,11 +50,14 @@ def test_create_my_route_happy_path_includes_distance(
     mock_helper_cls.return_value = helper
     mock_now.return_value = "2026-05-06T00:00:00+00:00"
     helper.get_document.return_value = {"email": "x@y.com"}
+    helper.query_documents.return_value = []
     helper.create_document.side_effect = [
         "route_auto_1",
         "point_auto_1",
         "point_auto_2",
         "point_auto_3",
+        "style_auto_1",
+        "style_auto_2",
     ]
 
     from users.create_my_route import handle
@@ -74,13 +77,29 @@ def test_create_my_route_happy_path_includes_distance(
             {"identifier": 7, "message": "m1"},
             {"identifier": 8, "message": "m2", "photos": ["http://a"]},
         ],
+        "trackStyles": [
+            {"startPointIndex": 150, "colorHex": "#00FF00"},
+            {"startPointIndex": 0, "colorHex": "#FF0000"},
+        ],
     }
     resp = handle(_make_request(payload))
     assert resp.status_code == 201
-    assert json.loads(resp.get_data(as_text=True)) == {"id": "route_auto_1"}
+    route_doc = helper.create_document.call_args_list[0][0][1]
+    assert json.loads(resp.get_data(as_text=True)) == {
+        "id": "route_auto_1",
+        "distance": route_doc["distance"],
+        "identifierLocal": None,
+        "identifierNew": None,
+    }
 
-    # 1 create de la ruta + 3 creates de points
-    assert helper.create_document.call_count == 4
+    # 1 ruta + 3 points + 2 trackStyles
+    assert helper.create_document.call_count == 6
+    style_calls = [
+        c[0][1]
+        for c in helper.create_document.call_args_list[4:6]
+    ]
+    assert style_calls[0] == {"startPointIndex": 150, "colorHex": "#00FF00"}
+    assert style_calls[1] == {"startPointIndex": 0, "colorHex": "#FF0000"}
     assert helper.create_document_with_id.call_count == 2
     call_args = helper.create_document_with_id.call_args_list
     assert call_args[0][0][1] == "7"
@@ -99,6 +118,7 @@ def test_create_my_route_points_null_distance_zero(mock_helper_cls, mock_now):
     mock_helper_cls.return_value = helper
     mock_now.return_value = "2026-05-06T00:00:00+00:00"
     helper.get_document.return_value = {"email": "x@y.com"}
+    helper.query_documents.return_value = []
     helper.create_document.return_value = "route_auto_1"
 
     from users.create_my_route import handle
@@ -117,6 +137,8 @@ def test_create_my_route_points_null_distance_zero(mock_helper_cls, mock_now):
     assert helper.create_document.call_count == 1
     route_doc = helper.create_document.call_args_list[0][0][1]
     assert route_doc["distance"] == 0.0
+    body = json.loads(resp.get_data(as_text=True))
+    assert body["distance"] == 0.0
 
 
 def test_create_my_route_missing_user_id():
@@ -151,7 +173,7 @@ def test_create_my_route_note_identifier_required_int():
     assert resp.status_code == 400
 
 
-def test_create_my_route_identifier_name_description_validation():
+def test_create_my_route_identifier_name_validation():
     from users.create_my_route import handle
 
     # identifier no int
@@ -180,18 +202,126 @@ def test_create_my_route_identifier_name_description_validation():
     )
     assert resp2.status_code == 400
 
-    # description vacío
-    resp3 = handle(
+
+@patch("users.create_my_route.get_current_timestamp")
+@patch("users.create_my_route.FirestoreHelper")
+def test_create_my_route_description_optional_and_normalized(
+    mock_helper_cls, mock_now
+):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    mock_now.return_value = "2026-05-06T00:00:00+00:00"
+    helper.get_document.return_value = {"email": "x@y.com"}
+    helper.query_documents.return_value = []
+    helper.create_document.side_effect = ["route_1", "route_2", "route_3"]
+
+    from users.create_my_route import handle
+
+    payload_base = {
+        "userId": "u1",
+        "identifier": 16,
+        "name": "test",
+        "eventId": None,
+        "points": None,
+        "notes": None,
+    }
+
+    resp1 = handle(_make_request({**payload_base, "description": ""}))
+    resp2 = handle(_make_request(dict(payload_base)))
+    resp3 = handle(_make_request({**payload_base, "description": "   "}))
+
+    assert resp1.status_code == 201
+    assert resp2.status_code == 201
+    assert resp3.status_code == 201
+
+    route_doc_1 = helper.create_document.call_args_list[0][0][1]
+    route_doc_2 = helper.create_document.call_args_list[1][0][1]
+    route_doc_3 = helper.create_document.call_args_list[2][0][1]
+    assert route_doc_1["description"] == ""
+    assert route_doc_2["description"] == ""
+    assert route_doc_3["description"] == ""
+
+
+def test_create_my_route_track_styles_must_be_list_or_null():
+    from users.create_my_route import handle
+
+    resp = handle(
         _make_request(
             {
                 "userId": "u1",
                 "identifier": 16,
                 "name": "test",
-                "description": "",
+                "description": "desc",
+                "trackStyles": "bad",
             }
         )
     )
-    assert resp3.status_code == 400
+    assert resp.status_code == 400
+
+
+@patch("users.create_my_route.get_current_timestamp")
+@patch("users.create_my_route.FirestoreHelper")
+def test_create_my_route_track_styles_optional_skips_subcollection_writes(
+    mock_helper_cls, mock_now
+):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    mock_now.return_value = "2026-05-06T00:00:00+00:00"
+    helper.get_document.return_value = {"email": "x@y.com"}
+    helper.query_documents.return_value = []
+    helper.create_document.return_value = "route_auto_1"
+
+    from users.create_my_route import handle
+
+    for track_styles in (None, []):
+        helper.reset_mock()
+        helper.get_document.return_value = {"email": "x@y.com"}
+        helper.query_documents.return_value = []
+        helper.create_document.return_value = "route_auto_1"
+        payload = {
+            "userId": "u1",
+            "identifier": 16,
+            "name": "test",
+            "description": "desc",
+            "eventId": None,
+            "points": None,
+            "notes": None,
+            "trackStyles": track_styles,
+        }
+        resp = handle(_make_request(payload))
+        assert resp.status_code == 201
+        assert helper.create_document.call_count == 1
+
+
+@patch("users.create_my_route.get_current_timestamp")
+@patch("users.create_my_route.FirestoreHelper")
+def test_create_my_route_track_styles_ignores_non_dict_items(mock_helper_cls, mock_now):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    mock_now.return_value = "2026-05-06T00:00:00+00:00"
+    helper.get_document.return_value = {"email": "x@y.com"}
+    helper.query_documents.return_value = []
+    helper.create_document.side_effect = ["route_auto_1", "style_auto_1"]
+
+    from users.create_my_route import handle
+
+    payload = {
+        "userId": "u1",
+        "identifier": 16,
+        "name": "test",
+        "description": "desc",
+        "eventId": None,
+        "points": None,
+        "notes": None,
+        "trackStyles": ["bad", {"startPointIndex": 0, "colorHex": "#FF0000"}],
+    }
+    resp = handle(_make_request(payload))
+    assert resp.status_code == 201
+    assert helper.create_document.call_count == 2
+    assert helper.create_document.call_args_list[1][0][1] == {
+        "startPointIndex": 0,
+        "colorHex": "#FF0000",
+    }
 
 
 def test_create_my_route_notes_must_be_list_or_null():
@@ -220,6 +350,7 @@ def test_create_my_route_mixed_points_distance_ignores_invalid(
     mock_helper_cls.return_value = helper
     mock_now.return_value = "2026-05-06T00:00:00+00:00"
     helper.get_document.return_value = {"email": "x@y.com"}
+    helper.query_documents.return_value = []
     helper.create_document.side_effect = [
         "route_auto_1",
         "point_auto_1",
@@ -256,6 +387,8 @@ def test_create_my_route_mixed_points_distance_ignores_invalid(
     assert helper.create_document.call_count == 1 + 5
 
     route_doc = helper.create_document.call_args_list[0][0][1]
+    body = json.loads(resp.get_data(as_text=True))
+    assert body["distance"] == route_doc["distance"]
     expected_m = _haversine_meters(19.4326, -99.1332, 19.4330, -99.1340) + _haversine_meters(
         19.4330, -99.1340, 19.4334, -99.1350
     )
@@ -306,6 +439,7 @@ def test_create_my_route_user_not_found_returns_404(mock_helper_cls):
     }
     resp = handle(_make_request(payload))
     assert resp.status_code == 404
+    helper.query_documents.assert_not_called()
     helper.create_document.assert_not_called()
 
 
@@ -316,6 +450,10 @@ def test_create_my_route_multiple_calls_are_stable(mock_helper_cls, mock_now):
     mock_helper_cls.return_value = helper
     mock_now.return_value = "2026-05-06T00:00:00+00:00"
     helper.get_document.return_value = {"email": "x@y.com"}
+    helper.query_documents.side_effect = [
+        [],
+        [("route_1", {"identifier": 16})],
+    ]
     helper.create_document.side_effect = ["route_1", "route_2"]
 
     from users.create_my_route import handle
@@ -334,8 +472,20 @@ def test_create_my_route_multiple_calls_are_stable(mock_helper_cls, mock_now):
     resp2 = handle(_make_request(payload))
     assert resp1.status_code == 201
     assert resp2.status_code == 201
-    assert json.loads(resp1.get_data(as_text=True)) == {"id": "route_1"}
-    assert json.loads(resp2.get_data(as_text=True)) == {"id": "route_2"}
+    assert json.loads(resp1.get_data(as_text=True)) == {
+        "id": "route_1",
+        "distance": 0.0,
+        "identifierLocal": None,
+        "identifierNew": None,
+    }
+    assert json.loads(resp2.get_data(as_text=True)) == {
+        "id": "route_2",
+        "distance": 0.0,
+        "identifierLocal": 16,
+        "identifierNew": 17,
+    }
+    route_doc_2 = helper.create_document.call_args_list[1][0][1]
+    assert route_doc_2["identifier"] == 17
 
 
 def test_create_my_route_value_error_in_json_returns_400():
@@ -361,6 +511,7 @@ def test_create_my_route_internal_error_returns_500(mock_helper_cls, mock_now):
     mock_helper_cls.return_value = helper
     mock_now.return_value = "2026-05-06T00:00:00+00:00"
     helper.get_document.return_value = {"email": "x@y.com"}
+    helper.query_documents.return_value = []
     helper.create_document.side_effect = RuntimeError("boom")
 
     from users.create_my_route import handle
@@ -376,4 +527,171 @@ def test_create_my_route_internal_error_returns_500(mock_helper_cls, mock_now):
     }
     resp = handle(_make_request(payload))
     assert resp.status_code == 500
+
+
+@patch("users.create_my_route.get_current_timestamp")
+@patch("users.create_my_route.FirestoreHelper")
+def test_create_my_route_identifier_collision_reassigns_max_plus_one(
+    mock_helper_cls, mock_now
+):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    mock_now.return_value = "2026-05-06T00:00:00+00:00"
+    helper.get_document.return_value = {"email": "x@y.com"}
+    helper.query_documents.return_value = [
+        ("a", {"identifier": 99}),
+        ("b", {"identifier": 16}),
+    ]
+    helper.create_document.return_value = "route_new"
+
+    from users.create_my_route import handle
+
+    payload = {
+        "userId": "u1",
+        "identifier": 16,
+        "name": "test",
+        "description": "desc",
+        "eventId": None,
+        "points": None,
+        "notes": None,
+    }
+    resp = handle(_make_request(payload))
+    assert resp.status_code == 201
+    body = json.loads(resp.get_data(as_text=True))
+    assert body == {
+        "id": "route_new",
+        "distance": 0.0,
+        "identifierLocal": 16,
+        "identifierNew": 100,
+    }
+    route_doc = helper.create_document.call_args_list[0][0][1]
+    assert route_doc["identifier"] == 100
+
+
+@patch("users.create_my_route.get_current_timestamp")
+@patch("users.create_my_route.FirestoreHelper")
+def test_create_my_route_identifier_free_among_existing_routes(
+    mock_helper_cls, mock_now
+):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    mock_now.return_value = "2026-05-06T00:00:00+00:00"
+    helper.get_document.return_value = {"email": "x@y.com"}
+    helper.query_documents.return_value = [("a", {"identifier": 10})]
+    helper.create_document.return_value = "route_new"
+
+    from users.create_my_route import handle
+
+    payload = {
+        "userId": "u1",
+        "identifier": 5,
+        "name": "test",
+        "description": "desc",
+        "eventId": None,
+        "points": None,
+        "notes": None,
+    }
+    resp = handle(_make_request(payload))
+    assert resp.status_code == 201
+    assert json.loads(resp.get_data(as_text=True)) == {
+        "id": "route_new",
+        "distance": 0.0,
+        "identifierLocal": None,
+        "identifierNew": None,
+    }
+    route_doc = helper.create_document.call_args_list[0][0][1]
+    assert route_doc["identifier"] == 5
+
+
+@patch("users.create_my_route.get_current_timestamp")
+@patch("users.create_my_route.FirestoreHelper")
+def test_create_my_route_skips_docs_with_no_data_in_identifier_scan(
+    mock_helper_cls, mock_now
+):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    mock_now.return_value = "2026-05-06T00:00:00+00:00"
+    helper.get_document.return_value = {"email": "x@y.com"}
+    helper.query_documents.return_value = [("bad", None), ("b", {"identifier": 3})]
+    helper.create_document.return_value = "route_new"
+
+    from users.create_my_route import handle
+
+    payload = {
+        "userId": "u1",
+        "identifier": 3,
+        "name": "test",
+        "description": "desc",
+        "eventId": None,
+        "points": None,
+        "notes": None,
+    }
+    resp = handle(_make_request(payload))
+    assert resp.status_code == 201
+    body = json.loads(resp.get_data(as_text=True))
+    assert body["distance"] == 0.0
+    assert body["identifierLocal"] == 3
+    assert body["identifierNew"] == 4
+
+
+@patch("users.create_my_route.get_current_timestamp")
+@patch("users.create_my_route.FirestoreHelper")
+def test_create_my_route_legacy_route_without_identifier_ignored_for_collision(
+    mock_helper_cls, mock_now
+):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    mock_now.return_value = "2026-05-06T00:00:00+00:00"
+    helper.get_document.return_value = {"email": "x@y.com"}
+    helper.query_documents.return_value = [("legacy", {"name": "old"})]
+    helper.create_document.return_value = "route_new"
+
+    from users.create_my_route import handle
+
+    payload = {
+        "userId": "u1",
+        "identifier": 7,
+        "name": "test",
+        "description": "desc",
+        "eventId": None,
+        "points": None,
+        "notes": None,
+    }
+    resp = handle(_make_request(payload))
+    assert resp.status_code == 201
+    route_doc = helper.create_document.call_args_list[0][0][1]
+    assert route_doc["identifier"] == 7
+
+
+@patch("users.create_my_route.get_current_timestamp")
+@patch("users.create_my_route.FirestoreHelper")
+def test_create_my_route_ignores_bool_identifier_in_existing_docs(
+    mock_helper_cls, mock_now
+):
+    helper = MagicMock()
+    mock_helper_cls.return_value = helper
+    mock_now.return_value = "2026-05-06T00:00:00+00:00"
+    helper.get_document.return_value = {"email": "x@y.com"}
+    helper.query_documents.return_value = [("weird", {"identifier": True})]
+    helper.create_document.return_value = "route_new"
+
+    from users.create_my_route import handle
+
+    payload = {
+        "userId": "u1",
+        "identifier": 1,
+        "name": "test",
+        "description": "desc",
+        "eventId": None,
+        "points": None,
+        "notes": None,
+    }
+    resp = handle(_make_request(payload))
+    assert resp.status_code == 201
+    route_doc = helper.create_document.call_args_list[0][0][1]
+    assert route_doc["identifier"] == 1
+    body = json.loads(resp.get_data(as_text=True))
+    assert body["identifierLocal"] is None
+
+
 

@@ -309,3 +309,76 @@ def test_user_route_put_my_route_notes_dispatches_to_update_notes(
     response = user_route(req)
     assert response.status_code == 200
     mock_update_notes.assert_called_once_with(req, "route_1")
+
+
+@patch("users.user_route.verify_bearer_token", return_value=True)
+@patch("users.user_route.validate_request", return_value=None)
+@patch("users.user_route.delete_my_route_notes_handle")
+def test_user_route_delete_my_route_notes_dispatches(
+    mock_delete_notes, mock_validate, mock_verify
+):
+    from users.user_route import user_route
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_delete_notes.return_value = mock_resp
+
+    req = _make_request(
+        path="/api/users/my-routes/route_1/notes",
+        method="DELETE",
+        args={"userId": "u1"},
+    )
+    response = user_route(req)
+    assert response.status_code == 200
+    mock_delete_notes.assert_called_once_with(req, "route_1")
+
+
+@patch("users.user_route.verify_bearer_token", return_value=True)
+@patch("users.user_route.validate_request", return_value=None)
+@patch("users.user_route.delete_my_route_handle")
+def test_user_route_delete_my_route_dispatches(mock_delete_route, mock_validate, mock_verify):
+    from users.user_route import user_route
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_delete_route.return_value = mock_resp
+
+    req = _make_request(
+        path="/api/users/my-routes/route_1",
+        method="DELETE",
+        args={"userId": "u1"},
+    )
+    response = user_route(req)
+    assert response.status_code == 200
+    mock_delete_route.assert_called_once_with(req, "route_1")
+
+
+@patch("users.user_route.verify_bearer_token", return_value=True)
+@patch("users.user_route.validate_request", return_value=None)
+def test_user_route_get_my_route_notes_returns_405(mock_validate, mock_verify):
+    from users.user_route import user_route
+
+    req = _make_request(
+        path="/api/users/my-routes/route_1/notes",
+        method="GET",
+        args={"userId": "u1"},
+    )
+    response = user_route(req)
+    assert response.status_code == 405
+    assert "PUT" in (response.headers.get("Allow") or "")
+
+
+@patch("users.user_route.verify_bearer_token", return_value=True)
+@patch("users.user_route.validate_request", return_value=None)
+def test_user_route_get_my_route_by_id_returns_405(mock_validate, mock_verify):
+    """GET /api/users/my-routes/{routeId} no está soportado en el early dispatch (solo DELETE)."""
+    from users.user_route import user_route
+
+    req = _make_request(
+        path="/api/users/my-routes/route_1",
+        method="GET",
+        args={"userId": "u1"},
+    )
+    response = user_route(req)
+    assert response.status_code == 405
+    assert response.headers.get("Allow") == "DELETE"
