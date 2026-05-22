@@ -23,6 +23,15 @@ functions/
 │   ├── events_customer.py          # events
 │   ├── events_detail_customer.py  # event_detail
 │   └── event_categories.py        # event_categories
+├── checklists/          # Package: Checklists de evento (CRM) — checklist_route
+│   ├── checklist_route.py           # checklist_route (router paths planos)
+│   ├── list_checklists.py         # GET list
+│   ├── get_checklist.py           # GET get
+│   ├── create_checklist.py        # POST create
+│   ├── update_checklist.py        # PUT update
+│   ├── delete_checklist.py        # DELETE delete
+│   ├── get_participant_progress.py # GET participant-progress
+│   └── checklist_participant_service.py
 ├── users/               # Package: Gestión de Usuarios (una función: user_route)
 │   ├── user_route.py                # user_route (router: read/create/update/delete_section/subscribedEvents/my-routes por path)
 │   ├── create.py                    # create.handle (crear/activar usuario)
@@ -540,6 +549,152 @@ curl -X POST 'https://system-track-monitor.web.app/api/events/save-info' \
 - `401`: token inválido o faltante.
 - `404`: recurso no encontrado o sin ownership.
 - `500`: error interno.
+
+---
+
+## 📦 Package: Checklists
+
+Una sola Cloud Function **`checklist_route`** atiende el CRM de checklists por evento (SPRTMNTRPP-123/124/125). Paths **planos** alineados con dart-define. Progreso de participantes en `events/{eventId}/checklists/{checklistId}/participants/{userId}`.
+
+**Tipo**: HTTP Request (`GET`, `POST`, `PUT`, `DELETE`)  
+**Endpoint con Hosting**: `https://system-track-monitor.web.app/api/events/checklists/...`
+
+**Nota**: Requiere autenticación Bearer token. Acceso si el UID es **creador del evento** o está en `events/{eventId}/staff_users/{uid}`.
+
+### Endpoints
+
+| Método | Path | Descripción |
+|---|---|---|
+| `GET` | `/api/events/checklists/list?eventId=` | Lista checklists del evento (resumen) |
+| `GET` | `/api/events/checklists/get?eventId=&checklistId=` | Detalle de checklist con ítems y asignados |
+| `POST` | `/api/events/checklists/create` | Crea checklist, ítems y docs de participantes asignados |
+| `PUT` | `/api/events/checklists/update` | Reemplazo completo; sincroniza `participants/` |
+| `DELETE` | `/api/events/checklists/delete?eventId=&checklistId=` | Elimina checklist, ítems y participantes (204) |
+| `GET` | `/api/events/checklists/participant-progress?eventId=&checklistId=` | Progreso paginado de participantes asignados |
+
+### Headers requeridos
+
+| Header | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `Authorization` | string | **Sí** | Bearer token de Firebase Auth |
+| `Content-Type` | string | POST/PUT | `application/json` |
+
+### Parámetros
+
+#### List (`GET /list`)
+
+| Parámetro | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `eventId` | string | **Sí** | ID del evento |
+
+#### Get (`GET /get`)
+
+| Parámetro | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `eventId` | string | **Sí** | ID del evento |
+| `checklistId` | string | **Sí** | ID del checklist |
+
+#### Create (`POST /create`) — body JSON
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `eventId` | string | **Sí** | ID del evento |
+| `title` | string | **Sí** | Título del checklist |
+| `visibilityMode` | string | **Sí** | `participants` o `eventDates` |
+| `items` | array | **Sí** | Plantilla de ítems (`name`, `isRequired`, `order`, etc.) |
+| `assignedParticipantIds` | array | No | UIDs con doc en `participants/` |
+
+#### Update (`PUT /update`) — body JSON
+
+Mismos campos que create más `checklistId` o `id`. Reemplazo completo de ítems; sincroniza participantes (crea nuevos, elimina removidos, preserva `check`/`updateDate` en ítems requeridos existentes).
+
+#### Delete (`DELETE /delete`)
+
+| Parámetro | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `eventId` | string | **Sí** | ID del evento |
+| `checklistId` | string | **Sí** | ID del checklist |
+
+#### Participant progress (`GET /participant-progress`)
+
+| Parámetro | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `eventId` | string | **Sí** | ID del evento |
+| `checklistId` | string | **Sí** | ID del checklist |
+| `limit` | integer | No | Tamaño de página (default 20, max 50) |
+| `cursor` | string | No | `participantId` del último doc de la página anterior |
+| `search` | string | No | Filtra por nombre, email o número de piloto |
+
+### Respuestas exitosas
+
+- **List (200)**: `{ "result": [ { "id", "title", "visibilityMode", "itemCount", "assignedCount", "createdAt", "updatedAt" } ] }`
+- **Get / Create (201) / Update (200)**: objeto checklist con `id`, `eventId`, `title`, `visibilityMode`, `items[]`, `assignedParticipantIds[]`, timestamps
+- **Delete (204)**: sin cuerpo
+- **Participant progress (200)**:
+
+```json
+{
+  "result": [
+    {
+      "participantId": "USER_1",
+      "participantName": "Ana Lopez",
+      "pilotNumber": "7",
+      "items": [
+        { "itemId": "item-1", "name": "License", "isRequired": true, "check": false, "updateDate": null }
+      ],
+      "isCompleted": false,
+      "lastUpdateDate": null
+    }
+  ],
+  "pagination": { "hasMore": false, "lastDocId": "USER_1", "count": 1, "limit": 20 },
+  "summary": { "assignedCount": 1, "completedCount": 0, "incompleteCount": 1 }
+}
+```
+
+### Reglas v2
+
+- Solo IDs en `assignedParticipantIds` tienen documento en `participants/`.
+- Suscriptores del evento **no asignados** no aparecen en `participant-progress`.
+- `itemProgress` solo incluye ítems de plantilla con `isRequired: true`.
+- Sin sync en `users/.../membership`.
+- PATCH móvil (`participant-update`) — pendiente otra subtarea.
+
+### Comandos cURL
+
+```bash
+# List
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://system-track-monitor.web.app/api/events/checklists/list?eventId=EVENT_ID"
+
+# Get
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://system-track-monitor.web.app/api/events/checklists/get?eventId=EVENT_ID&checklistId=CHK_ID"
+
+# Create
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"eventId":"EVENT_ID","title":"Technical","visibilityMode":"participants","items":[{"name":"License","isRequired":true,"order":0}],"assignedParticipantIds":["USER_1"]}' \
+  "https://system-track-monitor.web.app/api/events/checklists/create"
+
+# Update
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"eventId":"EVENT_ID","checklistId":"CHK_ID","title":"Technical","visibilityMode":"participants","items":[{"name":"License","isRequired":true,"order":0}],"assignedParticipantIds":["USER_1","USER_2"]}' \
+  "https://system-track-monitor.web.app/api/events/checklists/update"
+
+# Delete
+curl -s -X DELETE -H "Authorization: Bearer $TOKEN" \
+  "https://system-track-monitor.web.app/api/events/checklists/delete?eventId=EVENT_ID&checklistId=CHK_ID"
+
+# Participant progress
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://system-track-monitor.web.app/api/events/checklists/participant-progress?eventId=EVENT_ID&checklistId=CHK_ID&limit=20&search=ana"
+```
+
+### Respuestas de error
+
+- `400`: parámetros o body inválidos (sin cuerpo JSON).
+- `401`: token inválido o faltante.
+- `404`: evento/checklist no encontrado o sin acceso CRM.
+- `500`: error interno (sin cuerpo JSON).
 
 ---
 
@@ -4559,6 +4714,9 @@ firebase deploy --only functions:NOMBRE_FUNCION
 ### Ejemplos
 
 ```bash
+# Desplegar checklist_route + hosting (rewrites /api/events/checklists/... → checklist_route)
+firebase deploy --only functions:checklist_route,hosting
+
 # Desplegar solo events
 firebase deploy --only functions:events
 
