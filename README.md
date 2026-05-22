@@ -602,7 +602,7 @@ Una sola Cloud Function **`checklist_route`** atiende el CRM de checklists por e
 | `title` | string | **Sí** | Título del checklist |
 | `visibilityMode` | string | **Sí** | `participants` o `eventDates` |
 | `items` | array | **Sí** | Plantilla de ítems (`name`, `isRequired`, `order`, etc.) |
-| `assignedParticipantIds` | array | No | UIDs con doc en `participants/` |
+| `assignedParticipantIds` | array of string | No | UIDs a asignar (crea doc en `participants/`) |
 
 #### Update (`PUT /update`) — body JSON
 
@@ -627,10 +627,112 @@ Mismos campos que create más `checklistId` o `id`. Reemplazo completo de ítems
 
 ### Respuestas exitosas
 
-- **List (200)**: `{ "result": [ { "id", "title", "visibilityMode", "itemCount", "assignedCount", "createdAt", "updatedAt" } ] }`
-- **Get / Create (201) / Update (200)**: objeto checklist con `id`, `eventId`, `title`, `visibilityMode`, `items[]`, `assignedParticipantIds[]`, timestamps
-- **Delete (204)**: sin cuerpo
-- **Participant progress (200)**:
+#### List (`GET /list`) — 200 OK
+
+JSON directo con array en `result` (sin wrapper `success`/`message`). Si no hay checklists, `result` es `[]`.
+
+```json
+{
+  "result": [
+    {
+      "id": "chk_abc123",
+      "title": "Documentación obligatoria",
+      "visibilityMode": "participants",
+      "itemCount": 5,
+      "assignedCount": 12,
+      "createdAt": "2026-05-22T10:00:00+00:00",
+      "updatedAt": "2026-05-22T12:00:00+00:00"
+    }
+  ]
+}
+```
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | string | ID del checklist |
+| `title` | string | Título |
+| `visibilityMode` | string | `participants` o `eventDates` (visibilidad en app móvil) |
+| `itemCount` | integer | Cantidad de documentos en subcolección `items/` |
+| `assignedCount` | integer | Cantidad de documentos en `participants/` (pilotos asignados) |
+| `createdAt` | string | ISO 8601 UTC |
+| `updatedAt` | string | ISO 8601 UTC |
+
+#### Get (`GET /get`) — 200 OK
+
+Objeto **ChecklistDetail** en la raíz (no envuelto en `result`).
+
+```json
+{
+  "id": "chk_abc123",
+  "eventId": "evt_123",
+  "title": "Documentación obligatoria",
+  "visibilityMode": "eventDates",
+  "items": [
+    {
+      "id": "item_001",
+      "name": "Licencia vigente",
+      "description": "Subir foto de licencia",
+      "photoUrl": "https://storage.googleapis.com/.../photo.jpg",
+      "latitude": -12.0464,
+      "longitude": -77.0428,
+      "isRequired": true,
+      "order": 0,
+      "createdAt": "2026-05-22T10:00:00+00:00",
+      "updatedAt": "2026-05-22T10:00:00+00:00"
+    },
+    {
+      "id": "item_002",
+      "name": "Foto cabina",
+      "description": "",
+      "photoUrl": null,
+      "latitude": null,
+      "longitude": null,
+      "isRequired": false,
+      "order": 1,
+      "createdAt": "2026-05-22T10:00:00+00:00",
+      "updatedAt": "2026-05-22T10:00:00+00:00"
+    }
+  ],
+  "assignedParticipantIds": [
+    { "id": "user_1", "name": "Ana Lopez", "pilotNumber": "7" },
+    { "id": "user_2", "name": "Juan Pérez", "pilotNumber": "12" }
+  ],
+  "createdAt": "2026-05-22T10:00:00+00:00",
+  "updatedAt": "2026-05-22T12:00:00+00:00"
+}
+```
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | string | ID del checklist |
+| `eventId` | string | ID del evento |
+| `title` | string | Título |
+| `visibilityMode` | string | `participants` o `eventDates` |
+| `items` | array | Plantilla ordenada por `order` ascendente |
+| `items[].id` | string | ID del ítem en Firestore |
+| `items[].name` | string | Nombre del ítem |
+| `items[].description` | string | Descripción (puede ser `""`) |
+| `items[].photoUrl` | string \| null | URL en Storage |
+| `items[].latitude` | number \| null | Latitud |
+| `items[].longitude` | number \| null | Longitud |
+| `items[].isRequired` | boolean | Si entra en `itemProgress` de participantes asignados |
+| `items[].order` | integer | Orden base 0 |
+| `assignedParticipantIds` | array of object | Participantes con doc en `participants/` (ordenados por `id`) |
+| `assignedParticipantIds[].id` | string | UID del participante |
+| `assignedParticipantIds[].name` | string | Nombre denormalizado (`participantName` en Firestore) |
+| `assignedParticipantIds[].pilotNumber` | string | Número de competidor (`pilotNumber` en Firestore; `""` si falta) |
+| `createdAt` | string | ISO 8601 UTC |
+| `updatedAt` | string | ISO 8601 UTC |
+
+#### Create — 201 Created / Update — 200 OK
+
+Mismo shape que **Get** (`ChecklistDetail` en la raíz). En el **body** de create/update, `assignedParticipantIds` sigue siendo `string[]` (solo UIDs).
+
+#### Delete — 204 No Content
+
+Sin cuerpo.
+
+#### Participant progress (`GET /participant-progress`) — 200 OK
 
 ```json
 {
@@ -653,7 +755,7 @@ Mismos campos que create más `checklistId` o `id`. Reemplazo completo de ítems
 
 ### Reglas v2
 
-- Solo IDs en `assignedParticipantIds` tienen documento en `participants/`.
+- En create/update, solo los UIDs enviados en `assignedParticipantIds` tienen documento en `participants/`. En get/create/update (respuesta), cada entrada trae `id`, `name` y `pilotNumber`.
 - Suscriptores del evento **no asignados** no aparecen en `participant-progress`.
 - `itemProgress` solo incluye ítems de plantilla con `isRequired: true`.
 - Sin sync en `users/.../membership`.

@@ -225,10 +225,15 @@ def test_get_checklist_returns_detail(mock_helper_cls, mock_access):
         "createdAt": "t1",
         "updatedAt": "t2",
     }
-    helper.query_documents.return_value = [
-        ("item-1", {"name": "License", "isRequired": True, "order": 0})
+    helper.query_documents.side_effect = [
+        [("item-1", {"name": "License", "isRequired": True, "order": 0})],
+        [
+            (
+                "user-1",
+                {"participantName": "Ana Lopez", "pilotNumber": "7"},
+            )
+        ],
     ]
-    helper.list_document_ids.return_value = ["user-1"]
 
     response = handle_get(
         _req(
@@ -241,7 +246,9 @@ def test_get_checklist_returns_detail(mock_helper_cls, mock_access):
     assert response.status_code == 200
     payload = json.loads(response.data)
     assert payload["id"] == "chk-1"
-    assert payload["assignedParticipantIds"] == ["user-1"]
+    assert payload["assignedParticipantIds"] == [
+        {"id": "user-1", "name": "Ana Lopez", "pilotNumber": "7"}
+    ]
 
 
 @_ACCESS

@@ -126,14 +126,29 @@ def load_checklist_items(
     return [build_item_response(item_id, data) for item_id, data in rows]
 
 
-def load_assigned_participant_ids(
+def build_assigned_participant_response(
+    participant_id: str, data: Dict[str, Any]
+) -> Dict[str, Any]:
+    return {
+        "id": participant_id,
+        "name": data.get("participantName") or "",
+        "pilotNumber": data.get("pilotNumber") or "",
+    }
+
+
+def load_assigned_participants(
     helper: FirestoreHelper, event_id: str, checklist_id: str
-) -> List[str]:
+) -> List[Dict[str, Any]]:
     from checklists.checklist_paths import participants_collection_path
 
-    return helper.list_document_ids(
-        participants_collection_path(event_id, checklist_id)
+    rows = helper.query_documents(
+        participants_collection_path(event_id, checklist_id),
     )
+    participants = [
+        build_assigned_participant_response(participant_id, data)
+        for participant_id, data in rows
+    ]
+    return sorted(participants, key=lambda row: row["id"])
 
 
 def build_checklist_detail(
@@ -143,14 +158,14 @@ def build_checklist_detail(
     checklist_data: Dict[str, Any],
 ) -> Dict[str, Any]:
     items = load_checklist_items(helper, event_id, checklist_id)
-    assigned_ids = load_assigned_participant_ids(helper, event_id, checklist_id)
+    assigned_participants = load_assigned_participants(helper, event_id, checklist_id)
     return {
         "id": checklist_id,
         "eventId": event_id,
         "title": checklist_data.get("title", ""),
         "visibilityMode": checklist_data.get("visibilityMode", ""),
         "items": items,
-        "assignedParticipantIds": assigned_ids,
+        "assignedParticipantIds": assigned_participants,
         "createdAt": checklist_data.get("createdAt"),
         "updatedAt": checklist_data.get("updatedAt"),
     }
