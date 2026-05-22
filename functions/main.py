@@ -66,6 +66,9 @@ from vehicles import vehicle_route
 # Importar funciones de catalogs (una sola función: catalog_route; despacha por path)
 from catalogs import catalog_route
 
+# Importar router de checklists por evento (paths planos /api/events/checklists/*)
+from checklists import checklist_route
+
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
 # traffic spikes by instead downgrading performance. This limit is a per-function

@@ -37,6 +37,9 @@ class FirestoreCollections:
     EVENT_STAFF = "staff_users"
     EVENT_ROUTES = "routes"
     EVENT_CONTENT = "event_content"
+    EVENT_CHECKLISTS = "checklists"
+    CHECKLIST_ITEMS = "items"
+    CHECKLIST_PARTICIPANTS = "participants"
 
     # Subcolecciones de participantes dentro del evento
     PARTICIPANT_EMERGENCY_CONTACTS = "emergencyContacts"

@@ -103,6 +103,36 @@
         "region": "us-central1"
       },
       {
+        "source": "/api/events/checklists/list",
+        "function": "checklist_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/events/checklists/get",
+        "function": "checklist_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/events/checklists/create",
+        "function": "checklist_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/events/checklists/update",
+        "function": "checklist_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/events/checklists/delete",
+        "function": "checklist_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/events/checklists/participant-progress",
+        "function": "checklist_route",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/event-management/**",
         "function": "event_management_route",
         "region": "us-central1"

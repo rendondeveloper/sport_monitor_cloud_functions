@@ -1,0 +1,134 @@
+"""Sync de subcolección participants/{userId} para checklists v2."""
+
+import logging
+from typing import Any, Dict, List, Optional
+
+from models.firestore_collections import FirestoreCollections
+from utils.datetime_helper import get_current_timestamp
+from utils.firestore_helper import FirestoreHelper
+
+from checklists.checklist_common import (
+    build_item_progress_template,
+    compute_is_completed,
+)
+from checklists.checklist_paths import (
+    event_participants_collection_path,
+    participants_collection_path,
+)
+
+LOG = logging.getLogger(__name__)
+LOG_PREFIX = "[checklist_participant_service]"
+
+
+def _denormalize_participant_fields(
+    helper: FirestoreHelper, event_id: str, participant_id: str
+) -> Dict[str, Optional[str]]:
+    event_participant = helper.get_document(
+        event_participants_collection_path(event_id), participant_id
+    )
+    pilot_number = ""
+    if event_participant:
+        category = event_participant.get("competitionCategory") or {}
+        pilot_number = str(category.get("pilotNumber") or "")
+
+    user_doc = helper.get_document(FirestoreCollections.USERS, participant_id)
+    participant_name = ""
+    email = ""
+    if user_doc:
+        email = str(user_doc.get("email") or "")
+        personal_rows = helper.query_documents(
+            f"{FirestoreCollections.USERS}/{participant_id}/personalData",
+            limit=1,
+        )
+        if personal_rows and len(personal_rows[0]) == 2:
+            _, personal = personal_rows[0]
+            first_name = personal.get("firstName") or personal.get("name") or ""
+            last_name = personal.get("lastName") or ""
+            participant_name = f"{first_name} {last_name}".strip()
+
+    return {
+        "participantName": participant_name or None,
+        "pilotNumber": pilot_number or None,
+        "email": email or None,
+    }
+
+
+def _merge_item_progress(
+    existing_progress: Dict[str, Dict[str, Any]],
+    new_required_ids: List[str],
+) -> Dict[str, Dict[str, Any]]:
+    merged: Dict[str, Dict[str, Any]] = {}
+    for item_id in new_required_ids:
+        if item_id in existing_progress:
+            merged[item_id] = {
+                "check": existing_progress[item_id].get("check", False),
+                "updateDate": existing_progress[item_id].get("updateDate"),
+            }
+        else:
+            merged[item_id] = {"check": False, "updateDate": None}
+    return merged
+
+
+def create_participant_doc(
+    helper: FirestoreHelper,
+    event_id: str,
+    checklist_id: str,
+    participant_id: str,
+    required_item_ids: List[str],
+) -> None:
+    now = get_current_timestamp()
+    item_progress = build_item_progress_template(required_item_ids)
+    denorm = _denormalize_participant_fields(helper, event_id, participant_id)
+    payload = {
+        "itemProgress": item_progress,
+        "isCompleted": compute_is_completed(item_progress),
+        "lastUpdateDate": None,
+        "assignedAt": now,
+        "updatedAt": now,
+        **denorm,
+    }
+    helper.create_document_with_id(
+        participants_collection_path(event_id, checklist_id),
+        participant_id,
+        payload,
+    )
+
+
+def sync_participants_for_assigned_ids(
+    helper: FirestoreHelper,
+    event_id: str,
+    checklist_id: str,
+    assigned_ids: List[str],
+    required_item_ids: List[str],
+) -> None:
+    path = participants_collection_path(event_id, checklist_id)
+    existing_ids = set(helper.list_document_ids(path))
+    target_ids = set(assigned_ids)
+
+    for removed_id in existing_ids - target_ids:
+        helper.delete_document(path, removed_id)
+
+    for participant_id in target_ids:
+        if participant_id in existing_ids:
+            existing = helper.get_document(path, participant_id) or {}
+            item_progress = _merge_item_progress(
+                existing.get("itemProgress") or {},
+                required_item_ids,
+            )
+            helper.update_document(
+                path,
+                participant_id,
+                {
+                    "itemProgress": item_progress,
+                    "isCompleted": compute_is_completed(item_progress),
+                    "updatedAt": get_current_timestamp(),
+                },
+            )
+        else:
+            create_participant_doc(
+                helper, event_id, checklist_id, participant_id, required_item_ids
+            )
+
+
+def required_ids_from_items(items: List[Dict[str, Any]]) -> List[str]:
+    return [item["id"] for item in items if item.get("isRequired")]
