@@ -7,10 +7,7 @@ from utils.datetime_helper import get_current_timestamp
 from utils.firestore_helper import FirestoreHelper
 
 from checklists import checklist_common as common
-from checklists.checklist_participant_service import (
-    create_participant_doc,
-    required_ids_from_items,
-)
+from checklists.checklist_participant_service import sync_all_event_participants
 from checklists.checklist_paths import checklists_collection_path
 
 LOG = logging.getLogger(__name__)
@@ -22,26 +19,32 @@ def handle_create(req: https_fn.Request, user_id: str) -> https_fn.Response:
     if body is None:
         return common.empty_response(400)
 
+    if common.body_has_deprecated_assigned_field(body):
+        logging.warning("%s assignedParticipantIds is no longer supported", LOG_PREFIX)
+        return common.empty_response(400)
+
     event_id = (body.get("eventId") or "").strip()
     title = (body.get("title") or "").strip()
     visibility_mode = common.validate_visibility_mode(body.get("visibilityMode"))
     items = common.normalize_items(body.get("items"))
-    assigned_ids = common.normalize_assigned_ids(body.get("assignedParticipantIds"))
 
-    if not title or visibility_mode is None or items is None:
+    if not event_id or not title or visibility_mode is None or items is None:
         return common.empty_response(400)
-
-    _, error_response = common.assert_event_crm_access(event_id, user_id)
-    if error_response is not None:
-        return error_response
 
     try:
         helper = FirestoreHelper()
+        if not common.validate_items_event_participants(helper, event_id, items):
+            logging.warning("%s Invalid participantIds in items", LOG_PREFIX)
+            return common.empty_response(400)
+
         now = get_current_timestamp()
+        checklist_fields = common.normalize_checklist_fields(body)
         checklist_id = helper.create_document(
             checklists_collection_path(event_id),
             {
                 "title": title,
+                "description": checklist_fields["description"],
+                "photoUrl": checklist_fields["photoUrl"],
                 "visibilityMode": visibility_mode,
                 "createdAt": now,
                 "updatedAt": now,
@@ -50,11 +53,7 @@ def handle_create(req: https_fn.Request, user_id: str) -> https_fn.Response:
         stored_items = common.persist_template_items(
             helper, event_id, checklist_id, items
         )
-        required_ids = required_ids_from_items(stored_items)
-        for participant_id in assigned_ids:
-            create_participant_doc(
-                helper, event_id, checklist_id, participant_id, required_ids
-            )
+        sync_all_event_participants(helper, event_id, checklist_id, stored_items)
 
         detail = common.build_checklist_detail(
             helper,

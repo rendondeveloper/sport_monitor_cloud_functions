@@ -15,7 +15,7 @@ from checklists.checklist_paths import (
 LOG = logging.getLogger(__name__)
 LOG_PREFIX = "[get_participant_progress]"
 
-_MAX_LIMIT = 50
+_MAX_LIMIT = 200
 _DEFAULT_LIMIT = 20
 
 
@@ -41,18 +41,21 @@ def _matches_search(row: Dict[str, Any], search: str) -> bool:
 def _build_progress_row(
     participant_id: str,
     participant_data: Dict[str, Any],
-    required_items: List[Dict[str, Any]],
+    template_items: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     item_progress = participant_data.get("itemProgress") or {}
     progress_items = []
-    for template_item in required_items:
+    for template_item in template_items:
         item_id = template_item["id"]
         progress_entry = item_progress.get(item_id) or {}
         progress_items.append(
             {
                 "itemId": item_id,
                 "name": template_item.get("name", ""),
-                "isRequired": True,
+                "photoUrl": template_item.get("photoUrl"),
+                "isRequired": common.effective_is_required_for_participant(
+                    template_item, participant_id
+                ),
                 "check": bool(progress_entry.get("check", False)),
                 "updateDate": progress_entry.get("updateDate"),
             }
@@ -72,33 +75,30 @@ def handle_participant_progress(
 ) -> https_fn.Response:
     event_id = common.parse_event_id_from_query(req)
     checklist_id = common.parse_checklist_id_from_query(req)
-    if not checklist_id:
+    if not event_id or not checklist_id:
         return common.empty_response(400)
 
     limit = _parse_limit(req.args.get("limit"))
     cursor = (req.args.get("cursor") or "").strip() or None
     search = (req.args.get("search") or "").strip().lower()
 
-    _, error_response = common.assert_event_crm_access(event_id or "", user_id)
-    if error_response is not None:
-        return error_response
-
     try:
         helper = FirestoreHelper()
         if helper.get_document(checklists_collection_path(event_id), checklist_id) is None:
             return common.empty_response(404)
 
-        required_items = [
-            item for item in common.load_checklist_items(helper, event_id, checklist_id)
-            if item.get("isRequired")
-        ]
+        template_items = common.load_checklist_items(helper, event_id, checklist_id)
         participant_rows: List[Tuple[str, Dict[str, Any]]] = helper.query_documents(
             participants_collection_path(event_id, checklist_id),
         )
         participant_rows.sort(key=lambda row: row[0])
 
         built_rows = [
-            _build_progress_row(participant_id, data, required_items)
+            _build_progress_row(
+                participant_id,
+                data,
+                common.items_for_participant_progress(template_items, participant_id),
+            )
             for participant_id, data in participant_rows
         ]
         filtered_rows = [row for row in built_rows if _matches_search(row, search)]
@@ -114,11 +114,11 @@ def handle_participant_progress(
         has_more = start_index + limit < len(filtered_rows)
         last_doc_id = page_rows[-1]["participantId"] if page_rows else None
 
-        assigned_count = len(participant_rows)
+        participant_count = len(participant_rows)
         completed_count = sum(
             1 for _, data in participant_rows if data.get("isCompleted") is True
         )
-        incomplete_count = assigned_count - completed_count
+        incomplete_count = participant_count - completed_count
 
         return common.json_response(
             {
@@ -130,7 +130,7 @@ def handle_participant_progress(
                     "limit": limit,
                 },
                 "summary": {
-                    "assignedCount": assigned_count,
+                    "assignedCount": participant_count,
                     "completedCount": completed_count,
                     "incompleteCount": incomplete_count,
                 },

@@ -29,6 +29,7 @@ functions/
 │   ├── get_checklist.py           # GET get
 │   ├── create_checklist.py        # POST create
 │   ├── update_checklist.py        # PUT update
+│   ├── update_checklist_photos.py # PUT update-photos
 │   ├── delete_checklist.py        # DELETE delete
 │   ├── get_participant_progress.py # GET participant-progress
 │   └── checklist_participant_service.py
@@ -509,7 +510,7 @@ Router central de eventos para operaciones de administración. Valida CORS, mét
 | `POST` | `/api/events/create` | Crea evento y persiste `creator = uid` autenticado |
 | `PUT` | `/api/events/update` | Actualiza evento existente del owner |
 | `GET` | `/api/event-management/{userId}/get?eventId=` | Obtiene evento del owner incluyendo `eventContent` |
-| `GET` | `/api/events/{userId}/list?status=` | Lista eventos con `creator == userId`; el `userId` va en la URL (no se toma del token). Filtro opcional `status` |
+| `GET` | `/api/events/list?userId=&status=` | Lista eventos con `creator == userId`; el `userId` va en query (no se toma del token). Filtro opcional `status` |
 | `DELETE` | `/api/event-management/{userId}/delete?eventId=` | Elimina evento del owner (incluye limpieza de content y rutas) |
 | `GET` | `/api/events/get-info?eventId=` | Obtiene `event_content` (primer doc) del evento del owner |
 | `POST` | `/api/events/save-info` | Upsert de `event_content` del evento del owner |
@@ -517,7 +518,7 @@ Router central de eventos para operaciones de administración. Valida CORS, mét
 #### Reglas de autorización
 
 - Todas las operaciones requieren `Authorization: Bearer <Firebase ID Token>`.
-- La identidad del usuario se obtiene del token (`uid`), salvo en **`GET /api/events/{userId}/list`**: ahí el criterio de filtro es el **`userId` del path** (no el del token).
+- La identidad del usuario se obtiene del token (`uid`), salvo en **`GET /api/events/list`**: ahí el criterio de filtro es el **`userId` del query** (no el del token).
 - En el resto de rutas de gestión, solo se opera sobre eventos donde `creator == uid` del token.
 - El campo `creator` es controlado por backend (no editable por cliente).
 
@@ -531,7 +532,7 @@ curl -X POST 'https://system-track-monitor.web.app/api/events/create' \
 ```
 
 ```bash
-curl -X GET 'https://system-track-monitor.web.app/api/events/USER_ID/list?status=draft' \
+curl -X GET 'https://system-track-monitor.web.app/api/events/list?userId=USER_ID&status=draft' \
   -H 'Authorization: Bearer TOKEN'
 ```
 
@@ -556,21 +557,34 @@ curl -X POST 'https://system-track-monitor.web.app/api/events/save-info' \
 
 Una sola Cloud Function **`checklist_route`** atiende el CRM de checklists por evento (SPRTMNTRPP-123/124/125). Paths **planos** alineados con dart-define. Progreso de participantes en `events/{eventId}/checklists/{checklistId}/participants/{userId}`.
 
+**Documentación v3:** [`functions/checklists/README.md`](functions/checklists/README.md)
+
+### Cómo funciona (resumen v3)
+
+- **Tres tipos de ítem:** opcional (`isRequired: false`, sin lista); global (`isRequired: true`, `participantIds: []`); dirigido (`participantIds: ["uid", …]` — solo esos deben cumplir).
+- **Sin `assignedParticipantIds` en el checklist** (body o respuesta). La asignación va **por ítem** en `items[].participantIds`.
+- Tras **create** (y tras **update** solo si el patch toca `visibilityMode`, `isRequired` o `participantIds`) se sincroniza `checklists/.../participants/` para **todos** los competidores del evento; `itemProgress` solo incluye ítems que aplican a cada piloto.
+- **`PUT update` es patch-only** (2026-05-27): ya no reemplaza todos los ítems. Envía solo campos a cambiar; `items[]` y `participants[]` opcionales (entries sin `id` o con `id` prefijo `client-` se ignoran). Cambio incompatible respecto al reemplazo completo anterior.
+- **`participant-progress`:** cada fila muestra ítems opcionales (aplican a todos) + obligatorios (globales + dirigidos que le aplican). **`isCompleted` solo considera los obligatorios** (incluye `photoUrl` por ítem).
+- **`visibilityMode`:** ventana de visibilidad en móvil (`participants` / `eventDates`), independiente de las reglas de ítems.
+- **Fotos:** imagen del evento en `events/{eventId}.photoUrl`; portada del checklist en `checklists/.../photoUrl`; foto por tarea en `items/{id}.photoUrl`. Actualización parcial con **`PUT update-photos`** (200 sin cuerpo).
+
 **Tipo**: HTTP Request (`GET`, `POST`, `PUT`, `DELETE`)  
 **Endpoint con Hosting**: `https://system-track-monitor.web.app/api/events/checklists/...`
 
-**Nota**: Requiere autenticación Bearer token. Acceso si el UID es **creador del evento** o está en `events/{eventId}/staff_users/{uid}`.
+**Nota**: Requiere autenticación Bearer token (cualquier usuario con token válido).
 
 ### Endpoints
 
 | Método | Path | Descripción |
 |---|---|---|
 | `GET` | `/api/events/checklists/list?eventId=` | Lista checklists del evento (resumen) |
-| `GET` | `/api/events/checklists/get?eventId=&checklistId=` | Detalle de checklist con ítems y asignados |
-| `POST` | `/api/events/checklists/create` | Crea checklist, ítems y docs de participantes asignados |
-| `PUT` | `/api/events/checklists/update` | Reemplazo completo; sincroniza `participants/` |
+| `GET` | `/api/events/checklists/get?eventId=&checklistId=` | Detalle con `items[]` (incl. `participantIds`) |
+| `POST` | `/api/events/checklists/create` | Crea checklist, ítems y sync `participants/` por evento |
+| `PUT` | `/api/events/checklists/update` | Patch-only (sin reemplazo); `items[]` / `participants[]` opcionales; sync solo si `visibilityMode` / `isRequired` / `participantIds` |
+| `PUT` | `/api/events/checklists/update-photos` | Fotos parciales: `events/{eventId}.photoUrl` y/o `items/{id}.photoUrl` (200 vacío) |
 | `DELETE` | `/api/events/checklists/delete?eventId=&checklistId=` | Elimina checklist, ítems y participantes (204) |
-| `GET` | `/api/events/checklists/participant-progress?eventId=&checklistId=` | Progreso paginado de participantes asignados |
+| `GET` | `/api/events/checklists/participant-progress?eventId=&checklistId=` | Progreso por competidor (ítems según piloto; incluye `photoUrl`) |
 
 ### Headers requeridos
 
@@ -600,13 +614,94 @@ Una sola Cloud Function **`checklist_route`** atiende el CRM de checklists por e
 |---|---|---|---|
 | `eventId` | string | **Sí** | ID del evento |
 | `title` | string | **Sí** | Título del checklist |
+| `description` | string | No | Descripción del checklist (default `""`) |
+| `photoUrl` | string \| null | No | URL de imagen del checklist |
 | `visibilityMode` | string | **Sí** | `participants` o `eventDates` |
-| `items` | array | **Sí** | Plantilla de ítems (`name`, `isRequired`, `order`, etc.) |
-| `assignedParticipantIds` | array of string | No | UIDs a asignar (crea doc en `participants/`) |
+| `items` | array | **Sí** | Plantilla; cada ítem: `name`, `isRequired`, `participantIds[]`, `order`, `description`, `photoUrl`, etc. |
 
-#### Update (`PUT /update`) — body JSON
+**Por ítem:** `participantIds` vacío + `isRequired: true` = obligatorio para todos; `participantIds` con UIDs = obligatorio solo para esos; ambos `isRequired: true` y lista no vacía → **400**. Enviar `assignedParticipantIds` en el body → **400** (eliminado en v3). En **create**, el `id` de ítem **se ignora** (el servidor genera IDs). Para cambiar solo fotos de ítems ya creados usar **`update-photos`**.
 
-Mismos campos que create más `checklistId` o `id`. Reemplazo completo de ítems; sincroniza participantes (crea nuevos, elimina removidos, preserva `check`/`updateDate` en ítems requeridos existentes).
+#### Update (`PUT /update`) — body JSON (patch-only)
+
+**Cambio incompatible:** antes se enviaba el checklist completo y se **reemplazaban** todos los ítems. Ahora es **solo parche**: incluir únicamente los campos a modificar. No borra ítems omitidos ni crea filas nuevas sin `id` en Firestore.
+
+Requeridos: `eventId`, `checklistId` o `id`. Opcionales (solo si vienen en el body): `title`, `description`, `photoUrl`, `visibilityMode`, `items[]`, `participants[]`. Al menos un campo actualizable además de los IDs → si no, **400**. Si `participants[]` solo trae entradas sin `id` o sin campos permitidos, no cuenta como cambio → **400** (salvo otro campo actualizable).
+
+**`items[]`:** patch por ítem existente; `id` recomendado. Entries sin `id` o con `id` prefijo `client-` → ignoradas (no 400/404). **404** solo si se envía un `id` real (no vacío, no `client-*`) con campos actualizables y el doc no existe.
+
+**`participants[]`:** patch parcial sobre docs en `checklists/.../participants/`; **no toca progreso**. `id` recomendado. Entries sin `id` → ignoradas (no 400/404). Campos permitidos: `participantName`, `pilotNumber`, `email`. Campos prohibidos (`itemProgress`, `isCompleted`, `lastUpdateDate`, `assignedAt`) → **400**. **404** solo si se envía `id` (con al menos un campo permitido) y el doc no existe. No dispara sync.
+
+Sync de `participants/` **solo** si el body incluye `visibilityMode` o algún ítem con `id` real y `isRequired` y/o `participantIds` (entries sin `id` o `client-*` no cuentan). Patches de solo `title`, `description`, `photoUrl`, `latitude`, `longitude`, `name`, `order` en ítems, o datos CRM en `participants[]` → **sin** sync.
+
+**Ejemplo — patch solo título:**
+
+```json
+{
+  "eventId": "evt_123",
+  "checklistId": "chk_abc",
+  "title": "Documentación actualizada"
+}
+```
+
+**Ejemplo — patch obligatoriedad (dispara sync):**
+
+```json
+{
+  "eventId": "evt_123",
+  "checklistId": "chk_abc",
+  "items": [
+    {
+      "id": "item_002",
+      "isRequired": false,
+      "participantIds": ["user_1", "user_2"]
+    }
+  ]
+}
+```
+
+**Ejemplo — patch datos CRM de participantes (sin sync; entry sin `id` ignorada):**
+
+```json
+{
+  "eventId": "evt_123",
+  "checklistId": "chk_abc",
+  "participants": [
+    { "id": "user_ana", "participantName": "Ana López", "pilotNumber": "7" },
+    { "pilotNumber": "99" }
+  ]
+}
+```
+
+Detalle completo: [`functions/checklists/README.md`](functions/checklists/README.md) y [`ai-system/changes/checklists/design-patch-update-amendment.md`](ai-system/changes/checklists/design-patch-update-amendment.md).
+
+#### Update photos (`PUT /update-photos`) — body JSON
+
+Actualización parcial tras subir imágenes a Storage. **Response: `200` con cuerpo vacío.**
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `eventId` | string | **Sí** | ID del evento |
+| `photoUrl` | string \| null | No* | Reemplaza `events/{eventId}.photoUrl` (una imagen); `null` quita |
+| `checklistId` | string | Sí si hay `items` | ID del checklist |
+| `items` | array | No* | `{ "id", "photoUrl" }` por fila de plantilla |
+
+\*Al menos la clave `photoUrl` en el body o `items` con un elemento.
+
+**Request (foto del evento + fotos de ítems):**
+
+```json
+{
+  "eventId": "evt_123",
+  "photoUrl": "https://storage.googleapis.com/.../event-cover.jpg",
+  "checklistId": "chk_abc",
+  "items": [
+    { "id": "item_001", "photoUrl": "https://storage.googleapis.com/.../item.jpg" },
+    { "id": "item_002", "photoUrl": null }
+  ]
+}
+```
+
+**Response — `200 OK`:** cuerpo vacío (sin JSON). Consultar `photoUrl` del evento en su detalle y `items[].photoUrl` con `GET get`.
 
 #### Delete (`DELETE /delete`)
 
@@ -629,31 +724,33 @@ Mismos campos que create más `checklistId` o `id`. Reemplazo completo de ítems
 
 #### List (`GET /list`) — 200 OK
 
-JSON directo con array en `result` (sin wrapper `success`/`message`). Si no hay checklists, `result` es `[]`.
+JSON directo: **array** de resúmenes (sin wrapper `success`/`message` ni clave `result`). Si no hay checklists, `[]`. `photoUrl` en el resumen es opcional (`null` si no hay portada).
 
 ```json
-{
-  "result": [
-    {
-      "id": "chk_abc123",
-      "title": "Documentación obligatoria",
-      "visibilityMode": "participants",
-      "itemCount": 5,
-      "assignedCount": 12,
-      "createdAt": "2026-05-22T10:00:00+00:00",
-      "updatedAt": "2026-05-22T12:00:00+00:00"
-    }
-  ]
-}
+[
+  {
+    "id": "chk_abc123",
+    "title": "Documentación obligatoria",
+    "description": "Requisitos generales del rally",
+    "photoUrl": "https://storage.googleapis.com/.../checklist-cover.jpg",
+    "visibilityMode": "participants",
+    "itemCount": 5,
+    "assignedCount": 12,
+    "createdAt": "2026-05-22T10:00:00+00:00",
+    "updatedAt": "2026-05-22T12:00:00+00:00"
+  }
+]
 ```
 
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | string | ID del checklist |
 | `title` | string | Título |
+| `description` | string | Descripción del checklist |
+| `photoUrl` | string \| null | Imagen del checklist |
 | `visibilityMode` | string | `participants` o `eventDates` (visibilidad en app móvil) |
 | `itemCount` | integer | Cantidad de documentos en subcolección `items/` |
-| `assignedCount` | integer | Cantidad de documentos en `participants/` (pilotos asignados) |
+| `assignedCount` | integer | Docs en `participants/` (competidores del evento sincronizados) |
 | `createdAt` | string | ISO 8601 UTC |
 | `updatedAt` | string | ISO 8601 UTC |
 
@@ -666,6 +763,8 @@ Objeto **ChecklistDetail** en la raíz (no envuelto en `result`).
   "id": "chk_abc123",
   "eventId": "evt_123",
   "title": "Documentación obligatoria",
+  "description": "Requisitos generales del rally",
+  "photoUrl": "https://storage.googleapis.com/.../checklist-cover.jpg",
   "visibilityMode": "eventDates",
   "items": [
     {
@@ -676,26 +775,24 @@ Objeto **ChecklistDetail** en la raíz (no envuelto en `result`).
       "latitude": -12.0464,
       "longitude": -77.0428,
       "isRequired": true,
+      "participantIds": [],
       "order": 0,
       "createdAt": "2026-05-22T10:00:00+00:00",
       "updatedAt": "2026-05-22T10:00:00+00:00"
     },
     {
       "id": "item_002",
-      "name": "Foto cabina",
+      "name": "Certificado médico",
       "description": "",
       "photoUrl": null,
       "latitude": null,
       "longitude": null,
       "isRequired": false,
+      "participantIds": ["user_1", "user_2"],
       "order": 1,
       "createdAt": "2026-05-22T10:00:00+00:00",
       "updatedAt": "2026-05-22T10:00:00+00:00"
     }
-  ],
-  "assignedParticipantIds": [
-    { "id": "user_1", "name": "Ana Lopez", "pilotNumber": "7" },
-    { "id": "user_2", "name": "Juan Pérez", "pilotNumber": "12" }
   ],
   "createdAt": "2026-05-22T10:00:00+00:00",
   "updatedAt": "2026-05-22T12:00:00+00:00"
@@ -707,32 +804,30 @@ Objeto **ChecklistDetail** en la raíz (no envuelto en `result`).
 | `id` | string | ID del checklist |
 | `eventId` | string | ID del evento |
 | `title` | string | Título |
+| `description` | string | Descripción del checklist |
+| `photoUrl` | string \| null | Imagen del checklist |
 | `visibilityMode` | string | `participants` o `eventDates` |
 | `items` | array | Plantilla ordenada por `order` ascendente |
-| `items[].id` | string | ID del ítem en Firestore |
-| `items[].name` | string | Nombre del ítem |
-| `items[].description` | string | Descripción (puede ser `""`) |
-| `items[].photoUrl` | string \| null | URL en Storage |
-| `items[].latitude` | number \| null | Latitud |
-| `items[].longitude` | number \| null | Longitud |
-| `items[].isRequired` | boolean | Si entra en `itemProgress` de participantes asignados |
-| `items[].order` | integer | Orden base 0 |
-| `assignedParticipantIds` | array of object | Participantes con doc en `participants/` (ordenados por `id`) |
-| `assignedParticipantIds[].id` | string | UID del participante |
-| `assignedParticipantIds[].name` | string | Nombre denormalizado (`participantName` en Firestore) |
-| `assignedParticipantIds[].pilotNumber` | string | Número de competidor (`pilotNumber` en Firestore; `""` si falta) |
-| `createdAt` | string | ISO 8601 UTC |
-| `updatedAt` | string | ISO 8601 UTC |
+| `items[].participantIds` | string[] | UIDs del evento; lista no vacía = ítem dirigido |
+| `items[].isRequired` | boolean | `true` con `participantIds` vacío = obligatorio para todos |
+| `items[].photoUrl` | string \| null | Imagen de la tarea (plantilla) |
+| `createdAt` / `updatedAt` | string | ISO 8601 UTC |
 
 #### Create — 201 Created / Update — 200 OK
 
-Mismo shape que **Get** (`ChecklistDetail` en la raíz). En el **body** de create/update, `assignedParticipantIds` sigue siendo `string[]` (solo UIDs).
+Mismo shape que **Get**. Body incluye `description` y `photoUrl` del checklist; `items[].participantIds`; no enviar `assignedParticipantIds`.
 
 #### Delete — 204 No Content
 
 Sin cuerpo.
 
+#### Update photos — 200 OK
+
+Sin cuerpo JSON. Ver request en la tabla **Update photos** arriba.
+
 #### Participant progress (`GET /participant-progress`) — 200 OK
+
+`participantName` puede ser `string` o `null` (se denormaliza desde `users/{participantId}/personalData.fullName` con fallbacks y se refresca cuando corre el sync de `participants/`).
 
 ```json
 {
@@ -742,7 +837,14 @@ Sin cuerpo.
       "participantName": "Ana Lopez",
       "pilotNumber": "7",
       "items": [
-        { "itemId": "item-1", "name": "License", "isRequired": true, "check": false, "updateDate": null }
+        {
+          "itemId": "item-1",
+          "name": "License",
+          "photoUrl": "https://storage.googleapis.com/.../license.jpg",
+          "isRequired": true,
+          "check": false,
+          "updateDate": null
+        }
       ],
       "isCompleted": false,
       "lastUpdateDate": null
@@ -753,17 +855,20 @@ Sin cuerpo.
 }
 ```
 
-### Reglas v2
+### Reglas v3
 
-- En create/update, solo los UIDs enviados en `assignedParticipantIds` tienen documento en `participants/`. En get/create/update (respuesta), cada entrada trae `id`, `name` y `pilotNumber`.
-- Suscriptores del evento **no asignados** no aparecen en `participant-progress`.
-- `itemProgress` solo incluye ítems de plantilla con `isRequired: true`.
-- Sin sync en `users/.../membership`.
-- PATCH móvil (`participant-update`) — pendiente otra subtarea.
+- Asignación por ítem: `items[].participantIds`; sin `assignedParticipantIds` en checklist.
+- Sync `participants/` tras create; tras update solo si el patch afecta `visibilityMode`, `isRequired` o `participantIds`.
+- `PUT update` patch-only: `items[]` / `participants[]` opcionales (entries sin `id` o con `id` prefijo `client-` ignoradas); sin reemplazo completo (breaking change 2026-05-27). Campos de progreso en `participants[]` → **400**.
+- `participant-progress`: `items[]` por fila incluye opcionales (para todos) + obligatorios que aplican al piloto; **`isCompleted` ignora opcionales**. Cada ítem incluye `photoUrl`.
+- Fotos: `PUT update-photos` para `events/{eventId}.photoUrl` y `items/{id}.photoUrl`; no regenera IDs de ítems.
+- PATCH móvil (`participant-update`) — pendiente.
 
 ### Comandos cURL
 
 ```bash
+export TOKEN="TU_FIREBASE_ID_TOKEN"
+
 # List
 curl -s -H "Authorization: Bearer $TOKEN" \
   "https://system-track-monitor.web.app/api/events/checklists/list?eventId=EVENT_ID"
@@ -772,15 +877,31 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 curl -s -H "Authorization: Bearer $TOKEN" \
   "https://system-track-monitor.web.app/api/events/checklists/get?eventId=EVENT_ID&checklistId=CHK_ID"
 
-# Create
+# Create (v3 — participantIds por ítem)
 curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"eventId":"EVENT_ID","title":"Technical","visibilityMode":"participants","items":[{"name":"License","isRequired":true,"order":0}],"assignedParticipantIds":["USER_1"]}' \
+  -d '{"eventId":"EVENT_ID","title":"Technical","description":"","photoUrl":null,"visibilityMode":"participants","items":[{"name":"License","photoUrl":null,"isRequired":true,"participantIds":[],"order":0}]}' \
   "https://system-track-monitor.web.app/api/events/checklists/create"
 
-# Update
+# Update — patch solo título (sin sync)
 curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"eventId":"EVENT_ID","checklistId":"CHK_ID","title":"Technical","visibilityMode":"participants","items":[{"name":"License","isRequired":true,"order":0}],"assignedParticipantIds":["USER_1","USER_2"]}' \
+  -d '{"eventId":"EVENT_ID","checklistId":"CHK_ID","title":"Documentación actualizada"}' \
   "https://system-track-monitor.web.app/api/events/checklists/update"
+
+# Update — patch lat/long de ítem + obligatoriedad (sync)
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"eventId":"EVENT_ID","checklistId":"CHK_ID","items":[{"id":"ITEM_ID","latitude":-12.0464,"longitude":-77.0428,"isRequired":false,"participantIds":["user_ana"]}]}' \
+  "https://system-track-monitor.web.app/api/events/checklists/update"
+
+# Update — patch participants[] (CRM; entry sin id ignorada; no toca itemProgress)
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"eventId":"EVENT_ID","checklistId":"CHK_ID","participants":[{"id":"user_ana","participantName":"Ana López","pilotNumber":"7"},{"pilotNumber":"99"}]}' \
+  "https://system-track-monitor.web.app/api/events/checklists/update"
+
+# Update photos (200 vacío — galería evento + fotos de ítems por id)
+curl -s -o /dev/null -w "HTTP %{http_code}\n" -X PUT \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"eventId":"EVENT_ID","photoUrl":"https://storage.googleapis.com/.../event.jpg","checklistId":"CHK_ID","items":[{"id":"ITEM_ID","photoUrl":"https://storage.googleapis.com/.../item.jpg"}]}' \
+  "https://system-track-monitor.web.app/api/events/checklists/update-photos"
 
 # Delete
 curl -s -X DELETE -H "Authorization: Bearer $TOKEN" \
@@ -4995,7 +5116,7 @@ Comprobar configuración: `firebase login:list` (cuenta); `functions/venv/bin/py
    http://localhost:5050/api/events/create
    http://localhost:5050/api/events/update
    http://localhost:5050/api/events/get
-   http://localhost:5050/api/events/USER_ID/list
+   http://localhost:5050/api/events/list?userId=USER_ID
   http://localhost:5050/api/event-management/USER_ID/delete?eventId=EVENT_ID
    http://localhost:5050/api/events/get-info
    http://localhost:5050/api/events/save-info
@@ -5050,7 +5171,7 @@ Si solo ejecutas `firebase emulators:start --only functions` (sin hosting), solo
 3. **Errores**: Las funciones de eventos, usuarios y checkpoints retornan solo códigos HTTP en caso de error (400, 401, 404, 500) sin cuerpo JSON, excepto `competitor_tracking`, `update_competitor_status` y `change_competitor_status` que retornan JSON con `success: false` en caso de error. Las funciones de tracking retornan objetos JSON con información del error.
 
 4. **Autenticación**: Las funciones protegidas requieren Bearer token válido de Firebase Auth.  
-   **Event Management / listado**: en `GET /api/events/{userId}/list` (y en `GET /api/event-management/{userId}/list`) el **`userId` va en la URL**; no se obtiene del token. El listado filtra Firestore con `creator == userId` del path.  
+   **Event Management / listado**: en `GET /api/events/list?userId=` (y en `GET /api/event-management/{userId}/list`) el **`userId` va en query o path según el endpoint**; no se obtiene del token en el listado vía `event_route`. El listado filtra Firestore con `creator == userId`.  
    **Autorización** en el resto de rutas de eventos (`/api/events/create|update|get|get-info|save-info`, `/api/event-management/{userId}/delete` y `/api/routes/*`): el backend usa el `uid` del token donde aplique ownership sobre `events/{eventId}.creator`.
 
 5. **CORS**: Todas las funciones HTTP incluyen headers CORS para permitir llamadas desde aplicaciones web.
@@ -5068,8 +5189,8 @@ curl -X POST 'http://localhost:5050/api/events/create' \
   -H 'Content-Type: application/json' \
   -d '{"name":"Rally Smoke","status":"draft"}'
 
-# 2) Listar eventos (userId en la URL, no del token)
-curl -X GET 'http://localhost:5050/api/events/USER_ID/list?status=draft' \
+# 2) Listar eventos (userId en query, no del token)
+curl -X GET 'http://localhost:5050/api/events/list?userId=USER_ID&status=draft' \
   -H 'Authorization: Bearer TOKEN'
 
 # 3) Obtener evento

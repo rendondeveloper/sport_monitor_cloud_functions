@@ -19,12 +19,8 @@ LOG_PREFIX = "[delete_checklist]"
 def handle_delete(req: https_fn.Request, user_id: str) -> https_fn.Response:
     event_id = common.parse_event_id_from_query(req)
     checklist_id = common.parse_checklist_id_from_query(req)
-    if not checklist_id:
+    if not event_id or not checklist_id:
         return common.empty_response(400)
-
-    _, error_response = common.assert_event_crm_access(event_id or "", user_id)
-    if error_response is not None:
-        return error_response
 
     try:
         helper = FirestoreHelper()

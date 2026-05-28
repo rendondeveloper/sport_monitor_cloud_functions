@@ -16,8 +16,13 @@
 | D4 | Region | `us-central1` (events module family) |
 | D5 | List response wrapper | `{ "result": [...] }` per Jira 123 |
 | D6 | Success body | JSON direct; errors empty body (project standard) |
+| D7 | Item assignment (v3) | `participantIds[]` per item; sync all `events/.../participants`; remove checklist `assignedParticipantIds` |
 
-> **Amendment (2026-05-22):** Phase 0 initially chose nested REST (4-A). User requested **flat paths like dart-define**. D1 supersedes nested examples in Jira narrative; Firestore model unchanged.
+> **Amendment (2026-05-22):** Phase 0 initially chose nested REST (4-A). User requested **flat paths like dart-define**. D1 supersedes nested examples in Jira narrative.
+>
+> **Amendment v3 (2026-05-22):** Per-item `participantIds`, mandatory rules per pilot, `sync_all_event_participants`. See `functions/checklists/README.md`.
+>
+> **Amendment patch-only (2026-05-27):** Row #4 (`update`) is **patch-only**, not full replace. See [`design-patch-update-amendment.md`](design-patch-update-amendment.md).
 
 ---
 
@@ -29,7 +34,7 @@ Aligned with SPRTMNTRPP-123 dart-define block and existing `firebase.json` style
 |---|--------|--------|-------------|-----------|---------------|-------|
 | 1 | list | GET | `/api/events/checklists/list` | query `eventId` | — | — |
 | 2 | get | GET | `/api/events/checklists/get` | query `eventId` | query `checklistId` | — |
-| 3 | create | POST | `/api/events/checklists/create` | body | — | body: title, visibilityMode, items, assignedParticipantIds |
+| 3 | create | POST | `/api/events/checklists/create` | body | — | body: title, visibilityMode, items (`participantIds` per item) |
 | 4 | update | PUT | `/api/events/checklists/update` | body | body `id` or `checklistId` | full replace body |
 | 5 | delete | DELETE | `/api/events/checklists/delete` | query `eventId` | query `checklistId` | 204 |
 | 6 | participant-progress | GET | `/api/events/checklists/participant-progress` | query `eventId` | query `checklistId` | query: `limit`, `cursor`, `search` |
@@ -87,7 +92,13 @@ def get_event_if_owner_or_staff(event_id: str, user_id: str) -> Optional[dict]:
 
 ---
 
-## Firestore model (unchanged v2)
+## Firestore model
+
+### v2 (superseded)
+
+Checklist-level `assignedParticipantIds`; `itemProgress` = all `isRequired` items for assigned pilots only.
+
+### v3 (current — 2026-05-22)
 
 ```
 events/{eventId}/checklists/{checklistId}
@@ -95,13 +106,21 @@ events/{eventId}/checklists/{checklistId}
 
   items/{itemId}
     name, description, photoUrl?, latitude?, longitude?
-    isRequired, order, createdAt, updatedAt
+    isRequired, participantIds: string[], order, createdAt, updatedAt
 
-  participants/{userId}   # ONLY assignedParticipantIds
-    itemProgress: { itemId: { check, updateDate } }  # ONLY isRequired items
+  participants/{userId}   # one doc per event competitor after sync
+    itemProgress: { itemId: { check, updateDate } }  # mandatory items FOR this pilot
     isCompleted, lastUpdateDate, assignedAt, updatedAt
     participantName?, pilotNumber?, email?
 ```
+
+| Item config | Mandatory for |
+|-------------|----------------|
+| `isRequired: true`, `participantIds: []` | All event competitors |
+| `participantIds: [uids]` | Listed UIDs only |
+| `isRequired: false`, `participantIds: []` | None (optional) |
+
+Validation: `isRequired: true` + non-empty `participantIds` → 400. Body field `assignedParticipantIds` → 400.
 
 ### `FirestoreCollections` additions
 
@@ -124,7 +143,7 @@ Path builder helpers:
 See SPRTMNTRPP-123 for full shapes. Backend must return:
 
 - **list:** `{ "result": ChecklistSummary[] }` — include `assignedCount`
-- **get/create/update:** ChecklistDetail with `assignedParticipantIds` + `items[]`
+- **get/create/update:** ChecklistDetail with `items[]` (each includes `participantIds`); no root `assignedParticipantIds`
 - **participant-progress:** `{ "result", "pagination", "summary" }`
 
 ---

@@ -83,7 +83,7 @@
         "region": "us-central1"
       },
       {
-        "source": "/api/events/*/list",
+        "source": "/api/events/list",
         "function": "event_route",
         "region": "us-central1"
       },
@@ -119,6 +119,11 @@
       },
       {
         "source": "/api/events/checklists/update",
+        "function": "checklist_route",
+        "region": "us-central1"
+      },
+      {
+        "source": "/api/events/checklists/update-photos",
         "function": "checklist_route",
         "region": "us-central1"
       },

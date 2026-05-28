@@ -1,4 +1,4 @@
-"""Sync de subcolección participants/{userId} para checklists v2."""
+"""Sync de subcolección participants/{userId} para checklists v3."""
 
 import logging
 from typing import Any, Dict, List, Optional
@@ -10,6 +10,9 @@ from utils.firestore_helper import FirestoreHelper
 from checklists.checklist_common import (
     build_item_progress_template,
     compute_is_completed,
+    compute_is_completed_required,
+    mandatory_item_ids_for_pilot,
+    progress_item_ids_for_pilot,
 )
 from checklists.checklist_paths import (
     event_participants_collection_path,
@@ -42,9 +45,16 @@ def _denormalize_participant_fields(
         )
         if personal_rows and len(personal_rows[0]) == 2:
             _, personal = personal_rows[0]
-            first_name = personal.get("firstName") or personal.get("name") or ""
-            last_name = personal.get("lastName") or ""
-            participant_name = f"{first_name} {last_name}".strip()
+            full_name = str(personal.get("fullName") or "").strip()
+            if full_name:
+                participant_name = full_name
+            else:
+                first_name = str(personal.get("firstName") or "").strip()
+                last_name = str(personal.get("lastName") or "").strip()
+                if first_name and last_name:
+                    participant_name = f"{first_name} {last_name}".strip()
+                else:
+                    participant_name = str(personal.get("name") or "").strip()
 
     return {
         "participantName": participant_name or None,
@@ -55,10 +65,10 @@ def _denormalize_participant_fields(
 
 def _merge_item_progress(
     existing_progress: Dict[str, Dict[str, Any]],
-    new_required_ids: List[str],
+    new_item_ids: List[str],
 ) -> Dict[str, Dict[str, Any]]:
     merged: Dict[str, Dict[str, Any]] = {}
-    for item_id in new_required_ids:
+    for item_id in new_item_ids:
         if item_id in existing_progress:
             merged[item_id] = {
                 "check": existing_progress[item_id].get("check", False),
@@ -74,14 +84,15 @@ def create_participant_doc(
     event_id: str,
     checklist_id: str,
     participant_id: str,
+    progress_item_ids: List[str],
     required_item_ids: List[str],
 ) -> None:
     now = get_current_timestamp()
-    item_progress = build_item_progress_template(required_item_ids)
+    item_progress = build_item_progress_template(progress_item_ids)
     denorm = _denormalize_participant_fields(helper, event_id, participant_id)
     payload = {
         "itemProgress": item_progress,
-        "isCompleted": compute_is_completed(item_progress),
+        "isCompleted": compute_is_completed_required(item_progress, required_item_ids),
         "lastUpdateDate": None,
         "assignedAt": now,
         "updatedAt": now,
@@ -94,41 +105,48 @@ def create_participant_doc(
     )
 
 
-def sync_participants_for_assigned_ids(
+def sync_all_event_participants(
     helper: FirestoreHelper,
     event_id: str,
     checklist_id: str,
-    assigned_ids: List[str],
-    required_item_ids: List[str],
+    stored_items: List[Dict[str, Any]],
 ) -> None:
     path = participants_collection_path(event_id, checklist_id)
+    event_ids = helper.list_document_ids(event_participants_collection_path(event_id))
+    target_ids = set(event_ids)
     existing_ids = set(helper.list_document_ids(path))
-    target_ids = set(assigned_ids)
 
     for removed_id in existing_ids - target_ids:
         helper.delete_document(path, removed_id)
 
     for participant_id in target_ids:
+        required_ids = mandatory_item_ids_for_pilot(stored_items, participant_id)
+        progress_ids = progress_item_ids_for_pilot(stored_items, participant_id)
         if participant_id in existing_ids:
             existing = helper.get_document(path, participant_id) or {}
             item_progress = _merge_item_progress(
                 existing.get("itemProgress") or {},
-                required_item_ids,
+                progress_ids,
             )
+            denorm = _denormalize_participant_fields(helper, event_id, participant_id)
             helper.update_document(
                 path,
                 participant_id,
                 {
                     "itemProgress": item_progress,
-                    "isCompleted": compute_is_completed(item_progress),
+                    "isCompleted": compute_is_completed_required(
+                        item_progress, required_ids
+                    ),
                     "updatedAt": get_current_timestamp(),
+                    **denorm,
                 },
             )
         else:
             create_participant_doc(
-                helper, event_id, checklist_id, participant_id, required_item_ids
+                helper,
+                event_id,
+                checklist_id,
+                participant_id,
+                progress_ids,
+                required_ids,
             )
-
-
-def required_ids_from_items(items: List[Dict[str, Any]]) -> List[str]:
-    return [item["id"] for item in items if item.get("isRequired")]

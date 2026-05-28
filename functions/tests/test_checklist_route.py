@@ -79,6 +79,7 @@ pytest_cases = [
     ("GET", "/api/events/checklists/get", "get"),
     ("POST", "/api/events/checklists/create", "create"),
     ("PUT", "/api/events/checklists/update", "update"),
+    ("PUT", "/api/events/checklists/update-photos", "update_photos"),
     ("DELETE", "/api/events/checklists/delete", "delete"),
     ("GET", "/api/events/checklists/participant-progress", "participant_progress"),
 ]
@@ -112,3 +113,5 @@ def test_resolve_action_invalid_paths():
     assert _resolve_action("/api/other/checklists/list", "GET") is None
     assert _resolve_action("/api/events/checklists", "GET") is None
     assert _resolve_action("", "GET") is None
+    assert _resolve_action("/api/events/checklists/update-photos", "PUT") == "update_photos"
+    assert _resolve_action("/api/events/checklists/update-photos", "POST") is None

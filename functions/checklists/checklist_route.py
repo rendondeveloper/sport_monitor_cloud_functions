@@ -5,6 +5,7 @@ Router para checklists de evento (paths planos).
 - GET    /api/events/checklists/get
 - POST   /api/events/checklists/create
 - PUT    /api/events/checklists/update
+- PUT    /api/events/checklists/update-photos
 - DELETE /api/events/checklists/delete
 - GET    /api/events/checklists/participant-progress
 """
@@ -21,6 +22,7 @@ from .get_checklist import handle_get
 from .get_participant_progress import handle_participant_progress
 from .list_checklists import handle_list
 from .update_checklist import handle_update
+from .update_checklist_photos import handle_update_photos
 
 LOG = logging.getLogger(__name__)
 LOG_PREFIX = "[checklist_route]"
@@ -29,6 +31,7 @@ _ACTION_LIST = "list"
 _ACTION_GET = "get"
 _ACTION_CREATE = "create"
 _ACTION_UPDATE = "update"
+_ACTION_UPDATE_PHOTOS = "update_photos"
 _ACTION_DELETE = "delete"
 _ACTION_PROGRESS = "participant_progress"
 
@@ -37,6 +40,7 @@ _HANDLERS = {
     _ACTION_GET: handle_get,
     _ACTION_CREATE: handle_create,
     _ACTION_UPDATE: handle_update,
+    _ACTION_UPDATE_PHOTOS: handle_update_photos,
     _ACTION_DELETE: handle_delete,
     _ACTION_PROGRESS: handle_participant_progress,
 }
@@ -58,6 +62,8 @@ def _resolve_action(path: str, method: str) -> str | None:
         return _ACTION_CREATE
     if method == "PUT" and segment == "update":
         return _ACTION_UPDATE
+    if method == "PUT" and segment == "update-photos":
+        return _ACTION_UPDATE_PHOTOS
     if method == "DELETE" and segment == "delete":
         return _ACTION_DELETE
     if method == "GET" and segment == "participant-progress":
@@ -67,6 +73,9 @@ def _resolve_action(path: str, method: str) -> str | None:
 
 @https_fn.on_request(region="us-central1")
 def checklist_route(req: https_fn.Request) -> https_fn.Response:
+
+    LOG.warning("%s Checklist route", LOG_PREFIX)
+    
     validation_response = validate_request(
         req,
         ["GET", "POST", "PUT", "DELETE"],
@@ -94,6 +103,7 @@ def checklist_route(req: https_fn.Request) -> https_fn.Response:
 
     path = getattr(req, "path", "") or ""
     action = _resolve_action(path, req.method)
+    LOG.info("%s Path=%s Method=%s Action=%s", LOG_PREFIX, path, req.method, action)
     if action is None:
         LOG.warning("%s Path no reconocido: %s %s", LOG_PREFIX, req.method, path)
         return https_fn.Response(

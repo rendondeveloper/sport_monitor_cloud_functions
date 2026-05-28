@@ -3,7 +3,8 @@ Router central para API de events (consultas públicas).
 
 Paths soportados:
 - GET /api/events
-- GET /api/events/{userId}/list (userId en path, no del token; query opcional status=)
+- GET /api/events/list?userId= (userId en query, no del token; query opcional status=)
+- GET /api/events/{userId}/list (legacy; userId en path)
 - GET /api/events/detail
 - GET /api/event/event-categories/**
 
@@ -42,7 +43,8 @@ def _action_from_path(path: str, method: str) -> str | None:
     Determina la acción a partir del path para rutas públicas de events.
 
     - /api/events           -> events
-    - /api/events/{userId}/list -> events_list
+    - /api/events/list      -> events_list
+    - /api/events/{userId}/list -> events_list (legacy)
     - /api/events/detail    -> event_detail
     - /api/event/event-categories/** -> event_categories
     """
@@ -53,6 +55,8 @@ def _action_from_path(path: str, method: str) -> str | None:
     if len(parts) >= 2 and parts[0] == "api" and parts[1] == "events":
         if len(parts) == 2:
             return _ACTION_EVENTS
+        if len(parts) == 3 and parts[2] == "list":
+            return _ACTION_EVENTS_LIST
         if len(parts) == 4 and parts[3] == "list":
             return _ACTION_EVENTS_LIST
         if len(parts) >= 3 and parts[2] == "detail":
@@ -99,17 +103,26 @@ def _dispatch_event_categories(req: https_fn.Request) -> https_fn.Response:
         return event_categories_module.event_categories(req)
 
 
-def _dispatch_events_list(req: https_fn.Request) -> https_fn.Response:
-    """Lista eventos con creator == userId del path (el userId no se toma del token)."""
+def _user_id_for_events_list(req: https_fn.Request) -> str | None:
+    """
+    Obtiene userId para listado: query ?userId= en /api/events/list
+    o segmento de path en /api/events/{userId}/list (legacy).
+    """
     path = getattr(req, "path", "") or ""
     parts = [p for p in path.strip("/").split("/") if p]
-    if len(parts) != 4 or parts[3] != "list":
-        LOG.warning("%s Path list inválido: %s", LOG_PREFIX, path)
-        return https_fn.Response("", status=404, headers={"Access-Control-Allow-Origin": "*"})
-    user_id = parts[2].strip()
+    if len(parts) == 3 and parts[0] == "api" and parts[1] == "events" and parts[2] == "list":
+        return (req.args.get("userId") or "").strip() or None
+    if len(parts) == 4 and parts[3] == "list":
+        return parts[2].strip() or None
+    return None
+
+
+def _dispatch_events_list(req: https_fn.Request) -> https_fn.Response:
+    """Lista eventos con creator == userId (query o path legacy; no se toma del token)."""
+    user_id = _user_id_for_events_list(req)
     if not user_id:
-        LOG.warning("%s userId vacío en path list", LOG_PREFIX)
-        return https_fn.Response("", status=404, headers={"Access-Control-Allow-Origin": "*"})
+        LOG.warning("%s userId faltante o vacío en list", LOG_PREFIX)
+        return https_fn.Response("", status=400, headers={"Access-Control-Allow-Origin": "*"})
     return handle_list(req, user_id)
 
 

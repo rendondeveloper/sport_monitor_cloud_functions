@@ -14,18 +14,34 @@ LOG_PREFIX = "[list_checklists]"
 
 def handle_list(req: https_fn.Request, user_id: str) -> https_fn.Response:
     event_id = common.parse_event_id_from_query(req)
-    _, error_response = common.assert_event_crm_access(event_id or "", user_id)
-    if error_response is not None:
-        return error_response
+    if not event_id:
+        return common.empty_response(400)
 
     try:
         helper = FirestoreHelper()
-        rows = helper.query_documents(checklists_collection_path(event_id))
+        collection_path = checklists_collection_path(event_id)
+
+        LOG.info(
+            "%s eventId=%s  firestorePath=%s",
+            LOG_PREFIX,
+            event_id,
+            collection_path,
+        )
+
+        rows = helper.query_documents(collection_path)
+        LOG.info(
+            "%s eventId=%s firestorePath=%s documentsFound=%d",
+            LOG_PREFIX,
+            event_id,
+            collection_path,
+            len(rows),
+        )
         summaries = [
             common.build_checklist_summary(helper, event_id, checklist_id, data)
             for checklist_id, data in rows
         ]
-        return common.json_response({"result": summaries})
+        # Array JSON directo (mismo patrón que catálogos/competitors); sin wrapper `result`.
+        return common.json_response(summaries)
     except Exception as error:
         LOG.error("%s Error: %s", LOG_PREFIX, error, exc_info=True)
         return common.empty_response(500)

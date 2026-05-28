@@ -3,7 +3,7 @@ Lista los eventos del usuario autenticado (filtrado por creator).
 Opcionalmente filtra por status.
 
 Método: GET /api/event-management/{userId}/list?status= — el userId va en la URL (no se obtiene del token).
-Alias vía event_route: GET /api/events/{userId}/list?status= (mismo criterio: userId solo en path).
+Alias vía event_route: GET /api/events/list?userId=&status= (userId en query; legacy path /api/events/{userId}/list).
 Headers: Authorization Bearer (requerido)
 Query params: status (opcional)
 Returns: 200 array de eventos (puede ser []) | 401 no autorizado | 500 error interno
