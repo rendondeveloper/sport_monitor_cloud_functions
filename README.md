@@ -2108,6 +2108,7 @@ Cuerpo: **array JSON** (sin wrapper) de objetos:
 
 - `eventId`: ID del evento.
 - `eventName`: Campo `name` del evento.
+- `checklist`: `true` si existe al menos un documento en `events/{eventId}/checklists/`; `false` si la subcolección está vacía. No evalúa `visibilityMode` (la app móvil decide cuándo mostrar el checklist).
 - `routes`: `null` si no hay rutas que cumplan filtros; en caso contrario array de objetos:
   - `competitor`: `category` (si hay `pilotNumber` no vacío, el dorsal; si no, el **nombre** de la categoría del evento, campo `name` del documento en `event_categories`, sin usar el id del documento), `nombre` (mismo criterio de nombre legible; si no hay `name` en Firestore, se usa el id de registro como respaldo).
   - `route`: `name`, `route` (URL desde `routeUrl`), `version` (1), `totalDistance`, `typedistance`.
@@ -2124,7 +2125,7 @@ curl -X GET \
 
 #### Respuestas
 
-- **200 OK**: JSON array de eventos con `routes` o `routes: null`.
+- **200 OK**: JSON array de eventos con `routes` o `routes: null`, y `checklist` boolean.
 - **400 Bad Request**: `userId` faltante o vacío (sin cuerpo).
 - **401 Unauthorized**: Token inválido o faltante (sin cuerpo).
 - **404 Not Found**: Sin membresías, o ningún evento aplicable tras omitir no inscritos / no disponibles (sin cuerpo).
@@ -2137,6 +2138,7 @@ curl -X GET \
   {
     "eventId": "ev123",
     "eventName": "Rally Ejemplo",
+    "checklist": true,
     "routes": [
       {
         "competitor": { "category": "4", "nombre": "Oro" },

@@ -64,6 +64,7 @@ def _build_firestore_mock(
     visible_routes_by_event,
     checkpoints_by_route=None,
     category_display_names=None,
+    has_checklists_by_event=None,
 ):
     """
     events_meta: { event_id: { "exists": bool, "name": str } }
@@ -73,9 +74,11 @@ def _build_firestore_mock(
     category_display_names: { event_id: str } campo name del doc categoría (tests)
     visible_routes_by_event: { event_id: [ dict route fields + categoryIds list ] }
     checkpoints_by_route: { (event_id, route_id): [ checkpoint docs mocks ] }
+    has_checklists_by_event: { event_id: bool } al menos un doc en checklists/
     """
     category_display_names = category_display_names or {}
     checkpoints_by_route = checkpoints_by_route or {}
+    has_checklists_by_event = has_checklists_by_event or {}
     db = MagicMock()
 
     # --- users/{uid}/membership ---
@@ -163,6 +166,14 @@ def _build_firestore_mock(
         r_col.where.return_value = r_where
         r_col.document.side_effect = r_document
 
+        checklists_col = MagicMock()
+        checklists_limited = MagicMock()
+        if has_checklists_by_event.get(eid, False):
+            checklists_limited.get.return_value = [MagicMock()]
+        else:
+            checklists_limited.get.return_value = []
+        checklists_col.limit.return_value = checklists_limited
+
         def ev_sub(name):
             if name == FirestoreCollections.EVENT_PARTICIPANTS:
                 return p_col
@@ -170,6 +181,8 @@ def _build_firestore_mock(
                 return cats_col
             if name == FirestoreCollections.EVENT_ROUTES:
                 return r_col
+            if name == FirestoreCollections.EVENT_CHECKLISTS:
+                return checklists_col
             return MagicMock()
 
         ev_root.collection.side_effect = ev_sub
@@ -318,6 +331,7 @@ def test_competitor_route_happy_path_with_checkpoints(_mock_vbt, mock_fs, _vr):
     assert len(data) == 1
     assert data[0]["eventId"] == "ev1"
     assert data[0]["eventName"] == "Rally Uno"
+    assert data[0]["checklist"] is False
     assert data[0]["routes"] is not None
     assert len(data[0]["routes"]) == 1
     item = data[0]["routes"][0]
@@ -367,6 +381,87 @@ def test_competitor_route_routes_null_when_no_category_match(
     assert resp.status_code == 200
     data = json.loads(resp.get_data(as_text=True))
     assert data[0]["routes"] is None
+    assert data[0]["checklist"] is False
+
+
+@patch("competitors.competitor_route.validate_request", return_value=None)
+@patch("competitors.competitor_route.firestore.client")
+@patch("competitors.competitor_route.verify_bearer_token", return_value=True)
+def test_competitor_route_checklist_true_when_event_has_checklists(
+    _mock_vbt, mock_fs, _vr
+):
+    from competitors.competitor_route import competitor_route
+
+    db = _build_firestore_mock(
+        membership_event_ids=["ev1"],
+        events_meta={"ev1": {"exists": True, "name": "E1"}},
+        participant_by_event={
+            "ev1": {
+                "exists": True,
+                "data": {
+                    "competitionCategory": {
+                        "registrationCategory": "cat1",
+                        "pilotNumber": "4",
+                    }
+                },
+            }
+        },
+        category_ids_by_event={"ev1": "cat1"},
+        visible_routes_by_event={"ev1": []},
+        has_checklists_by_event={"ev1": True},
+    )
+    mock_fs.return_value = db
+
+    resp = competitor_route(_make_req())
+    assert resp.status_code == 200
+    data = json.loads(resp.get_data(as_text=True))
+    assert data[0]["routes"] is None
+    assert data[0]["checklist"] is True
+
+
+@patch("competitors.competitor_route.validate_request", return_value=None)
+@patch("competitors.competitor_route.firestore.client")
+@patch("competitors.competitor_route.verify_bearer_token", return_value=True)
+def test_competitor_route_checklist_per_event(_mock_vbt, mock_fs, _vr):
+    from competitors.competitor_route import competitor_route
+
+    route_row = {
+        "_id": "r0",
+        "name": "R1",
+        "routeUrl": "u",
+        "visibleForPilots": True,
+        "categoryIds": ["cat1"],
+        "totalDistance": 0,
+    }
+    db = _build_firestore_mock(
+        membership_event_ids=["ev1", "ev2"],
+        events_meta={
+            "ev1": {"exists": True, "name": "Con checklist"},
+            "ev2": {"exists": True, "name": "Sin checklist"},
+        },
+        participant_by_event={
+            "ev1": {
+                "exists": True,
+                "data": {"competitionCategory": {"registrationCategory": "cat1"}},
+            },
+            "ev2": {
+                "exists": True,
+                "data": {"competitionCategory": {"registrationCategory": "cat1"}},
+            },
+        },
+        category_ids_by_event={"ev1": "cat1", "ev2": "cat1"},
+        visible_routes_by_event={"ev1": [route_row], "ev2": []},
+        has_checklists_by_event={"ev1": True, "ev2": False},
+    )
+    mock_fs.return_value = db
+
+    resp = competitor_route(_make_req())
+    assert resp.status_code == 200
+    data = json.loads(resp.get_data(as_text=True))
+    assert len(data) == 2
+    by_id = {item["eventId"]: item for item in data}
+    assert by_id["ev1"]["checklist"] is True
+    assert by_id["ev2"]["checklist"] is False
 
 
 @patch("competitors.competitor_route.validate_request", return_value=None)

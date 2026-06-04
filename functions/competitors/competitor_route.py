@@ -212,6 +212,17 @@ def _is_debug_request(req: https_fn.Request) -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
+def _event_has_checklist(db: firestore.Client, event_id: str) -> bool:
+    """True si existe al menos un documento en events/{eventId}/checklists."""
+    checklists_query = (
+        db.collection(FirestoreCollections.EVENTS)
+        .document(event_id)
+        .collection(FirestoreCollections.EVENT_CHECKLISTS)
+        .limit(1)
+    )
+    return len(checklists_query.get()) > 0
+
+
 def _not_found(req: https_fn.Request, error: str) -> https_fn.Response:
     if _is_debug_request(req):
         return https_fn.Response(
@@ -238,7 +249,8 @@ def competitor_route(req: https_fn.Request) -> https_fn.Response:
     - userId: UID del usuario (requerido)
 
     Returns:
-    - 200: JSON array [{ eventId, eventName, routes | null }, ...]
+    - 200: JSON array [{ eventId, eventName, routes | null, checklist }, ...]
+      checklist: true si el evento tiene al menos un doc en checklists/
     - 400: userId faltante
     - 401: Token inválido o faltante
     - 404: Sin documentos en membership, o ningún evento aplicable tras filtros
@@ -323,12 +335,15 @@ def competitor_route(req: https_fn.Request) -> https_fn.Response:
                     if category_id in (rdata.get("categoryIds") or []):
                         matching_routes.append(rd)
 
+            has_checklist = _event_has_checklist(db, event_id)
+
             if not matching_routes:
                 result.append(
                     {
                         "eventId": event_id,
                         "eventName": event_name,
                         "routes": None,
+                        "checklist": has_checklist,
                     }
                 )
             else:
@@ -347,6 +362,7 @@ def competitor_route(req: https_fn.Request) -> https_fn.Response:
                         "eventId": event_id,
                         "eventName": event_name,
                         "routes": entries,
+                        "checklist": has_checklist,
                     }
                 )
 
