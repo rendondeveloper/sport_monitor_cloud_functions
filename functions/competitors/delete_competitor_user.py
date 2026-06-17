@@ -1,13 +1,17 @@
 """
 Delete Competitor User - Eliminar usuario competidor creado con create_competitor_user
 
-Elimina en orden: participante, membership, subcolecciones del usuario
-(emergencyContacts como colección, healthData, personalData) y documento users.
+Elimina en orden: subcolecciones del participante en el evento (emergencyContacts,
+vehicle), participante, membership, subcolecciones del usuario (emergencyContacts,
+healthData, personalData, vehicles) y documento users.
 Requiere Bearer token.
 """
 
 import logging
 
+from competitors.competitor_participant_cleanup import (
+    delete_participant_event_subcollections,
+)
 from competitors.create_competitor import _get_collection_path
 from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
@@ -153,10 +157,12 @@ def delete_competitor_user_resources(
     """
     Elimina todo lo creado por create_competitor_user para un userId y eventId.
 
-    Orden (inverso al de creación): participante -> membership -> subcolecciones
-    (vehicles, emergencyContacts, healthData, personalData) -> usuario.
+    Orden (inverso al de creación): subcolecciones del participante en el evento ->
+    participante -> membership -> subcolecciones del usuario -> documento users.
     Si algún documento no existe, se registra y se continúa con el resto.
     """
+    delete_participant_event_subcollections(helper, user_id, event_id, LOG_PREFIX)
+
     # 1. Participante en events/{eventId}/participants/{userId}
     # Sin try/except: si falla, la excepción se propaga y el handler devuelve 500.
     collection_path = _get_collection_path(event_id)
@@ -214,8 +220,8 @@ def delete_competitor_user(req: https_fn.Request) -> https_fn.Response:
     """
     Elimina el usuario competidor creado con create_competitor_user y sus datos asociados.
 
-    Borra en orden: participante, membership, subcolecciones (emergencyContacts,
-    healthData, personalData) y documento users.
+    Borra en orden: subcolecciones del participante en el evento (emergencyContacts,
+    vehicle), participante, membership, subcolecciones del usuario y documento users.
 
     Requiere Bearer token.
 

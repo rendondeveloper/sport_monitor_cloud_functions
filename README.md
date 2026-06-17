@@ -2973,7 +2973,7 @@ curl -X GET \
 
 ### 7. `delete_competitor_user`
 
-Elimina el usuario competidor creado con `create_competitor_user` y todos sus datos asociados: participante en el evento, membership, subcolecciones (vehicles, emergencyContacts, healthData, personalData) y documento en `users`.
+Elimina el usuario competidor creado con `create_competitor_user` y todos sus datos asociados: subcolecciones del participante en el evento (`emergencyContacts`, `vehicle`), participante, membership, subcolecciones del usuario (vehicles, emergencyContacts, healthData, personalData) y documento en `users`.
 
 **Tipo**: HTTP Request (DELETE)  
 **Endpoint**: `https://delete-competitor-user-xa26lpxdea-uc.a.run.app`  
@@ -3044,7 +3044,7 @@ curl -X DELETE \
 
 ### 8. `delete_competitor`
 
-Elimina **solo el participante del evento** (y su membership en `users/{userId}/membership/{eventId}`). **No elimina** el documento del usuario en `users` ni sus subcolecciones (vehicles, emergencyContacts, healthData, personalData). Útil para quitar a un competidor de un evento sin borrar su cuenta ni datos.
+Elimina **solo el participante del evento** (subcolecciones `emergencyContacts` y `vehicle` bajo el participante, documento en `participants` y membership en `users/{userId}/membership/{eventId}`). **No elimina** el documento del usuario en `users` ni sus subcolecciones de perfil (vehicles, emergencyContacts, healthData, personalData en `users/`). Útil para quitar a un competidor de un evento sin borrar su cuenta ni datos.
 
 **Tipo**: HTTP Request (DELETE)  
 **Endpoint con Hosting**: `https://system-track-monitor.web.app/api/competitors/delete-competitor`

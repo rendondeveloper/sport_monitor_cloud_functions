@@ -1,14 +1,18 @@
 """
 Delete Competitor - Eliminar solo el participante del evento (no el usuario)
 
-Elimina el documento del competidor en events/{eventId}/participants/{userId}
-y opcionalmente el membership en users/{userId}/membership/{eventId}.
+Elimina el documento del competidor en events/{eventId}/participants/{userId},
+sus subcolecciones event-scoped (emergencyContacts, vehicle) y el membership en
+users/{userId}/membership/{eventId}.
 No elimina el documento users ni sus subcolecciones (vehicles, healthData, etc.).
 Requiere Bearer token.
 """
 
 import logging
 
+from competitors.competitor_participant_cleanup import (
+    delete_participant_event_subcollections,
+)
 from competitors.create_competitor import _get_collection_path
 from firebase_functions import https_fn
 from models.firestore_collections import FirestoreCollections
@@ -26,9 +30,11 @@ def delete_competitor_resources(
     event_id: str,
 ) -> None:
     """
-    Elimina solo el participante del evento y el membership.
+    Elimina subcolecciones del participante, el documento en el evento y el membership.
     No toca el documento users ni sus subcolecciones.
     """
+    delete_participant_event_subcollections(helper, user_id, event_id, LOG_PREFIX)
+
     # 1. Participante en events/{eventId}/participants/{userId}
     # Sin try/except: si falla, la excepción se propaga y el handler devuelve 500.
     collection_path = _get_collection_path(event_id)
@@ -65,7 +71,7 @@ def delete_competitor_resources(
 @https_fn.on_request(region="us-east4")
 def delete_competitor(req: https_fn.Request) -> https_fn.Response:
     """
-    Elimina solo el participante del evento (y su membership).
+    Elimina el participante del evento (subcolecciones event-scoped, documento y membership).
     No elimina el usuario ni sus datos en users.
 
     Requiere Bearer token.
@@ -73,14 +79,14 @@ def delete_competitor(req: https_fn.Request) -> https_fn.Response:
     Método: DELETE
     Body (JSON):
       - "eventId": "<id>" (requerido)
-      - "userId": "<id>" o "email": "<email>" (al menos uno requerido)
-    También se aceptan event_id, user_id.
+      - "userId": "<id>" (requerido)
+    También se aceptan event_id y user_id.
 
     Returns:
     - 204: No Content (eliminado correctamente)
-    - 400: Bad Request (body inválido, faltan eventId o userId/email)
+    - 400: Bad Request (body inválido, faltan eventId o userId)
     - 401: Unauthorized
-    - 404: Usuario no encontrado
+    - 404: Participante no encontrado en el evento
     - 500: Internal Server Error
     """
     validation_response = validate_request(
@@ -111,7 +117,6 @@ def delete_competitor(req: https_fn.Request) -> https_fn.Response:
             )
 
         user_id = request_data.get("userId") or request_data.get("user_id")
-        email = request_data.get("email")
         event_id = request_data.get("eventId") or request_data.get("event_id")
 
         if not event_id:
@@ -122,9 +127,9 @@ def delete_competitor(req: https_fn.Request) -> https_fn.Response:
                 headers={"Access-Control-Allow-Origin": "*"},
             )
 
-        if not user_id and not email:
+        if not user_id:
             LOG.warning(
-                "%s delete_competitor: debe enviarse userId o email en el body",
+                "%s delete_competitor: falta userId en el body",
                 LOG_PREFIX,
             )
             return https_fn.Response(
@@ -134,25 +139,6 @@ def delete_competitor(req: https_fn.Request) -> https_fn.Response:
             )
 
         helper = FirestoreHelper()
-
-        if not user_id and email:
-            results = helper.query_documents(
-                FirestoreCollections.USERS,
-                filters=[{"field": "email", "operator": "==", "value": email}],
-                limit=1,
-            )
-            if not results:
-                LOG.warning(
-                    "%s delete_competitor: no existe usuario con email %s",
-                    LOG_PREFIX,
-                    email,
-                )
-                return https_fn.Response(
-                    "",
-                    status=404,
-                    headers={"Access-Control-Allow-Origin": "*"},
-                )
-            user_id = results[0][0]
 
         # Opcional: comprobar que el participante exista (evita 500 por doc inexistente si se desea 404).
         # Firestore delete() sobre documento inexistente no lanza, así que no es obligatorio.

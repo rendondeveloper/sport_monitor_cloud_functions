@@ -183,3 +183,36 @@ def test_event_route_events_list_missing_user_id_returns_400(
     response = event_route(req)
 
     assert response.status_code == 400
+
+
+@patch("events.event_categories.firestore.client")
+@patch("events.event_route.verify_bearer_token", return_value=True)
+@patch("events.event_route.validate_request", return_value=None)
+def test_event_route_event_categories_dispatches_handler_without_attribute_error(
+    mock_validate, mock_verify, mock_firestore_client
+):
+    """Regresión: event_categories_module debe ser el módulo .py, no la función exportada."""
+    from events.event_route import event_categories_module, event_route
+
+    assert hasattr(event_categories_module, "event_categories")
+    assert hasattr(event_categories_module, "validate_request")
+
+    mock_doc = MagicMock()
+    mock_doc.id = "cat1"
+    mock_doc.to_dict.return_value = {"name": "Pro", "description": None}
+
+    mock_categories_ref = MagicMock()
+    mock_categories_ref.order_by.return_value.get.return_value = [mock_doc]
+    mock_event_ref = MagicMock()
+    mock_event_ref.collection.return_value = mock_categories_ref
+    mock_firestore_client.return_value.collection.return_value.document.return_value = (
+        mock_event_ref
+    )
+
+    req = _make_request(path="/api/event/event-categories/evt1", method="GET")
+    response = event_route(req)
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert '"id": "cat1"' in body
+    assert '"name": "Pro"' in body

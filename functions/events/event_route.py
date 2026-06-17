@@ -11,7 +11,9 @@ Paths soportados:
 Valida CORS, método HTTP y Bearer token una sola vez; luego despacha por path.
 """
 
+import importlib
 import logging
+import sys
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -20,7 +22,10 @@ from event_management.list_events import handle_list
 from utils.helper_http import verify_bearer_token
 from utils.helper_http_verb import validate_request
 
-from . import event_categories as event_categories_module
+# `from . import event_categories` resuelve la función exportada en events/__init__.py;
+# sys.modules conserva el módulo .py para bypass y dispatch.
+importlib.import_module("events.event_categories")
+event_categories_module = sys.modules["events.event_categories"]
 from . import events_customer as events_customer_module
 from . import events_detail_customer as events_detail_customer_module
 
