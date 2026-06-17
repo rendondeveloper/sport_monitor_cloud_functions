@@ -2,7 +2,7 @@
 Delete Vehicle - SPRTMNTRPP-73
 
 Elimina un vehiculo de un usuario en Firestore.
-Path: /api/vehicles/{vehicleId}. Query: userId, authUserId.
+Path: /api/vehicles/{vehicleId}. Query: userId.
 Respuesta exitosa: 204 No Content.
 
 Logica de negocio unicamente. La validacion CORS y Bearer token la realiza vehicle_route.
@@ -32,17 +32,10 @@ def _vehicle_id_from_path(path: str) -> str | None:
     return None
 
 
-def _validate_user_and_auth(
-    db: "FirestoreClient", user_id: str, auth_user_id: str
-) -> bool:
-    """Comprueba que el usuario exista y que authUserId coincida."""
+def _validate_user_exists(db: "FirestoreClient", user_id: str) -> bool:
+    """Comprueba que el usuario exista en Firestore."""
     user_ref = db.collection(FirestoreCollections.USERS).document(user_id)
-    user_doc = user_ref.get()
-    if not user_doc.exists:
-        return False
-    data = user_doc.to_dict() or {}
-    doc_auth_uid = (data.get("authUserId") or "").strip()
-    return doc_auth_uid == auth_user_id.strip()
+    return user_ref.get().exists
 
 
 def _validate_vehicle(db: "FirestoreClient", user_id: str, vehicle_id: str) -> bool:
@@ -84,7 +77,7 @@ def handle(req: https_fn.Request) -> https_fn.Response:
     Asume request ya validado (CORS, Bearer token) por vehicle_route.
 
     Path: /api/vehicles/{vehicleId}
-    Query: userId, authUserId
+    Query: userId
 
     Returns:
     - 204: eliminado correctamente
@@ -105,7 +98,6 @@ def handle(req: https_fn.Request) -> https_fn.Response:
             )
 
         user_id = (req.args.get("userId") or "").strip()
-        auth_user_id = (req.args.get("authUserId") or "").strip()
 
         if not user_id:
             logging.warning("%s userId faltante o vacio", LOG_PREFIX)
@@ -114,18 +106,11 @@ def handle(req: https_fn.Request) -> https_fn.Response:
                 status=400,
                 headers=_cors_headers_204(),
             )
-        if not auth_user_id:
-            logging.warning("%s authUserId faltante o vacio", LOG_PREFIX)
-            return https_fn.Response(
-                "",
-                status=400,
-                headers=_cors_headers_204(),
-            )
 
         db = firestore.client()
-        if not _validate_user_and_auth(db, user_id, auth_user_id):
+        if not _validate_user_exists(db, user_id):
             logging.warning(
-                "%s Usuario no encontrado o authUserId no coincide: userId=%s",
+                "%s Usuario no encontrado: userId=%s",
                 LOG_PREFIX,
                 user_id,
             )
