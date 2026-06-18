@@ -189,6 +189,12 @@ class FirestoreHelper:
         try:
             query = self.db.collection(collection_path)
 
+            if filters:
+                for f in filters:
+                    query = query.where(
+                        filter=FieldFilter(f["field"], f["operator"], f["value"])
+                    )
+
             if order_by:
                 for field, direction in order_by:
                     dir_enum = (
