@@ -27,8 +27,8 @@ LOG_PREFIX = "[list_events]"
 
 
 def _build_filters(user_id: str, status: str) -> list:
-    """Construye los filtros de la query. Siempre filtra por creator."""
-    filters = [{"field": "creator", "operator": "==", "value": user_id}]
+    """Construye los filtros de la query. Siempre filtra por createdBy (compatibilidad con frontend)."""
+    filters = [{"field": "createdBy", "operator": "==", "value": user_id}]
     if status:
         filters.append({"field": "status", "operator": "==", "value": status})
     return filters

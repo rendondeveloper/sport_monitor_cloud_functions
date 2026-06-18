@@ -41,8 +41,8 @@ def _make_request(status=None, method="GET"):
 
 
 _SAMPLE_EVENTS = [
-    ("ev1", {"name": "Rally 2026", "creator": "user1", "status": "draft", "createdAt": "2026-01-02"}),
-    ("ev2", {"name": "Rally 2025", "creator": "user1", "status": "published", "createdAt": "2026-01-01"}),
+    ("ev1", {"name": "Rally 2026", "createdBy": "user1", "status": "draft", "createdAt": "2026-01-02"}),
+    ("ev2", {"name": "Rally 2025", "createdBy": "user1", "status": "published", "createdAt": "2026-01-01"}),
 ]
 
 
@@ -81,7 +81,7 @@ class TestListEventsHappyPath:
 
 
 class TestListEventsFilters:
-    def test_always_filters_by_creator(self, mock_firestore_helper):
+    def test_always_filters_by_created_by(self, mock_firestore_helper):
         from event_management.list_events import handle_list
 
         mock_firestore_helper.query_documents.return_value = []
@@ -91,7 +91,7 @@ class TestListEventsFilters:
 
         call_args = mock_firestore_helper.query_documents.call_args
         filters = call_args.kwargs.get("filters") or call_args[1].get("filters")
-        creator_filter = next((f for f in filters if f["field"] == "creator"), None)
+        creator_filter = next((f for f in filters if f["field"] == "createdBy"), None)
         assert creator_filter is not None
         assert creator_filter["value"] == "my_user_id"
 
