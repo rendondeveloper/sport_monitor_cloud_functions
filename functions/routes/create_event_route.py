@@ -46,37 +46,47 @@ def handle_create(req: https_fn.Request, user_id: str) -> https_fn.Response:
     body = req.get_json(silent=True)
     if not isinstance(body, dict):
         LOG.warning("%s Body inválido o faltante", LOG_PREFIX)
-        return https_fn.Response("", status=400, headers={"Access-Control-Allow-Origin": "*"})
+        return https_fn.Response(
+            "", status=400, headers={"Access-Control-Allow-Origin": "*"}
+        )
 
     name = (body.get("name") or "").strip()
     if not name:
         LOG.warning("%s name faltante o vacío", LOG_PREFIX)
-        return https_fn.Response("", status=400, headers={"Access-Control-Allow-Origin": "*"})
+        return https_fn.Response(
+            "", status=400, headers={"Access-Control-Allow-Origin": "*"}
+        )
 
     event_id = (body.get("eventId") or "").strip()
     if not event_id:
         LOG.warning("%s eventId faltante o vacío", LOG_PREFIX)
-        return https_fn.Response("", status=400, headers={"Access-Control-Allow-Origin": "*"})
+        return https_fn.Response(
+            "", status=400, headers={"Access-Control-Allow-Origin": "*"}
+        )
 
     color_track = body.get("colorTrack")
     if color_track is None:
         LOG.warning("%s colorTrack faltante", LOG_PREFIX)
-        return https_fn.Response("", status=400, headers={"Access-Control-Allow-Origin": "*"})
+        return https_fn.Response(
+            "", status=400, headers={"Access-Control-Allow-Origin": "*"}
+        )
 
     width = body.get("width")
     if width is None:
         LOG.warning("%s width faltante", LOG_PREFIX)
-        return https_fn.Response("", status=400, headers={"Access-Control-Allow-Origin": "*"})
+        return https_fn.Response(
+            "", status=400, headers={"Access-Control-Allow-Origin": "*"}
+        )
 
     if get_event_if_owner(event_id, user_id) is None:
         LOG.warning("%s Evento no encontrado o usuario no es el creador", LOG_PREFIX)
-        return https_fn.Response("", status=404, headers={"Access-Control-Allow-Origin": "*"})
+        return https_fn.Response(
+            "", status=404, headers={"Access-Control-Allow-Origin": "*"}
+        )
 
     try:
         helper = FirestoreHelper()
-        route_collection_path = (
-            f"{FirestoreCollections.EVENTS}/{event_id}/{FirestoreCollections.EVENT_ROUTES}"
-        )
+        route_collection_path = f"{FirestoreCollections.EVENTS}/{event_id}/{FirestoreCollections.EVENT_ROUTES}"
         route_id = helper.new_document_id(route_collection_path)
         now = get_current_timestamp()
 
@@ -118,7 +128,9 @@ def handle_create(req: https_fn.Request, user_id: str) -> https_fn.Response:
                     "name": (waypoint.get("name") or "").strip(),
                     "order": waypoint.get("order", 0),
                     "coordinates": (waypoint.get("coordinates") or "").strip(),
-                    "checkpointTypeId": (waypoint.get("checkpointTypeId") or "").strip(),
+                    "checkpointTypeId": (
+                        waypoint.get("checkpointTypeId") or ""
+                    ).strip(),
                     "assignedStaffIds": waypoint.get("assignedStaffIds") or [],
                     "createdAt": now,
                     "updatedAt": now,
@@ -131,8 +143,17 @@ def handle_create(req: https_fn.Request, user_id: str) -> https_fn.Response:
 
         helper.batch_set(operations)
 
-        return https_fn.Response("", status=200, headers={"Access-Control-Allow-Origin": "*"})
+        return https_fn.Response(
+            f'{{"id":"{route_id}"}}',
+            status=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Content-Type": "application/json",
+            },
+        )
 
     except Exception as e:
         LOG.error("%s Error interno: %s", LOG_PREFIX, e, exc_info=True)
-        return https_fn.Response("", status=500, headers={"Access-Control-Allow-Origin": "*"})
+        return https_fn.Response(
+            "", status=500, headers={"Access-Control-Allow-Origin": "*"}
+        )

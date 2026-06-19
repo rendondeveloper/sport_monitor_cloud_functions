@@ -131,9 +131,9 @@ def handle_update(req: https_fn.Request, user_id: str) -> https_fn.Response:
         LOG.warning("%s eventId faltante o vacío", LOG_PREFIX)
         return https_fn.Response("", status=400, headers=_CORS)
 
-    route_id = (body.get("routeId") or "").strip()
+    route_id = (body.get("id") or "").strip()
     if not route_id:
-        LOG.warning("%s routeId faltante o vacío", LOG_PREFIX)
+        LOG.warning("%s id faltante o vacío", LOG_PREFIX)
         return https_fn.Response("", status=400, headers=_CORS)
 
     if get_event_if_owner(event_id, user_id) is None:
