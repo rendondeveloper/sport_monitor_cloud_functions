@@ -51,6 +51,10 @@ def handle_delete(req: https_fn.Request, user_id: str) -> https_fn.Response:
         route_ref.collection(FirestoreCollections.EVENT_CHECKPOINTS).stream()
     ):
         checkpoint_doc.reference.delete()
+    for trackpoint_doc in (
+        route_ref.collection(FirestoreCollections.EVENT_TRACKPOINTS).stream()
+    ):
+        trackpoint_doc.reference.delete()
     route_ref.delete()
     return _empty(200)
 

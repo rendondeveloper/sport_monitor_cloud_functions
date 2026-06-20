@@ -31,21 +31,32 @@ _CORS_HEADERS = {"Access-Control-Allow-Origin": "*"}
 # ============================================================================
 
 
-def _checkpoints_path(event_id: str, route_id: str) -> str:
+def _subcollection_path(event_id: str, route_id: str, subcollection: str) -> str:
     return (
         f"{FirestoreCollections.EVENTS}/{event_id}"
         f"/{FirestoreCollections.EVENT_ROUTES}/{route_id}"
-        f"/{FirestoreCollections.EVENT_CHECKPOINTS}"
+        f"/{subcollection}"
     )
 
 
 def _serialize_route(route_id: str, route_data: Dict[str, Any], event_id: str) -> Dict[str, Any]:
-    """Convierte datos de ruta a dict de respuesta, incluyendo sus checkpoints."""
+    """Convierte datos de ruta a dict de respuesta, incluyendo sus checkpoints y trackPoints."""
     result = dict(route_data)
     result["id"] = route_id
     helper = FirestoreHelper()
-    checkpoint_docs = helper.query_documents(_checkpoints_path(event_id, route_id))
+    checkpoint_docs = helper.query_documents(
+        _subcollection_path(event_id, route_id, FirestoreCollections.EVENT_CHECKPOINTS)
+    )
     result["checkpoints"] = [{"id": cp_id, **cp_data} for cp_id, cp_data in checkpoint_docs]
+    trackpoint_docs = helper.query_documents(
+        _subcollection_path(event_id, route_id, FirestoreCollections.EVENT_TRACKPOINTS)
+    )
+    trackpoint_docs.sort(key=lambda x: x[1].get("order", 0))
+    _TP_INTERNAL = {"order", "createdAt", "updatedAt"}
+    result["trackPoints"] = [
+        {k: v for k, v in tp_data.items() if k not in _TP_INTERNAL}
+        for tp_id, tp_data in trackpoint_docs
+    ]
     return result
 
 

@@ -60,7 +60,7 @@ class TestHandleListHappyPath:
 
     def test_retorna_lista_con_rutas_y_checkpoints(self, mock_get_event_if_owner, mock_firestore_helper):
         # Arrange
-        # query_documents se llama 3 veces: rutas, checkpoints route1, checkpoints route2
+        # query_documents se llama 5 veces: rutas, checkpoints r1, trackPoints r1, checkpoints r2, trackPoints r2
         mock_firestore_helper.query_documents.side_effect = [
             [
                 ("route1", {"name": "Etapa 1", "createdAt": "2026-01-01", "updatedAt": "2026-01-01"}),
@@ -70,6 +70,10 @@ class TestHandleListHappyPath:
                 ("cp1", {"name": "WP1", "order": 0, "createdAt": "2026-01-01", "updatedAt": "2026-01-01"}),
                 ("cp2", {"name": "WP2", "order": 1, "createdAt": "2026-01-01", "updatedAt": "2026-01-01"}),
             ],
+            [
+                ("tp1", {"lat": 40.1, "lng": -74.5, "order": 0, "createdAt": "2026-01-01", "updatedAt": "2026-01-01"}),
+            ],
+            [],
             [],
         ]
         req = _make_request({"eventId": "evt1"})
@@ -89,8 +93,15 @@ class TestHandleListHappyPath:
         assert data[0]["checkpoints"][0]["id"] == "cp1"
         assert "createdAt" not in data[0]["checkpoints"][0]
         assert "updatedAt" not in data[0]["checkpoints"][0]
+        assert len(data[0]["trackPoints"]) == 1
+        assert "id" not in data[0]["trackPoints"][0]
+        assert data[0]["trackPoints"][0]["lat"] == 40.1
+        assert "order" not in data[0]["trackPoints"][0]
+        assert "createdAt" not in data[0]["trackPoints"][0]
+        assert "updatedAt" not in data[0]["trackPoints"][0]
         assert data[1]["id"] == "route2"
         assert data[1]["checkpoints"] == []
+        assert data[1]["trackPoints"] == []
 
     def test_retorna_lista_vacia(self, mock_get_event_if_owner, mock_firestore_helper):
         # Arrange — sin rutas, solo una llamada a query_documents

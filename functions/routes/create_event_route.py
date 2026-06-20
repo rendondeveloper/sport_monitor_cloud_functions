@@ -108,11 +108,23 @@ def handle_create(req: https_fn.Request, user_id: str) -> https_fn.Response:
         if visible_for_pilots is not None:
             route_payload["visibleForPilots"] = visible_for_pilots
 
+        operations = [(route_collection_path, route_id, route_payload)]
+
         track_points = body.get("trackPoints")
         if track_points and isinstance(track_points, list):
-            route_payload["trackPoints"] = track_points
-
-        operations = [(route_collection_path, route_id, route_payload)]
+            trackpoints_path = (
+                f"{FirestoreCollections.EVENTS}/{event_id}"
+                f"/{FirestoreCollections.EVENT_ROUTES}/{route_id}"
+                f"/{FirestoreCollections.EVENT_TRACKPOINTS}"
+            )
+            for i, tp in enumerate(track_points):
+                if not isinstance(tp, dict):
+                    continue
+                tp_payload = dict(tp)
+                tp_payload["order"] = i
+                tp_payload["createdAt"] = now
+                tp_payload["updatedAt"] = now
+                operations.append((trackpoints_path, None, tp_payload))
 
         waypoints = body.get("waypoints")
         if waypoints and isinstance(waypoints, list):

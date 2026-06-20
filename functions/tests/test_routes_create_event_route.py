@@ -296,4 +296,10 @@ class TestHandleCreateOptionalFields:
         route_collection_path, route_id, route_payload = operations[0]
         assert route_payload["routeUrl"] == "https://maps.example.com/route"
         assert route_payload["visibleForPilots"] is True
-        assert route_payload["trackPoints"] == [{"lat": 40.1, "lng": -74.5}]
+        assert "trackPoints" not in route_payload
+        # trackPoints se escribe como subcolección en operations[1+]
+        trackpoint_op = operations[1]
+        assert trackpoint_op[0].endswith("/trackPoints")
+        assert trackpoint_op[2]["lat"] == 40.1
+        assert trackpoint_op[2]["lng"] == -74.5
+        assert trackpoint_op[2]["order"] == 0

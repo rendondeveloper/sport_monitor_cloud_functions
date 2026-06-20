@@ -53,11 +53,32 @@ def _build_update_payload(body: dict, now: str) -> dict:
     if visible_for_pilots is not None:
         payload["visibleForPilots"] = visible_for_pilots
 
-    track_points = body.get("trackPoints")
-    if track_points and isinstance(track_points, list):
-        payload["trackPoints"] = track_points
-
     return payload
+
+
+def _replace_subcollection(
+    helper: FirestoreHelper, path: str, items: list, now: str
+) -> None:
+    """Elimina los documentos existentes en una subcolección y escribe los nuevos."""
+    existing = helper.query_documents(path)
+    for doc_id, _ in existing:
+        helper.delete_document(path, doc_id)
+
+    if not items:
+        return
+
+    operations = []
+    for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        item_payload = dict(item)
+        item_payload["order"] = i
+        item_payload["createdAt"] = now
+        item_payload["updatedAt"] = now
+        operations.append((path, None, item_payload))
+
+    if operations:
+        helper.batch_set(operations)
 
 
 def _replace_waypoints(
@@ -154,6 +175,13 @@ def handle_update(req: https_fn.Request, user_id: str) -> https_fn.Response:
         now = get_current_timestamp()
         update_payload = _build_update_payload(body, now)
         helper.update_document(route_collection_path, route_id, update_payload)
+
+        if "trackPoints" in body:
+            trackpoints_path = (
+                f"{route_collection_path}/{route_id}"
+                f"/{FirestoreCollections.EVENT_TRACKPOINTS}"
+            )
+            _replace_subcollection(helper, trackpoints_path, body.get("trackPoints") or [], now)
 
         if "waypoints" in body:
             checkpoints_path = (

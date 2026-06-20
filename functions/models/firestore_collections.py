@@ -50,6 +50,9 @@ class FirestoreCollections:
     EVENT_TRACKING_COMPETITOR = "competitors"
     EVENT_TRACKING_CHECKPOINTS = "checkpoints"
 
+    # Subcolecciones de rutas del evento
+    EVENT_TRACKPOINTS = "trackPoints"
+
     # Subcolecciones de rutas del usuario
     MY_ROUTE_POINTS = "points"
     MY_ROUTE_NOTES = "notes"
