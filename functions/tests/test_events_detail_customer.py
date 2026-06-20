@@ -96,8 +96,20 @@ def test_event_detail_includes_routes_checkpoints_name_type(
     }
     checkpoint_docs = [cp_doc_1, cp_doc_2]
 
+    trackpoint_doc_1 = MagicMock()
+    trackpoint_doc_1.to_dict.return_value = {"lat": 19.5, "lng": 18.5, "ele": 100, "order": 1}
+
+    trackpoint_docs = [trackpoint_doc_1]
+    cp_sub_ref = MagicMock()
+    cp_sub_ref.get.return_value = checkpoint_docs
+    tp_sub_ref = MagicMock()
+    tp_sub_ref.get.return_value = trackpoint_docs
+
     route_doc_ref = MagicMock()
-    route_doc_ref.collection.return_value.get.return_value = checkpoint_docs
+    route_doc_ref.collection.side_effect = lambda col_name: {
+        FirestoreCollections.EVENT_CHECKPOINTS: cp_sub_ref,
+        FirestoreCollections.EVENT_TRACKPOINTS: tp_sub_ref,
+    }.get(col_name, MagicMock())
     routes_ref.document.return_value = route_doc_ref
 
     # Build events/{eventId} doc ref
@@ -173,7 +185,9 @@ def test_event_detail_includes_routes_checkpoints_name_type(
 
     assert "checkpoint" not in route_out
     assert "checkpoints" in route_out
-    assert "trackPoints" not in route_out
+    assert "trackPoints" in route_out
+    assert len(route_out["trackPoints"]) == 1
+    assert route_out["trackPoints"][0] == {"lat": 19.5, "lng": 18.5, "ele": 100}
     assert len(route_out["checkpoints"]) == 2
 
     cp_out_1 = route_out["checkpoints"][0]

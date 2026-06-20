@@ -254,6 +254,24 @@ def event_detail(req: https_fn.Request) -> https_fn.Response:
                     for cp_doc in checkpoints_docs
                 ]
 
+                trackpoints_docs = []
+                if route_id:
+                    trackpoints_ref = (
+                        db.collection(FirestoreCollections.EVENTS)
+                        .document(event_id)
+                        .collection(FirestoreCollections.EVENT_ROUTES)
+                        .document(route_id)
+                        .collection(FirestoreCollections.EVENT_TRACKPOINTS)
+                    )
+                    trackpoints_docs = list(trackpoints_ref.get() or [])
+                    trackpoints_docs.sort(key=lambda tp: (tp.to_dict() or {}).get("order", 0))
+
+                _TP_INTERNAL = {"order", "createdAt", "updatedAt"}
+                trackpoints_list = [
+                    {k: v for k, v in (tp.to_dict() or {}).items() if k not in _TP_INTERNAL}
+                    for tp in trackpoints_docs
+                ]
+
                 routes_list.append(
                     {
                         "name": rd.get("name", ""),
@@ -261,6 +279,7 @@ def event_detail(req: https_fn.Request) -> https_fn.Response:
                         "colorTrack": rd.get("colorTrack"),
                         "updatedAt": ts.isoformat() if hasattr(ts, "isoformat") else None,
                         "checkpoints": checkpoints_list,
+                        "trackPoints": trackpoints_list,
                     }
                 )
 
